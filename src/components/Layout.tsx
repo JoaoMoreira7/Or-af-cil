@@ -15,7 +15,9 @@ import {
   Sparkles,
   Volume2,
   Mic,
-  Smartphone,
+  MoreHorizontal,
+  AudioLines,
+  Radio,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSubscription } from '@/contexts/SubscriptionContext'
@@ -28,6 +30,7 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
 
   // Rotas isentas de bloqueio por paywall: Planos, Configurações e Admin
   const isRotaLiberada =
@@ -47,7 +50,7 @@ export default function Layout() {
     if (path.startsWith('/orcamentos/')) return 'Detalhe do Orçamento'
     if (path === '/clientes') return 'Clientes'
     if (path === '/audios') return 'Histórico de Ditados & Áudios'
-    if (path === '/modo-voz') return 'Modo Só Falar'
+    if (path === '/modo-voz') return 'Modo Voz — Só Falar'
     if (path === '/planos') return 'Planos e Assinatura'
     if (path === '/configuracoes') return 'Configurações da Conta'
     return 'JM Sistemas'
@@ -64,9 +67,9 @@ export default function Layout() {
   const baseNavItems: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Orçamentos', path: '/orcamentos', icon: FileText },
+    { label: 'Modo Voz', path: '/modo-voz', icon: Mic },
+    { label: 'Áudios', path: '/audios', icon: AudioLines },
     { label: 'Clientes', path: '/clientes', icon: Users },
-    { label: 'Áudios', path: '/audios', icon: Volume2 },
-    { label: 'Modo Voz', path: '/modo-voz', icon: Smartphone },
     { label: 'Novo Orçamento', path: '/orcamentos/novo', icon: PlusCircle, isCta: true },
     { label: 'Planos', path: '/planos', icon: CreditCard },
     { label: 'Configurações', path: '/configuracoes', icon: Settings },
@@ -312,6 +315,22 @@ export default function Layout() {
               </div>
             )}
 
+            {/* Atalho de Modo Voz no topo (fácil acesso no desktop e mobile) */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate('/modo-voz')}
+              className={`h-9 px-3 text-xs md:text-sm font-medium border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-all shadow-sm ${
+                location.pathname === '/modo-voz'
+                  ? 'bg-emerald-100 text-emerald-900 border-emerald-500 ring-2 ring-emerald-400/30'
+                  : ''
+              }`}
+              title="Abrir Modo Voz (Só Falar)"
+            >
+              <Mic className="w-4 h-4 mr-1 text-emerald-600 animate-pulse" />
+              <span className="hidden sm:inline">Modo Voz</span>
+            </Button>
+
             {/* CTA Desktop */}
             <Button
               onClick={() => navigate('/orcamentos/novo')}
@@ -367,54 +386,236 @@ export default function Layout() {
           {deveExibirPaywall ? <TrialExpiredPaywall /> : <Outlet />}
         </main>
 
-        {/* BOTTOM NAVIGATION MOBILE (64px) */}
-        <nav className="no-print md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 z-30 px-3 flex items-center justify-around shadow-lg">
-          {[
-            { label: 'Início', path: '/dashboard', icon: LayoutDashboard },
-            { label: 'Orçamentos', path: '/orcamentos', icon: FileText },
-            { label: 'Só Falar', path: '/modo-voz', icon: Mic, isCenter: true },
-            { label: 'Áudios', path: '/audios', icon: Volume2 },
-            ...(user?.admin
-              ? [{ label: 'Admin', path: '/admin', icon: Shield }]
-              : [{ label: 'Clientes', path: '/clientes', icon: Users }]),
-          ].map((item) => {
-            const Icon = item.icon
-            const isActive =
-              item.path === '/orcamentos/novo'
-                ? location.pathname === '/orcamentos/novo'
-                : item.path === '/orcamentos'
-                  ? location.pathname.startsWith('/orcamentos') &&
-                    location.pathname !== '/orcamentos/novo'
-                  : location.pathname === item.path
-
-            if (item.isCenter) {
-              return (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  className="flex flex-col items-center justify-center -mt-5"
+        {/* MOBILE BOTTOM SHEET / MENU SECUNDÁRIO 'MAIS' */}
+        {mobileMoreOpen && (
+          <div className="fixed inset-0 z-40 flex md:hidden">
+            <div
+              className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
+              onClick={() => setMobileMoreOpen(false)}
+            />
+            <div className="relative mt-auto w-full bg-white rounded-t-2xl shadow-2xl z-50 p-4 pb-20 border-t border-slate-200 animate-slide-up">
+              <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mb-4" />
+              <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Mais opções
+                </span>
+                <button
+                  onClick={() => setMobileMoreOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-700"
                 >
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-600 to-violet-600 text-white flex items-center justify-center shadow-md active:scale-95 transition-transform">
-                    <Icon className="w-6 h-6" />
-                  </div>
-                  <span className="text-[10px] font-semibold text-blue-600 mt-1">{item.label}</span>
-                </NavLink>
-              )
-            }
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={`flex flex-col items-center justify-center py-1 px-2 transition-colors ${
-                  isActive ? 'text-blue-600 font-semibold' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="text-[10px] mt-0.5">{item.label}</span>
-              </NavLink>
-            )
-          })}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false)
+                    navigate('/modo-voz')
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                    location.pathname === '/modo-voz'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1">
+                    <Mic className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-semibold">Modo Voz</span>
+                  <span className="text-[10px] text-slate-500">Só Falar</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false)
+                    navigate('/audios')
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                    location.pathname === '/audios'
+                      ? 'bg-blue-50 border-blue-300 text-blue-800'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mb-1">
+                    <AudioLines className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-semibold">Áudios</span>
+                  <span className="text-[10px] text-slate-500">Histórico</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false)
+                    navigate('/clientes')
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                    location.pathname === '/clientes'
+                      ? 'bg-purple-50 border-purple-300 text-purple-800'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center mb-1">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-semibold">Clientes</span>
+                  <span className="text-[10px] text-slate-500">Cadastro</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false)
+                    navigate('/planos')
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                    location.pathname === '/planos'
+                      ? 'bg-amber-50 border-amber-300 text-amber-800'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mb-1">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-semibold">Planos</span>
+                  <span className="text-[10px] text-slate-500">Assinatura</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false)
+                    navigate('/configuracoes')
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                    location.pathname === '/configuracoes'
+                      ? 'bg-slate-200 border-slate-400 text-slate-900'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center mb-1">
+                    <Settings className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-semibold">Ajustes</span>
+                  <span className="text-[10px] text-slate-500">Conta</span>
+                </button>
+
+                {user?.admin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMoreOpen(false)
+                      navigate('/admin')
+                    }}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                      location.pathname === '/admin'
+                        ? 'bg-rose-50 border-rose-300 text-rose-800'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mb-1">
+                      <Shield className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs font-semibold">Admin</span>
+                    <span className="text-[10px] text-slate-500">Gestão</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BOTTOM NAVIGATION MOBILE (64px) */}
+        <nav className="no-print md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 z-30 px-2 flex items-center justify-around shadow-lg">
+          {/* 1. Início */}
+          <NavLink
+            to="/dashboard"
+            onClick={() => setMobileMoreOpen(false)}
+            className={`flex flex-col items-center justify-center py-1 px-2 transition-colors ${
+              location.pathname === '/dashboard'
+                ? 'text-blue-600 font-semibold'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <LayoutDashboard className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Início</span>
+          </NavLink>
+
+          {/* 2. Orçamentos */}
+          <NavLink
+            to="/orcamentos"
+            onClick={() => setMobileMoreOpen(false)}
+            className={`flex flex-col items-center justify-center py-1 px-2 transition-colors ${
+              location.pathname.startsWith('/orcamentos') &&
+              location.pathname !== '/orcamentos/novo'
+                ? 'text-blue-600 font-semibold'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileText className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Orçamentos</span>
+          </NavLink>
+
+          {/* 3. BOTÃO CENTRAL DE DESTAQUE: MODO VOZ (SÓ FALAR) */}
+          <NavLink
+            to="/modo-voz"
+            onClick={() => setMobileMoreOpen(false)}
+            className="flex flex-col items-center justify-center -mt-5"
+          >
+            <div
+              className={`w-13 h-13 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-all ${
+                location.pathname === '/modo-voz'
+                  ? 'bg-gradient-to-tr from-emerald-500 via-teal-600 to-emerald-700 text-white ring-4 ring-emerald-300/50'
+                  : 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white hover:brightness-110'
+              }`}
+            >
+              <Mic className="w-6 h-6 animate-pulse" />
+            </div>
+            <span
+              className={`text-[10px] font-bold mt-1 ${
+                location.pathname === '/modo-voz'
+                  ? 'text-emerald-700 font-extrabold'
+                  : 'text-emerald-600'
+              }`}
+            >
+              Só Falar
+            </span>
+          </NavLink>
+
+          {/* 4. Áudios (Histórico) */}
+          <NavLink
+            to="/audios"
+            onClick={() => setMobileMoreOpen(false)}
+            className={`flex flex-col items-center justify-center py-1 px-2 transition-colors ${
+              location.pathname === '/audios'
+                ? 'text-blue-600 font-semibold'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <AudioLines className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Áudios</span>
+          </NavLink>
+
+          {/* 5. Mais (Abre Drawer Secundário com Clientes, Planos, Ajustes, Admin) */}
+          <button
+            type="button"
+            onClick={() => setMobileMoreOpen((prev) => !prev)}
+            className={`flex flex-col items-center justify-center py-1 px-2 transition-colors ${
+              mobileMoreOpen ||
+              location.pathname === '/clientes' ||
+              location.pathname === '/planos' ||
+              location.pathname === '/configuracoes' ||
+              location.pathname === '/admin'
+                ? 'text-blue-600 font-semibold'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <MoreHorizontal className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Mais</span>
+          </button>
         </nav>
       </div>
     </div>
