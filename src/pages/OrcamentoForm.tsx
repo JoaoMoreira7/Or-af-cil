@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import {
   Sparkles,
   Plus,
@@ -44,6 +44,7 @@ export default function OrcamentoForm() {
   const [loadingInitial, setLoadingInitial] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  const location = useLocation()
   // Form Fields
   const [clienteId, setClienteId] = useState('')
   const [descricao, setDescricao] = useState('')
@@ -87,6 +88,22 @@ export default function OrcamentoForm() {
         } else if (user?.id) {
           const prox = await orcamentosService.obterProximoNumero(user.id)
           setNumero(prox)
+        }
+
+        // Se veio de reaproveitar áudio salvo:
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const locState = location.state as any
+        if (locState?.interpretacaoSalva) {
+          const savedInterp = locState.interpretacaoSalva as InterpretacaoResultado
+          setInterpretacao(savedInterp)
+          setEditableCardDescricao(
+            savedInterp.descricao_servico || locState.textoReaproveitado || '',
+          )
+          setEditableCardItens(savedInterp.itens || [])
+          setEditableCardClienteId(savedInterp.cliente_sugerido_id || null)
+        } else if (locState?.textoReaproveitado) {
+          setAiPrompt(locState.textoReaproveitado)
+          processVoiceOrTextWithAI(locState.textoReaproveitado)
         }
       } catch (err) {
         console.error('Erro ao carregar dados do formulário:', err)

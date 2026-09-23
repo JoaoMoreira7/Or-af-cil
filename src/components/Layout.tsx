@@ -13,6 +13,9 @@ import {
   Menu,
   X,
   Sparkles,
+  Volume2,
+  Mic,
+  Smartphone,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSubscription } from '@/contexts/SubscriptionContext'
@@ -43,6 +46,8 @@ export default function Layout() {
     if (path.startsWith('/orcamentos/') && path.endsWith('/editar')) return 'Editar Orçamento'
     if (path.startsWith('/orcamentos/')) return 'Detalhe do Orçamento'
     if (path === '/clientes') return 'Clientes'
+    if (path === '/audios') return 'Histórico de Ditados & Áudios'
+    if (path === '/modo-voz') return 'Modo Só Falar'
     if (path === '/planos') return 'Planos e Assinatura'
     if (path === '/configuracoes') return 'Configurações da Conta'
     return 'JM Sistemas'
@@ -60,6 +65,8 @@ export default function Layout() {
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Orçamentos', path: '/orcamentos', icon: FileText },
     { label: 'Clientes', path: '/clientes', icon: Users },
+    { label: 'Áudios', path: '/audios', icon: Volume2 },
+    { label: 'Modo Voz', path: '/modo-voz', icon: Smartphone },
     { label: 'Novo Orçamento', path: '/orcamentos/novo', icon: PlusCircle, isCta: true },
     { label: 'Planos', path: '/planos', icon: CreditCard },
     { label: 'Configurações', path: '/configuracoes', icon: Settings },
@@ -365,11 +372,11 @@ export default function Layout() {
           {[
             { label: 'Início', path: '/dashboard', icon: LayoutDashboard },
             { label: 'Orçamentos', path: '/orcamentos', icon: FileText },
-            { label: 'Novo', path: '/orcamentos/novo', icon: PlusCircle, isCenter: true },
+            { label: 'Só Falar', path: '/modo-voz', icon: Mic, isCenter: true },
+            { label: 'Áudios', path: '/audios', icon: Volume2 },
             ...(user?.admin
               ? [{ label: 'Admin', path: '/admin', icon: Shield }]
               : [{ label: 'Clientes', path: '/clientes', icon: Users }]),
-            { label: 'Planos', path: '/planos', icon: CreditCard },
           ].map((item) => {
             const Icon = item.icon
             const isActive =

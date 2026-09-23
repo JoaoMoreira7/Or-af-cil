@@ -71,6 +71,30 @@ export interface AdminMetricas {
   receitaMensalEstimada: number
 }
 
+export type AudioContexto = 'orcamento' | 'cliente' | 'comando_status' | 'geral'
+
+export interface ComandoStatusExtraido {
+  orcamento_id?: string | null
+  orcamento_numero?: string | null
+  cliente_nome?: string | null
+  status_anterior?: string | null
+  novo_status: OrçamentoStatus | null
+  mensagem_confirmacao: string
+}
+
+export interface AudioRegistro {
+  id: string
+  user_id: string
+  transcricao_bruta: string
+  transcricao_corrigida?: string
+  contexto: AudioContexto
+  resultado_json?: Record<string, unknown>
+  confianca?: 'alta' | 'media' | 'baixa'
+  comando_executado?: boolean
+  created: string
+  updated: string
+}
+
 export function formatarMoedaBRL(valor: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   Users,
   Plus,
@@ -54,6 +55,7 @@ interface FormErrors {
 export default function Clientes() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const location = useLocation()
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
@@ -92,6 +94,23 @@ export default function Clientes() {
 
   useEffect(() => {
     fetchClientes()
+
+    // Se veio de reaproveitar áudio
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const locState = location.state as any
+    if (locState?.interpretacaoSalva || locState?.textoReaproveitado) {
+      handleOpenCreate()
+      if (locState.interpretacaoSalva?.cliente_novo) {
+        const c = locState.interpretacaoSalva.cliente_novo
+        if (c.nome) setNome(c.nome)
+        if (c.email) setEmail(c.email)
+        if (c.telefone) setTelefone(c.telefone)
+        if (c.empresa) setEmpresa(c.empresa)
+        if (c.endereco) setEndereco(c.endereco)
+      } else if (locState.textoReaproveitado) {
+        handleVoiceClientTranscript(locState.textoReaproveitado)
+      }
+    }
   }, [])
 
   useRealtime('clientes', () => {

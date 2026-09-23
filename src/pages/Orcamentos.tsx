@@ -1,9 +1,28 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FileText, Plus, Search, Filter, ArrowUpDown, Sparkles } from 'lucide-react'
+import {
+  FileText,
+  Plus,
+  Search,
+  Filter,
+  ArrowUpDown,
+  Sparkles,
+  Mic,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Smartphone,
+} from 'lucide-react'
 import { useRealtime } from '@/hooks/use-realtime'
 import { orcamentosService } from '@/services/orcamentos'
-import { Orçamento, formatarMoedaBRL, formatarData } from '@/types'
+import { aiInterpretarService } from '@/services/aiInterpretar'
+import {
+  Orçamento,
+  formatarMoedaBRL,
+  formatarData,
+  ComandoStatusExtraido,
+  OrçamentoStatus,
+} from '@/types'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,9 +34,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { VoiceRecorder } from '@/components/VoiceRecorder'
+import { useToast } from '@/hooks/use-toast'
 
 export default function Orcamentos() {
   const navigate = useNavigate()
+  const { toast } = useToast()
 
   const [orcamentos, setOrcamentos] = useState<Orçamento[]>([])
   const [loading, setLoading] = useState(true)
@@ -26,6 +58,11 @@ export default function Orcamentos() {
   const [busca, setBusca] = useState('')
   const [statusFiltro, setStatusFiltro] = useState('todos')
   const [ordenacao, setOrdenacao] = useState('recentes')
+
+  // Controle de comando de voz para alteração de status
+  const [voiceInterpreting, setVoiceInterpreting] = useState(false)
+  const [comandoPendente, setComandoPendente] = useState<ComandoStatusExtraido | null>(null)
+  const [applyingStatus, setApplyingStatus] = useState(false)
 
   const fetchOrcamentos = async () => {
     try {
@@ -58,6 +95,81 @@ export default function Orcamentos() {
     fetchOrcamentos()
   })
 
+  // Interpretar comando de voz de alteração de status
+  const handleVoiceCommand = async (transcript: string) => {
+    if (!transcript.trim()) return
+
+    setVoiceInterpreting(true)
+    try {
+      const res = await aiInterpretarService.interpretar({
+        transcricao: transcript,
+        contexto: 'comando_status',
+      })
+
+      const comando = res.interpretacao?.comando_status
+
+      if (comando && comando.orcamento_id && comando.novo_status) {
+        setComandoPendente(comando)
+      } else if (res.interpretacao?.intencao_detectada === 'orcamento') {
+        // Se a fala era de criação de orçamento, oferece ir pro formulário
+        toast({
+          title: 'Detectado pedido de orçamento',
+          description: 'Redirecionando para preenchimento com IA...',
+        })
+        navigate('/orcamentos/novo', {
+          state: {
+            textoReaproveitado: transcript,
+            interpretacaoSalva: res.interpretacao,
+          },
+        })
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Não foi possível identificar o orçamento ou o status',
+          description:
+            'Tente dizer algo como: "marcar o orçamento 3 como aprovado" ou "mudar proposta #001 para enviado".',
+        })
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao interpretar comando'
+      toast({
+        variant: 'destructive',
+        title: 'Erro de voz',
+        description: msg,
+      })
+    } finally {
+      setVoiceInterpreting(false)
+    }
+  }
+
+  // Executar a alteração de status confirmada
+  const handleConfirmStatusChange = async () => {
+    if (!comandoPendente?.orcamento_id || !comandoPendente?.novo_status) return
+
+    setApplyingStatus(true)
+    try {
+      await orcamentosService.atualizarStatus(
+        comandoPendente.orcamento_id,
+        comandoPendente.novo_status as OrçamentoStatus,
+      )
+      toast({
+        title: 'Status atualizado com sucesso!',
+        description: `O orçamento ${comandoPendente.orcamento_numero || ''} agora está como "${comandoPendente.novo_status}".`,
+      })
+      setComandoPendente(null)
+      fetchOrcamentos()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao atualizar status'
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao alterar status',
+        description: msg,
+      })
+    } finally {
+      setApplyingStatus(false)
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in-up">
       {/* HEADER */}
@@ -69,13 +181,58 @@ export default function Orcamentos() {
           </p>
         </div>
 
-        <Button
-          onClick={() => navigate('/orcamentos/novo')}
-          className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-medium rounded-lg shadow-sm"
-        >
-          <Sparkles className="w-4 h-4 mr-1.5" />
-          Novo Orçamento com IA
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => navigate('/modo-voz')}
+            variant="outline"
+            className="border-blue-200 text-blue-700 hover:bg-blue-50 text-xs sm:text-sm"
+          >
+            <Smartphone className="w-4 h-4 mr-1.5" />
+            Modo Só Falar
+          </Button>
+
+          <Button
+            onClick={() => navigate('/orcamentos/novo')}
+            className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-medium rounded-lg shadow-sm text-xs sm:text-sm"
+          >
+            <Sparkles className="w-4 h-4 mr-1.5" />
+            Novo Orçamento com IA
+          </Button>
+        </div>
+      </div>
+
+      {/* BARRA DE COMANDO DE VOZ RÁPIDO PARA ORÇAMENTOS (STATUS E AÇÕES) */}
+      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/80 rounded-2xl p-4 shadow-sm space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm">
+              <Mic className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                Comando de Voz Rápido: Mudar Status por Voz
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Fale comandos como: &ldquo;marcar o orçamento 3 como aprovado&rdquo; ou
+                &ldquo;colocar o orçamento da Maria como enviado&rdquo;.
+              </p>
+            </div>
+          </div>
+
+          {voiceInterpreting && (
+            <div className="flex items-center gap-2 text-xs font-semibold text-blue-700 bg-blue-100/80 px-3 py-1 rounded-full self-start sm:self-auto">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Identificando orçamento e status...</span>
+            </div>
+          )}
+        </div>
+
+        <VoiceRecorder
+          compact
+          isProcessing={voiceInterpreting}
+          placeholder="Ex: 'Marcar o orçamento #001 como aprovado' ou 'Cancelar orçamento 2'..."
+          onSendTranscript={handleVoiceCommand}
+        />
       </div>
 
       {/* FILTER BAR */}
@@ -230,6 +387,67 @@ export default function Orcamentos() {
           </>
         )}
       </div>
+
+      {/* MODAL DE CONFIRMAÇÃO DE ALTERAÇÃO DE STATUS POR VOZ */}
+      <AlertDialog
+        open={!!comandoPendente}
+        onOpenChange={(open) => !open && setComandoPendente(null)}
+      >
+        <AlertDialogContent className="max-w-[460px] rounded-2xl bg-white text-slate-900 p-6">
+          <AlertDialogHeader>
+            <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-2">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <AlertDialogTitle className="text-base font-bold text-slate-900">
+              Confirmar Alteração de Status por Voz
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-slate-600 space-y-2 pt-1">
+              <p className="text-sm font-medium text-slate-900 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                {comandoPendente?.mensagem_confirmacao ||
+                  `Deseja mudar o orçamento ${comandoPendente?.orcamento_numero} para o status "${comandoPendente?.novo_status}"?`}
+              </p>
+              <div className="text-xs text-slate-500 pt-1 space-y-0.5">
+                <p>
+                  • Orçamento:{' '}
+                  <strong className="text-slate-800">
+                    {comandoPendente?.orcamento_numero || 'Identificado'}
+                  </strong>
+                  {comandoPendente?.cliente_nome ? ` (${comandoPendente.cliente_nome})` : ''}
+                </p>
+                <p>
+                  • Status atual:{' '}
+                  <span className="capitalize">{comandoPendente?.status_anterior || '-'}</span>
+                </p>
+                <p>
+                  • Novo status:{' '}
+                  <strong className="text-blue-700 capitalize">
+                    {comandoPendente?.novo_status}
+                  </strong>
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel disabled={applyingStatus} className="h-9 text-xs">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmStatusChange}
+              disabled={applyingStatus}
+              className="h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+            >
+              {applyingStatus ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  Aplicando...
+                </>
+              ) : (
+                'Sim, Confirmar e Mudar'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

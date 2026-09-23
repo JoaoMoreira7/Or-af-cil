@@ -21,6 +21,8 @@ import Configuracoes from '@/pages/Configuracoes'
 import Admin from '@/pages/Admin'
 import TermosDeUso from '@/pages/TermosDeUso'
 import PoliticaDePrivacidade from '@/pages/PoliticaDePrivacidade'
+import AudiosHistorico from '@/pages/AudiosHistorico'
+import ModoVoz from '@/pages/ModoVoz'
 import NotFound from '@/pages/NotFound'
 
 const App = () => (
@@ -71,6 +73,8 @@ const App = () => (
               <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
               <Route path="/orcamentos/:id/editar" element={<OrcamentoForm />} />
               <Route path="/clientes" element={<Clientes />} />
+              <Route path="/audios" element={<AudiosHistorico />} />
+              <Route path="/modo-voz" element={<ModoVoz />} />
               <Route path="/planos" element={<Planos />} />
               <Route path="/configuracoes" element={<Configuracoes />} />
               <Route

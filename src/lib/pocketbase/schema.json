@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-23T12:53:42.399Z",
+  "generatedAt": "2026-09-23T13:05:31.457Z",
   "collections": [
     {
       "name": "users",
@@ -273,6 +273,83 @@
         }
       ],
       "indexes": ["CREATE UNIQUE INDEX idx_planos_user_id ON planos (user_id)"]
+    },
+    {
+      "name": "audios",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.body.user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "transcricao_bruta",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "transcricao_corrigida",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contexto",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["orcamento", "cliente", "comando_status", "geral"]
+        },
+        {
+          "name": "resultado_json",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "confianca",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["alta", "media", "baixa"]
+        },
+        {
+          "name": "comando_executado",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_audios_user_id ON audios (user_id)",
+        "CREATE INDEX idx_audios_contexto ON audios (contexto)",
+        "CREATE INDEX idx_audios_created ON audios (created DESC)"
+      ]
     }
   ]
 }
