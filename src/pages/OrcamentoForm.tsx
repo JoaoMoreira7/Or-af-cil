@@ -2,20 +2,22 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Sparkles,
-  Mic,
-  MicOff,
   Plus,
   Trash2,
   ArrowLeft,
   Loader2,
   Check,
-  RotateCcw,
-  AlertCircle,
   HelpCircle,
+  MessageSquare,
+  UserCheck,
+  Send,
+  AlertTriangle,
+  FileCheck2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { orcamentosService } from '@/services/orcamentos'
 import { clientesService } from '@/services/clientes'
+import { aiInterpretarService, InterpretacaoResultado } from '@/services/aiInterpretar'
 import { Cliente, OrçamentoItem, formatarMoedaBRL } from '@/types'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -29,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { VoiceRecorder } from '@/components/VoiceRecorder'
 
 export default function OrcamentoForm() {
   const { id } = useParams<{ id: string }>()
@@ -52,31 +54,19 @@ export default function OrcamentoForm() {
   const [impostos, setImpostos] = useState<number>(0)
   const [numero, setNumero] = useState('#001')
 
-  // AI State
+  // AI & Voice Interpretation State
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
-  const [aiSuggestion, setAiSuggestion] = useState<{
-    itens: OrçamentoItem[]
-    cliente_sugerido: string | null
-  } | null>(null)
+  const [interpretacao, setInterpretacao] = useState<InterpretacaoResultado | null>(null)
+  const [editableCardItens, setEditableCardItens] = useState<OrçamentoItem[]>([])
+  const [editableCardDescricao, setEditableCardDescricao] = useState('')
+  const [editableCardClienteId, setEditableCardClienteId] = useState<string | null>(null)
 
-  // Voice State (Web Speech API)
-  const [isRecording, setIsRecording] = useState(false)
-  const [speechSupported, setSpeechSupported] = useState(true)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null)
+  // Resposta a dúvidas da IA
+  const [respostaDuvida, setRespostaDuvida] = useState('')
+  const reviewCardRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    // Check Web Speech API support
-    const SpeechRecognition =
-      (window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown })
-        .SpeechRecognition ||
-      (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
-
-    if (!SpeechRecognition) {
-      setSpeechSupported(false)
-    }
-
     const init = async () => {
       try {
         const clientesList = await clientesService.listar()
@@ -137,97 +127,77 @@ export default function OrcamentoForm() {
     })
   }
 
-  // Voice Recognition Handler
-  const toggleRecording = () => {
-    if (!speechSupported) return
-
-    if (isRecording) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop()
-      }
-      setIsRecording(false)
-      return
-    }
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      const recognition = new SpeechRecognition()
-      recognition.lang = 'pt-BR'
-      recognition.continuous = false
-      recognition.interimResults = false
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript
-        if (transcript) {
-          setAiPrompt((prev) => (prev ? `${prev} ${transcript}` : transcript))
-          toast({
-            title: 'Áudio capturado',
-            description: 'Voz transcrita para a caixa da IA.',
-          })
-        }
-      }
-
-      recognition.onerror = () => {
-        setIsRecording(false)
-      }
-
-      recognition.onend = () => {
-        setIsRecording(false)
-      }
-
-      recognitionRef.current = recognition
-      recognition.start()
-      setIsRecording(true)
-    } catch {
-      setIsRecording(false)
-    }
+  // Manipulação de itens no Card "O que entendi"
+  const handleUpdateCardItem = (
+    index: number,
+    field: keyof OrçamentoItem,
+    value: string | number,
+  ) => {
+    setEditableCardItens((prev) => {
+      const next = [...prev]
+      next[index] = { ...next[index], [field]: value }
+      return next
+    })
   }
 
-  // Call Skip Cloud Native AI Agent
-  const handleGenerateWithAI = async () => {
-    if (!aiPrompt.trim()) {
+  const handleRemoveCardItem = (index: number) => {
+    setEditableCardItens((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleAddCardItem = () => {
+    setEditableCardItens((prev) => [
+      ...prev,
+      { descricao: 'Novo item', quantidade: 1, valor_unitario: 0 },
+    ])
+  }
+
+  // Chamar IA com a transcrição (seja por voz estilo WhatsApp ou por texto)
+  const processVoiceOrTextWithAI = async (texto: string) => {
+    if (!texto.trim()) {
       toast({
         variant: 'destructive',
-        title: 'Descrição necessária',
-        description: 'Digite ou dite pelo microfone o serviço para a IA orçar.',
+        title: 'Nenhum áudio ou texto detectado',
+        description: 'Fale no microfone ou digite uma descrição para a IA interpretar.',
       })
       return
     }
-    if (!user?.id) return
 
     setAiLoading(true)
     try {
-      const resultado = await orcamentosService.gerarComIA(aiPrompt, user.id)
-      setAiSuggestion(resultado)
+      const resultado = await aiInterpretarService.interpretar({
+        transcricao: texto,
+        contexto: 'orcamento',
+        userId: user?.id,
+      })
 
-      // Preenche automaticamente itens e pré-seleciona cliente caso haja recomendação
-      if (resultado.itens && resultado.itens.length > 0) {
-        setItens(resultado.itens)
-      }
+      const interp = resultado.interpretacao
+      setInterpretacao(interp)
+      setEditableCardDescricao(interp.descricao_servico || texto)
+      setEditableCardItens(interp.itens || [])
+      setEditableCardClienteId(interp.cliente_sugerido_id || null)
 
-      if (resultado.cliente_sugerido) {
-        const matched = clientes.find((c) => c.id === resultado.cliente_sugerido)
-        if (matched) {
-          setClienteId(matched.id)
-        }
-      }
-
-      if (!descricao.trim()) {
-        setDescricao(aiPrompt.trim())
+      // Se a IA criou dados de um cliente novo em potencial, avisa
+      if (interp.cliente_novo?.nome && !interp.cliente_sugerido_id) {
+        toast({
+          title: 'Cliente novo identificado na fala',
+          description: `Identificado: ${interp.cliente_novo.nome}. Você pode confirmar no card de revisão.`,
+        })
       }
 
       toast({
-        title: 'Orçamento gerado pela IA com sucesso',
-        description: 'Os itens sugeridos foram inseridos na proposta.',
+        title: 'Áudio compreendido pela IA!',
+        description: 'Revise abaixo o que a IA assimilou e aplique com 1 clique.',
       })
+
+      // Rola suavemente até o card de revisão
+      setTimeout(() => {
+        reviewCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 150)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha ao processar com IA'
       toast({
         variant: 'destructive',
-        title: 'Erro na IA',
+        title: 'Erro na interpretação do áudio',
         description: msg,
       })
     } finally {
@@ -235,21 +205,68 @@ export default function OrcamentoForm() {
     }
   }
 
-  const handleUseSuggestion = () => {
-    if (aiSuggestion?.itens) {
-      setItens(aiSuggestion.itens)
-      if (aiSuggestion.cliente_sugerido) {
-        setClienteId(aiSuggestion.cliente_sugerido)
-      }
-      toast({
-        title: 'Sugestão aplicada',
-        description: 'Itens atualizados conforme sugestão da IA.',
-      })
-    }
+  // Refinar interpretação respondendo a dúvida da IA
+  const handleRefineWithAnswer = async () => {
+    if (!respostaDuvida.trim()) return
+
+    const contextoGeral = `${interpretacao?.transcricao_corrigida || aiPrompt}. Esclarecimento adicional: ${respostaDuvida.trim()}`
+    setRespostaDuvida('')
+    await processVoiceOrTextWithAI(contextoGeral)
   }
 
-  const handleDiscardSuggestion = () => {
-    setAiSuggestion(null)
+  // Aplicar interpretação nos campos oficiais do orçamento
+  const handleApplyToForm = async () => {
+    if (!interpretacao) return
+
+    // 1. Descrição
+    if (editableCardDescricao.trim()) {
+      setDescricao(editableCardDescricao.trim())
+    }
+
+    // 2. Itens
+    if (editableCardItens.length > 0) {
+      setItens(editableCardItens)
+    }
+
+    // 3. Cliente sugerido
+    if (editableCardClienteId) {
+      setClienteId(editableCardClienteId)
+    } else if (interpretacao.cliente_novo?.nome && user?.id) {
+      // Cria cliente automaticamente caso o usuário tenha ditado dados de um novo cliente
+      try {
+        const novoCli = await clientesService.criar({
+          nome: interpretacao.cliente_novo.nome,
+          email:
+            interpretacao.cliente_novo.email ||
+            `${interpretacao.cliente_novo.nome.toLowerCase().replace(/\s+/g, '.')}@cliente.com`,
+          telefone: interpretacao.cliente_novo.telefone || '',
+          empresa: interpretacao.cliente_novo.empresa || '',
+          endereco: interpretacao.cliente_novo.endereco || '',
+          user_id: user.id,
+        })
+        const listaAtualizada = await clientesService.listar()
+        setClientes(listaAtualizada)
+        setClienteId(novoCli.id)
+        toast({
+          title: 'Cliente cadastrado automaticamente',
+          description: `"${novoCli.nome}" foi salvo e selecionado neste orçamento.`,
+        })
+      } catch (eCli) {
+        console.warn('Não foi possível auto-cadastrar cliente:', eCli)
+      }
+    }
+
+    toast({
+      title: 'Dados aplicados no orçamento!',
+      description: 'Campos preenchidos com sucesso. Você pode salvar ou fazer ajustes finais.',
+    })
+
+    setInterpretacao(null)
+  }
+
+  const handleDiscardInterpretation = () => {
+    setInterpretacao(null)
+    setEditableCardItens([])
   }
 
   // Submit Form
@@ -360,11 +377,303 @@ export default function OrcamentoForm() {
             {isEditing ? `Editar Orçamento ${numero}` : `Novo Orçamento (${numero})`}
           </h2>
           <p className="text-xs text-slate-500">
-            Preencha os detalhes da proposta ou utilize nossa IA e comando de voz para gerar
-            automaticamente.
+            Fale por áudio estilo WhatsApp ou digite: nossa IA assimila tudo, corrige erros e coloca
+            cada coisa no lugar certo.
           </p>
         </div>
       </div>
+
+      {/* COMPONENTE PRINCIPAL DE ÁUDIO ESTILO WHATSAPP NO TOPO */}
+      <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 border-2 border-emerald-500/30 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+              Comando de Voz WhatsApp & IA Universal
+            </h3>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Grave o áudio falando normalmente com sotaque, valores e cliente. A IA normaliza erros
+              de português e preenche o orçamento.
+            </p>
+          </div>
+          {aiLoading && (
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-100/80 px-3 py-1.5 rounded-full self-start sm:self-auto">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Entendendo o que você falou...</span>
+            </div>
+          )}
+        </div>
+
+        {/* GRAVADOR ESTILO WHATSAPP */}
+        <VoiceRecorder
+          onSendTranscript={(transcript) => {
+            setAiPrompt(transcript)
+            processVoiceOrTextWithAI(transcript)
+          }}
+          isProcessing={aiLoading}
+          placeholder="Ex: 'Grava um orçamento pro João Carlos de instalação de 3 ar condiciado a 350 reais cada...'"
+        />
+      </div>
+
+      {/* CARD DE REVISÃO 'O QUE ENTENDI' (SE A IA PROCESSOU O ÁUDIO) */}
+      {interpretacao && (
+        <div
+          ref={reviewCardRef}
+          className="bg-white rounded-2xl border-2 border-emerald-500 shadow-lg p-5 sm:p-6 space-y-5 animate-scale-in"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow">
+                <FileCheck2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  O que a IA entendeu da sua fala
+                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Confiança: {interpretacao.confianca}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Revise ou edite os dados assimilados antes de jogar no orçamento oficial.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDiscardInterpretation}
+                className="h-9 text-xs text-slate-600"
+              >
+                Descartar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleApplyToForm}
+                className="h-9 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+              >
+                <Check className="w-4 h-4 mr-1.5" />
+                Aplicar no Orçamento
+              </Button>
+            </div>
+          </div>
+
+          {/* Transcrição corrigida & Fala original */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+            <span className="font-semibold text-slate-700">Transcrição tratada pela IA:</span>
+            <p className="text-slate-800 italic font-medium">
+              &ldquo;{interpretacao.transcricao_corrigida}&rdquo;
+            </p>
+          </div>
+
+          {/* CAMPOS IDENTIFICADOS PELA IA (EDITÁVEIS) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Cliente sugerido / identificado */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-emerald-50/50 border border-emerald-200">
+              <Label className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                <UserCheck className="w-4 h-4 text-emerald-600" />
+                Cliente Identificado:
+              </Label>
+
+              {editableCardClienteId ? (
+                <div className="text-xs text-emerald-950 font-semibold bg-white p-2 rounded-lg border border-emerald-200 flex items-center justify-between">
+                  <span>
+                    {clientes.find((c) => c.id === editableCardClienteId)?.nome ||
+                      interpretacao.cliente_sugerido_nome}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditableCardClienteId(null)}
+                    className="text-[11px] text-red-600 hover:underline"
+                  >
+                    Trocar
+                  </button>
+                </div>
+              ) : interpretacao.cliente_novo?.nome ? (
+                <div className="text-xs text-emerald-950 bg-white p-2 rounded-lg border border-emerald-200 space-y-1">
+                  <span className="font-bold">Novo cliente detectado:</span>
+                  <p>{interpretacao.cliente_novo.nome}</p>
+                  {interpretacao.cliente_novo.telefone && (
+                    <p className="text-[11px] text-slate-500">
+                      Tel: {interpretacao.cliente_novo.telefone}
+                    </p>
+                  )}
+                  <span className="text-[10px] text-emerald-700 block">
+                    (Será cadastrado automaticamente ao aplicar)
+                  </span>
+                </div>
+              ) : (
+                <Select
+                  value={editableCardClienteId || ''}
+                  onValueChange={(v) => setEditableCardClienteId(v)}
+                >
+                  <SelectTrigger className="h-9 text-xs bg-white">
+                    <SelectValue placeholder="Vincular a um cliente..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientes.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.nome} {c.empresa ? `(${c.empresa})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            {/* Prazo e Observações */}
+            <div className="space-y-2 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+              <div>
+                <span className="font-bold text-slate-700">Prazo detectado:</span>{' '}
+                <span className="text-slate-900">{interpretacao.prazo || 'Não especificado'}</span>
+              </div>
+              {interpretacao.observacoes && (
+                <div>
+                  <span className="font-bold text-slate-700">Observações:</span>{' '}
+                  <span className="text-slate-900">{interpretacao.observacoes}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Descrição do serviço assimilada */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-slate-800">Descrição Formal do Serviço:</Label>
+            <Input
+              value={editableCardDescricao}
+              onChange={(e) => setEditableCardDescricao(e.target.value)}
+              className="text-xs h-9 bg-white"
+            />
+          </div>
+
+          {/* Itens assimilados (tabela editável) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-slate-800">
+                Itens e Valores Extraídos ({editableCardItens.length}):
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddCardItem}
+                className="h-7 text-[11px]"
+              >
+                + Adicionar item
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {editableCardItens.map((it, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs"
+                >
+                  <Input
+                    value={it.descricao}
+                    onChange={(e) => handleUpdateCardItem(idx, 'descricao', e.target.value)}
+                    placeholder="Descrição do item"
+                    className="h-8 text-xs flex-1 bg-white"
+                  />
+                  <div className="w-20">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={it.quantidade}
+                      onChange={(e) =>
+                        handleUpdateCardItem(
+                          idx,
+                          'quantidade',
+                          Math.max(1, parseInt(e.target.value, 10) || 1),
+                        )
+                      }
+                      className="h-8 text-xs text-center bg-white"
+                      title="Qtd"
+                    />
+                  </div>
+                  <div className="w-28 relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]">
+                      R$
+                    </span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={it.valor_unitario}
+                      onChange={(e) =>
+                        handleUpdateCardItem(idx, 'valor_unitario', parseFloat(e.target.value) || 0)
+                      }
+                      className="h-8 text-xs pl-7 bg-white"
+                      title="Valor unitário"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCardItem(idx)}
+                    className="text-slate-400 hover:text-red-600 p-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* DÚVIDAS E PERGUNTAS DA IA (QUANDO FALTA DADO ESSENCIAL) */}
+          {interpretacao.duvidas && interpretacao.duvidas.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 space-y-2 text-xs text-amber-900">
+              <div className="flex items-center gap-2 font-bold text-amber-800">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <span>A IA ficou com dúvidas sobre alguns pontos:</span>
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-amber-800 pl-1">
+                {interpretacao.duvidas.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+              <div className="pt-2 flex items-center gap-2">
+                <Input
+                  value={respostaDuvida}
+                  onChange={(e) => setRespostaDuvida(e.target.value)}
+                  placeholder="Responda aqui para esclarecer a IA (ex: 'O prazo é 5 dias e o cliente é o Carlos')"
+                  className="h-8 text-xs bg-white"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleRefineWithAnswer()
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleRefineWithAnswer}
+                  disabled={!respostaDuvida.trim() || aiLoading}
+                  className="h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5 mr-1" />
+                  Esclarecer
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* BOTÃO FINAL DO CARD */}
+          <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+            <Button
+              type="button"
+              onClick={handleApplyToForm}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 px-4 rounded-lg shadow"
+            >
+              <Check className="w-4 h-4 mr-1.5" />
+              Confirmar e Preencher no Orçamento
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* TWO COLUMNS: FORM (2/3) AND AI PANEL (1/3 STICKY) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -617,7 +926,7 @@ export default function OrcamentoForm() {
           </div>
         </form>
 
-        {/* RIGHT COLUMN: AI ASSISTANT PANEL (STICKY ON DESKTOP) */}
+        {/* RIGHT COLUMN: ALTERNATIVA POR TEXTO / INFORMAÇÕES */}
         <div className="lg:sticky lg:top-20 space-y-4">
           <div className="bg-gradient-to-b from-blue-900/5 via-violet-900/5 to-white rounded-2xl border-2 border-indigo-100 p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
@@ -627,135 +936,58 @@ export default function OrcamentoForm() {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 leading-tight">
-                    Assistente de IA
+                    Digitação Rápida por IA
                   </h3>
                   <span className="text-[10px] text-violet-700 font-semibold tracking-wide uppercase">
-                    Skip Cloud Native
+                    Alternativa ao áudio
                   </span>
                 </div>
               </div>
-
-              {/* VOICE MICROPHONE BUTTON */}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div>
-                      {speechSupported ? (
-                        <button
-                          type="button"
-                          onClick={toggleRecording}
-                          className={`p-2 rounded-full transition-all ${
-                            isRecording
-                              ? 'bg-red-600 text-white animate-pulse-ring'
-                              : 'bg-white text-slate-600 hover:text-blue-600 border border-slate-200 shadow-sm'
-                          }`}
-                          aria-label={isRecording ? 'Parar gravação' : 'Falar por comando de voz'}
-                        >
-                          {isRecording ? (
-                            <MicOff className="w-4 h-4" />
-                          ) : (
-                            <Mic className="w-4 h-4" />
-                          )}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled
-                          className="p-2 rounded-full bg-slate-100 text-slate-400 cursor-not-allowed"
-                        >
-                          <MicOff className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p className="text-xs">
-                      {speechSupported
-                        ? isRecording
-                          ? 'Ouvindo... fale agora'
-                          : 'Clique para falar (Comando de voz)'
-                        : 'Não suportado neste navegador'}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
             </div>
-
-            {isRecording && (
-              <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2 animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-red-600" />
-                <span className="font-semibold">Ouvindo... fale agora o serviço desejado</span>
-              </div>
-            )}
 
             <div className="space-y-1.5">
               <Textarea
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
                 rows={4}
-                placeholder="Descreva o serviço que você quer orçar... (Ex: Manutenção de 10 computadores, troca de pasta térmica e configuração de backup para clínica médica)"
+                placeholder="Se preferir digitar, descreva aqui (ex: 'Fazer manutenção em 3 servidores pro Carlos por 900 reais')"
                 className="text-xs bg-white resize-none"
               />
             </div>
 
             <Button
               type="button"
-              disabled={aiLoading}
-              onClick={handleGenerateWithAI}
+              disabled={aiLoading || !aiPrompt.trim()}
+              onClick={() => processVoiceOrTextWithAI(aiPrompt)}
               className="w-full bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-medium text-xs h-9 rounded-lg shadow"
             >
               {aiLoading ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
-                  Gerando orçamento...
+                  Interpretando...
                 </>
               ) : (
                 <>
                   <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-                  Gerar Orçamento com IA
+                  Processar Texto com IA
                 </>
               )}
             </Button>
 
-            {/* AI SUGGESTION BANNER IF GENERATED */}
-            {aiSuggestion && (
-              <div className="p-3 rounded-xl bg-violet-50/80 border border-violet-200 text-violet-900 text-xs space-y-2">
-                <div className="font-semibold flex items-center gap-1.5 text-violet-800">
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  Sugestão pronta da IA
-                </div>
-                <p className="text-[11px] text-violet-700">
-                  {aiSuggestion.itens.length} itens estruturados com valores em BRL sugeridos.
-                </p>
-                <div className="flex items-center gap-2 pt-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={handleUseSuggestion}
-                    className="h-7 text-[11px] bg-violet-600 hover:bg-violet-700 text-white font-medium"
-                  >
-                    Usar sugestão
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={handleDiscardSuggestion}
-                    className="h-7 text-[11px] border-violet-200 text-violet-700 hover:bg-violet-100"
-                  >
-                    Descartar
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/60 text-[11px] text-slate-500 space-y-1">
+            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/60 text-[11px] text-slate-500 space-y-1.5">
               <span className="font-semibold text-slate-700 flex items-center gap-1">
-                <HelpCircle className="w-3 h-3 text-blue-500" /> Como funciona:
+                <HelpCircle className="w-3.5 h-3.5 text-blue-500" /> Como o áudio WhatsApp funciona:
               </span>
               <p>
-                O agente nativo da JM Sistemas analisa a descrição, precifica serviços e identifica
-                clientes compatíveis na sua base em tempo real.
+                1. <strong>Grave naturalmente:</strong> Diga o serviço, valores e o nome do cliente.
+              </p>
+              <p>
+                2. <strong>Inteligência fonética:</strong> A IA perdoa sotaques, palavras cortadas e
+                gírias (&ldquo;ar condiciado&rdquo; &rarr; ar-condicionado).
+              </p>
+              <p>
+                3. <strong>Revisão transparente:</strong> O card &ldquo;O que entendi&rdquo; exibe
+                os campos para sua aprovação.
               </p>
             </div>
           </div>

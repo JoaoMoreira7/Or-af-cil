@@ -10,10 +10,14 @@ import {
   MapPin,
   Loader2,
   AlertTriangle,
+  Mic,
+  Sparkles,
+  Check,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { clientesService } from '@/services/clientes'
+import { aiInterpretarService } from '@/services/aiInterpretar'
 import { Cliente, formatarData } from '@/types'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -37,6 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { VoiceRecorder } from '@/components/VoiceRecorder'
 
 interface FormErrors {
   nome?: string
@@ -65,6 +70,10 @@ export default function Clientes() {
   const [empresa, setEmpresa] = useState('')
   const [endereco, setEndereco] = useState('')
   const [errors, setErrors] = useState<FormErrors>({})
+
+  // Estado de IA por Voz no Modal de Cliente
+  const [voiceInterpreting, setVoiceInterpreting] = useState(false)
+  const [lastVoiceTranscript, setLastVoiceTranscript] = useState('')
 
   // Modal Exclusão
   const [deleteTarget, setDeleteTarget] = useState<Cliente | null>(null)
@@ -97,6 +106,7 @@ export default function Clientes() {
     setEmpresa('')
     setEndereco('')
     setErrors({})
+    setLastVoiceTranscript('')
     setModalOpen(true)
   }
 
@@ -108,7 +118,53 @@ export default function Clientes() {
     setEmpresa(cliente.empresa || '')
     setEndereco(cliente.endereco || '')
     setErrors({})
+    setLastVoiceTranscript('')
     setModalOpen(true)
+  }
+
+  // Preenchimento de Cliente via Áudio estilo WhatsApp
+  const handleVoiceClientTranscript = async (transcription: string) => {
+    if (!transcription.trim()) return
+
+    setVoiceInterpreting(true)
+    setLastVoiceTranscript(transcription)
+
+    try {
+      const res = await aiInterpretarService.interpretar({
+        transcricao: transcription,
+        contexto: 'cliente',
+        userId: user?.id,
+      })
+
+      const extraido = res.interpretacao?.cliente_novo
+
+      if (extraido) {
+        if (extraido.nome) setNome(extraido.nome)
+        if (extraido.email) setEmail(extraido.email)
+        if (extraido.telefone) setTelefone(extraido.telefone)
+        if (extraido.empresa) setEmpresa(extraido.empresa)
+        if (extraido.endereco) setEndereco(extraido.endereco)
+
+        toast({
+          title: 'Dados preenchidos pela IA!',
+          description: `Identificado: ${extraido.nome || 'Cliente'}. Revise os campos antes de salvar.`,
+        })
+      } else {
+        toast({
+          title: 'Áudio processado',
+          description: 'A IA tentou mapear os dados. Preencha os campos faltantes.',
+        })
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao processar áudio'
+      toast({
+        variant: 'destructive',
+        title: 'Erro na interpretação de voz',
+        description: msg,
+      })
+    } finally {
+      setVoiceInterpreting(false)
+    }
   }
 
   const validateForm = (): boolean => {
@@ -232,8 +288,8 @@ export default function Clientes() {
             </div>
             <h3 className="text-base font-bold text-slate-800">Nenhum cliente cadastrado ainda</h3>
             <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto mt-1 mb-5">
-              Cadastre seus clientes para associá-los a orçamentos gerados com inteligência
-              artificial.
+              Cadastre seus clientes manualmente ou por áudio WhatsApp para associá-los a orçamentos
+              gerados com inteligência artificial.
             </p>
             <Button
               onClick={handleOpenCreate}
@@ -372,17 +428,38 @@ export default function Clientes() {
 
       {/* MODAL NOVO / EDITAR CLIENTE */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-[480px] rounded-2xl bg-white text-slate-900 p-6">
+        <DialogContent className="max-w-[540px] rounded-2xl bg-white text-slate-900 p-6">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold">
-              {editingClient ? 'Editar Cliente' : 'Novo Cliente'}
+            <DialogTitle className="text-lg font-bold flex items-center justify-between">
+              <span>{editingClient ? 'Editar Cliente' : 'Novo Cliente'}</span>
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
-              Preencha as informações do cliente para registro e integração com orçamentos.
+              Preencha os dados ou grave um áudio WhatsApp com as informações do cliente.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSaveClient} className="space-y-3.5 mt-3">
+          {/* ATALHO DE ÁUDIO ESTILO WHATSAPP PARA PREENCHER CLIENTE */}
+          <div className="mt-1 mb-2">
+            <VoiceRecorder
+              compact
+              isProcessing={voiceInterpreting}
+              placeholder="Fale: 'Cliente novo Maria Souza, fone 11 98888-7777, empresa Padaria Real...'"
+              onSendTranscript={handleVoiceClientTranscript}
+            />
+            {voiceInterpreting && (
+              <div className="mt-2 text-xs text-emerald-700 flex items-center gap-1.5 font-medium animate-pulse">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Assimulando áudio e preenchendo os dados do cliente...</span>
+              </div>
+            )}
+            {lastVoiceTranscript && !voiceInterpreting && (
+              <p className="mt-1 text-[11px] text-slate-500 italic">
+                Último áudio: &ldquo;{lastVoiceTranscript}&rdquo;
+              </p>
+            )}
+          </div>
+
+          <form onSubmit={handleSaveClient} className="space-y-3.5 mt-2">
             <div className="space-y-1">
               <Label htmlFor="c-nome" className="text-xs font-semibold">
                 Nome completo *
@@ -470,7 +547,7 @@ export default function Clientes() {
               </Button>
               <Button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || voiceInterpreting}
                 className="h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium"
               >
                 {submitting ? (
