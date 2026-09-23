@@ -435,14 +435,31 @@ export default function AudiosHistorico() {
                           )}
 
                           {res.cliente_novo?.nome && (
-                            <div className="p-2.5 bg-purple-50 rounded-lg border border-purple-200">
+                            <div className="p-2.5 bg-purple-50 rounded-lg border border-purple-200 space-y-1">
                               <span className="text-purple-800 font-semibold block">
                                 Novo cliente identificado:
                               </span>
-                              <span className="text-purple-950 font-medium">
-                                {res.cliente_novo.nome}{' '}
-                                {res.cliente_novo.telefone ? `(${res.cliente_novo.telefone})` : ''}
-                              </span>
+                              <p className="text-purple-950 font-medium">{res.cliente_novo.nome}</p>
+                              <div className="text-[11px] text-slate-600 space-y-0.5">
+                                <p>
+                                  <span className="text-slate-400">Telefone:</span>{' '}
+                                  {res.cliente_novo.telefone || (
+                                    <span className="text-slate-400 italic">não informado</span>
+                                  )}
+                                </p>
+                                <p>
+                                  <span className="text-slate-400">E-mail:</span>{' '}
+                                  {res.cliente_novo.email || (
+                                    <span className="text-slate-400 italic">não informado</span>
+                                  )}
+                                </p>
+                                {res.cliente_novo.empresa && (
+                                  <p>
+                                    <span className="text-slate-400">Empresa:</span>{' '}
+                                    {res.cliente_novo.empresa}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           )}
 
@@ -453,19 +470,23 @@ export default function AudiosHistorico() {
                               </span>
                               <div className="space-y-1">
                                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                {res.itens.map((it: any, i: number) => (
-                                  <div
-                                    key={i}
-                                    className="flex justify-between items-center p-2 rounded bg-slate-50 border border-slate-200"
-                                  >
-                                    <span>
-                                      {it.quantidade}x {it.descricao}
-                                    </span>
-                                    <span className="font-bold text-slate-800">
-                                      R$ {Number(it.valor_unitario).toFixed(2)}
-                                    </span>
-                                  </div>
-                                ))}
+                                {res.itens.map((it: any, i: number) => {
+                                  const qtd = Number(it?.quantidade) || 1
+                                  const val = Number(it?.valor_unitario) || 0
+                                  return (
+                                    <div
+                                      key={i}
+                                      className="flex justify-between items-center p-2 rounded bg-slate-50 border border-slate-200"
+                                    >
+                                      <span>
+                                        {qtd}x {it?.descricao || 'Item de serviço'}
+                                      </span>
+                                      <span className="font-bold text-slate-800">
+                                        R$ {val.toFixed(2)}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
                               </div>
                             </div>
                           )}

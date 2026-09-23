@@ -98,18 +98,28 @@ export default function Clientes() {
     // Se veio de reaproveitar áudio
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const locState = location.state as any
-    if (locState?.interpretacaoSalva || locState?.textoReaproveitado) {
-      handleOpenCreate()
-      if (locState.interpretacaoSalva?.cliente_novo) {
-        const c = locState.interpretacaoSalva.cliente_novo
-        if (c.nome) setNome(c.nome)
-        if (c.email) setEmail(c.email)
-        if (c.telefone) setTelefone(c.telefone)
-        if (c.empresa) setEmpresa(c.empresa)
-        if (c.endereco) setEndereco(c.endereco)
-      } else if (locState.textoReaproveitado) {
-        handleVoiceClientTranscript(locState.textoReaproveitado)
+    try {
+      if (locState?.interpretacaoSalva || locState?.textoReaproveitado) {
+        handleOpenCreate()
+        if (locState.interpretacaoSalva?.cliente_novo) {
+          const c = locState.interpretacaoSalva.cliente_novo
+          setNome(c?.nome ? String(c.nome) : '')
+          setEmail(
+            c?.email
+              ? String(c.email)
+              : c?.nome
+                ? `${String(c.nome).toLowerCase().replace(/\s+/g, '.')}@cliente.com`
+                : '',
+          )
+          setTelefone(c?.telefone ? String(c.telefone) : '')
+          setEmpresa(c?.empresa ? String(c.empresa) : '')
+          setEndereco(c?.endereco ? String(c.endereco) : '')
+        } else if (locState.textoReaproveitado) {
+          handleVoiceClientTranscript(locState.textoReaproveitado)
+        }
       }
+    } catch (eLoc) {
+      console.warn('Erro ao carregar estado de navegação:', eLoc)
     }
   }, [])
 
@@ -158,15 +168,25 @@ export default function Clientes() {
       const extraido = res.interpretacao?.cliente_novo
 
       if (extraido) {
-        if (extraido.nome) setNome(extraido.nome)
-        if (extraido.email) setEmail(extraido.email)
-        if (extraido.telefone) setTelefone(extraido.telefone)
-        if (extraido.empresa) setEmpresa(extraido.empresa)
-        if (extraido.endereco) setEndereco(extraido.endereco)
+        const nomeExtraido = extraido.nome ? String(extraido.nome).trim() : ''
+        const emailExtraido = extraido.email
+          ? String(extraido.email).trim()
+          : nomeExtraido
+            ? `${nomeExtraido.toLowerCase().replace(/\s+/g, '.')}@cliente.com`
+            : ''
+        const telefoneExtraido = extraido.telefone ? String(extraido.telefone).trim() : ''
+        const empresaExtraido = extraido.empresa ? String(extraido.empresa).trim() : ''
+        const enderecoExtraido = extraido.endereco ? String(extraido.endereco).trim() : ''
+
+        if (nomeExtraido) setNome(nomeExtraido)
+        if (emailExtraido) setEmail(emailExtraido)
+        setTelefone(telefoneExtraido)
+        setEmpresa(empresaExtraido)
+        setEndereco(enderecoExtraido)
 
         toast({
           title: 'Dados preenchidos pela IA!',
-          description: `Identificado: ${extraido.nome || 'Cliente'}. Revise os campos antes de salvar.`,
+          description: `Identificado: ${nomeExtraido || 'Cliente'}. Revise os campos antes de salvar.`,
         })
       } else {
         toast({
@@ -191,9 +211,8 @@ export default function Clientes() {
     if (!nome.trim()) {
       errs.nome = 'O nome do cliente é obrigatório.'
     }
-    if (!email.trim()) {
-      errs.email = 'O e-mail é obrigatório.'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    // Se e-mail foi fornecido, deve ser válido; se vazio, aceita (pois a regra de negócio permite campos opcionais)
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       errs.email = 'Digite um e-mail válido (ex: nome@dominio.com).'
     }
     setErrors(errs)
@@ -207,10 +226,13 @@ export default function Clientes() {
 
     setSubmitting(true)
     try {
+      const emailFinal =
+        email.trim() || `${nome.trim().toLowerCase().replace(/\s+/g, '.')}@cliente.com`
+
       if (editingClient) {
         await clientesService.atualizar(editingClient.id, {
           nome: nome.trim(),
-          email: email.trim(),
+          email: emailFinal,
           telefone: telefone.trim(),
           empresa: empresa.trim(),
           endereco: endereco.trim(),
@@ -222,7 +244,7 @@ export default function Clientes() {
       } else {
         await clientesService.criar({
           nome: nome.trim(),
-          email: email.trim(),
+          email: emailFinal,
           telefone: telefone.trim(),
           empresa: empresa.trim(),
           endereco: endereco.trim(),
@@ -497,9 +519,12 @@ export default function Clientes() {
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="c-email" className="text-xs font-semibold">
-                E-mail *
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="c-email" className="text-xs font-semibold">
+                  E-mail
+                </Label>
+                <span className="text-[11px] text-slate-400">Opcional</span>
+              </div>
               <Input
                 id="c-email"
                 type="email"
@@ -508,7 +533,7 @@ export default function Clientes() {
                   setEmail(e.target.value)
                   if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }))
                 }}
-                placeholder="cliente@exemplo.com"
+                placeholder="cliente@exemplo.com (ou deixe vazio para auto-gerar)"
                 className={`h-10 text-sm ${errors.email ? 'border-red-500' : ''}`}
               />
               {errors.email && <p className="text-[11px] text-red-600">{errors.email}</p>}

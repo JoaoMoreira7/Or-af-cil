@@ -7,6 +7,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute, PublicOnlyRoute, AdminRoute } from '@/components/ProtectedRoute'
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext'
 import Layout from '@/components/Layout'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 // Pages
 import Login from '@/pages/Login'
@@ -30,66 +31,68 @@ const App = () => (
     <AuthProvider>
       <SubscriptionProvider>
         <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <Routes>
-            {/* Public Legal Pages (Access without auth) */}
-            <Route path="/termos-de-uso" element={<TermosDeUso />} />
-            <Route path="/politica-de-privacidade" element={<PoliticaDePrivacidade />} />
+          <ErrorBoundary>
+            <Toaster />
+            <Sonner />
+            <Routes>
+              {/* Public Legal Pages (Access without auth) */}
+              <Route path="/termos-de-uso" element={<TermosDeUso />} />
+              <Route path="/politica-de-privacidade" element={<PoliticaDePrivacidade />} />
 
-            {/* Public Auth Only Pages */}
-            <Route
-              path="/login"
-              element={
-                <PublicOnlyRoute>
-                  <Login />
-                </PublicOnlyRoute>
-              }
-            />
-            <Route
-              path="/signup"
-              element={
-                <PublicOnlyRoute>
-                  <Signup />
-                </PublicOnlyRoute>
-              }
-            />
-            <Route path="/cadastro" element={<Navigate to="/signup" replace />} />
-
-            {/* Root Redirect to Dashboard */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-            {/* Authenticated Routes wrapped in ProtectedRoute & Global Layout */}
-            <Route
-              element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/orcamentos" element={<Orcamentos />} />
-              <Route path="/orcamentos/novo" element={<OrcamentoForm />} />
-              <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
-              <Route path="/orcamentos/:id/editar" element={<OrcamentoForm />} />
-              <Route path="/clientes" element={<Clientes />} />
-              <Route path="/audios" element={<AudiosHistorico />} />
-              <Route path="/modo-voz" element={<ModoVoz />} />
-              <Route path="/planos" element={<Planos />} />
-              <Route path="/configuracoes" element={<Configuracoes />} />
+              {/* Public Auth Only Pages */}
               <Route
-                path="/admin"
+                path="/login"
                 element={
-                  <AdminRoute>
-                    <Admin />
-                  </AdminRoute>
+                  <PublicOnlyRoute>
+                    <Login />
+                  </PublicOnlyRoute>
                 }
               />
-            </Route>
+              <Route
+                path="/signup"
+                element={
+                  <PublicOnlyRoute>
+                    <Signup />
+                  </PublicOnlyRoute>
+                }
+              />
+              <Route path="/cadastro" element={<Navigate to="/signup" replace />} />
 
-            {/* Fallback 404 */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              {/* Root Redirect to Dashboard */}
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+              {/* Authenticated Routes wrapped in ProtectedRoute & Global Layout */}
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <Layout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/orcamentos" element={<Orcamentos />} />
+                <Route path="/orcamentos/novo" element={<OrcamentoForm />} />
+                <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
+                <Route path="/orcamentos/:id/editar" element={<OrcamentoForm />} />
+                <Route path="/clientes" element={<Clientes />} />
+                <Route path="/audios" element={<AudiosHistorico />} />
+                <Route path="/modo-voz" element={<ModoVoz />} />
+                <Route path="/planos" element={<Planos />} />
+                <Route path="/configuracoes" element={<Configuracoes />} />
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminRoute>
+                      <Admin />
+                    </AdminRoute>
+                  }
+                />
+              </Route>
+
+              {/* Fallback 404 */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </ErrorBoundary>
         </TooltipProvider>
       </SubscriptionProvider>
     </AuthProvider>

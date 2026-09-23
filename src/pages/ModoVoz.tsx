@@ -242,18 +242,24 @@ export default function ModoVoz() {
       // Caso 2: Criação de novo cliente ditado
       if (resultado.intencao_detectada === 'cliente' && resultado.cliente_novo?.nome) {
         const c = resultado.cliente_novo
+        const nomeCli = String(c.nome || '').trim()
+        const emailCli =
+          c.email && String(c.email).trim()
+            ? String(c.email).trim()
+            : `${nomeCli.toLowerCase().replace(/\s+/g, '.')}@cliente.com`
+
         await clientesService.criar({
-          nome: c.nome,
-          email: c.email || `${c.nome.toLowerCase().replace(/\s+/g, '.')}@cliente.com`,
-          telefone: c.telefone || '',
-          empresa: c.empresa || '',
-          endereco: c.endereco || '',
+          nome: nomeCli,
+          email: emailCli,
+          telefone: c.telefone ? String(c.telefone).trim() : '',
+          empresa: c.empresa ? String(c.empresa).trim() : '',
+          endereco: c.endereco ? String(c.endereco).trim() : '',
           user_id: user.id,
         })
-        setAppliedSuccess(`Cliente "${c.nome}" cadastrado com sucesso na base!`)
+        setAppliedSuccess(`Cliente "${nomeCli}" cadastrado com sucesso na base!`)
         toast({
           title: 'Cliente cadastrado!',
-          description: `"${c.nome}" salvo com sucesso.`,
+          description: `"${nomeCli}" salvo com sucesso.`,
         })
         return
       }
@@ -263,12 +269,18 @@ export default function ModoVoz() {
       let cliId = resultado.cliente_sugerido_id
       if (!cliId && resultado.cliente_novo?.nome) {
         const c = resultado.cliente_novo
+        const nomeCli = String(c.nome || '').trim()
+        const emailCli =
+          c.email && String(c.email).trim()
+            ? String(c.email).trim()
+            : `${nomeCli.toLowerCase().replace(/\s+/g, '.')}@cliente.com`
+
         const criado = await clientesService.criar({
-          nome: c.nome,
-          email: c.email || `${c.nome.toLowerCase().replace(/\s+/g, '.')}@cliente.com`,
-          telefone: c.telefone || '',
-          empresa: c.empresa || '',
-          endereco: c.endereco || '',
+          nome: nomeCli,
+          email: emailCli,
+          telefone: c.telefone ? String(c.telefone).trim() : '',
+          empresa: c.empresa ? String(c.empresa).trim() : '',
+          endereco: c.endereco ? String(c.endereco).trim() : '',
           user_id: user.id,
         })
         cliId = criado.id
@@ -471,15 +483,32 @@ export default function ModoVoz() {
                   </p>
                 </div>
               ) : resultado.intencao_detectada === 'cliente' && resultado.cliente_novo?.nome ? (
-                <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 space-y-1">
+                <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 space-y-1.5">
                   <span className="font-bold text-purple-900 flex items-center gap-1.5">
                     <UserPlus className="w-3.5 h-3.5 text-purple-600" />
                     Novo Cliente Identificado:
                   </span>
                   <p className="text-purple-950 font-semibold">{resultado.cliente_novo.nome}</p>
-                  {resultado.cliente_novo.telefone && (
-                    <p className="text-slate-600">Tel: {resultado.cliente_novo.telefone}</p>
-                  )}
+                  <div className="text-xs text-slate-600 space-y-0.5">
+                    <p>
+                      <span className="text-slate-500">Telefone:</span>{' '}
+                      {resultado.cliente_novo.telefone || (
+                        <span className="text-slate-400 italic">não informado</span>
+                      )}
+                    </p>
+                    <p>
+                      <span className="text-slate-500">E-mail:</span>{' '}
+                      {resultado.cliente_novo.email || (
+                        <span className="text-slate-400 italic">não informado (será gerado)</span>
+                      )}
+                    </p>
+                    {resultado.cliente_novo.empresa && (
+                      <p>
+                        <span className="text-slate-500">Empresa:</span>{' '}
+                        {resultado.cliente_novo.empresa}
+                      </p>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -503,16 +532,23 @@ export default function ModoVoz() {
                       <span className="text-[11px] font-bold text-slate-700 block">
                         Itens extraídos ({resultado.itens.length}):
                       </span>
-                      {resultado.itens.map((it, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-xs py-0.5">
-                          <span className="text-slate-800 truncate mr-2">
-                            {it.quantidade}x {it.descricao}
-                          </span>
-                          <span className="font-semibold text-slate-900 shrink-0">
-                            {formatarMoedaBRL(it.valor_unitario * it.quantidade)}
-                          </span>
-                        </div>
-                      ))}
+                      {resultado.itens.map((it, idx) => {
+                        const qtd = Number(it.quantidade) || 1
+                        const val = Number(it.valor_unitario) || 0
+                        return (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between text-xs py-0.5"
+                          >
+                            <span className="text-slate-800 truncate mr-2">
+                              {qtd}x {it.descricao || 'Item de serviço'}
+                            </span>
+                            <span className="font-semibold text-slate-900 shrink-0">
+                              {formatarMoedaBRL(val * qtd)}
+                            </span>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>

@@ -97,10 +97,17 @@ export default function OrcamentoForm() {
           const savedInterp = locState.interpretacaoSalva as InterpretacaoResultado
           setInterpretacao(savedInterp)
           setEditableCardDescricao(
-            savedInterp.descricao_servico || locState.textoReaproveitado || '',
+            savedInterp?.descricao_servico || locState.textoReaproveitado || '',
           )
-          setEditableCardItens(savedInterp.itens || [])
-          setEditableCardClienteId(savedInterp.cliente_sugerido_id || null)
+          const safeItens = Array.isArray(savedInterp?.itens)
+            ? savedInterp.itens.map((it) => ({
+                descricao: String(it?.descricao || '').trim(),
+                quantidade: Math.max(1, Number(it?.quantidade) || 1),
+                valor_unitario: Math.max(0, Number(it?.valor_unitario) || 0),
+              }))
+            : []
+          setEditableCardItens(safeItens)
+          setEditableCardClienteId(savedInterp?.cliente_sugerido_id || null)
         } else if (locState?.textoReaproveitado) {
           setAiPrompt(locState.textoReaproveitado)
           processVoiceOrTextWithAI(locState.textoReaproveitado)
@@ -190,7 +197,14 @@ export default function OrcamentoForm() {
       const interp = resultado.interpretacao
       setInterpretacao(interp)
       setEditableCardDescricao(interp.descricao_servico || texto)
-      setEditableCardItens(interp.itens || [])
+      const safeItens = Array.isArray(interp?.itens)
+        ? interp.itens.map((it) => ({
+            descricao: String(it?.descricao || '').trim(),
+            quantidade: Math.max(1, Number(it?.quantidade) || 1),
+            valor_unitario: Math.max(0, Number(it?.valor_unitario) || 0),
+          }))
+        : []
+      setEditableCardItens(safeItens)
       setEditableCardClienteId(interp.cliente_sugerido_id || null)
 
       // Se a IA criou dados de um cliente novo em potencial, avisa
@@ -251,14 +265,24 @@ export default function OrcamentoForm() {
     } else if (interpretacao.cliente_novo?.nome && user?.id) {
       // Cria cliente automaticamente caso o usuário tenha ditado dados de um novo cliente
       try {
+        const nomeCli = String(interpretacao.cliente_novo.nome || '').trim()
+        const emailCli =
+          interpretacao.cliente_novo.email && String(interpretacao.cliente_novo.email).trim()
+            ? String(interpretacao.cliente_novo.email).trim()
+            : `${nomeCli.toLowerCase().replace(/\s+/g, '.')}@cliente.com`
+
         const novoCli = await clientesService.criar({
-          nome: interpretacao.cliente_novo.nome,
-          email:
-            interpretacao.cliente_novo.email ||
-            `${interpretacao.cliente_novo.nome.toLowerCase().replace(/\s+/g, '.')}@cliente.com`,
-          telefone: interpretacao.cliente_novo.telefone || '',
-          empresa: interpretacao.cliente_novo.empresa || '',
-          endereco: interpretacao.cliente_novo.endereco || '',
+          nome: nomeCli,
+          email: emailCli,
+          telefone: interpretacao.cliente_novo.telefone
+            ? String(interpretacao.cliente_novo.telefone).trim()
+            : '',
+          empresa: interpretacao.cliente_novo.empresa
+            ? String(interpretacao.cliente_novo.empresa).trim()
+            : '',
+          endereco: interpretacao.cliente_novo.endereco
+            ? String(interpretacao.cliente_novo.endereco).trim()
+            : '',
           user_id: user.id,
         })
         const listaAtualizada = await clientesService.listar()
@@ -510,16 +534,31 @@ export default function OrcamentoForm() {
                   </button>
                 </div>
               ) : interpretacao.cliente_novo?.nome ? (
-                <div className="text-xs text-emerald-950 bg-white p-2 rounded-lg border border-emerald-200 space-y-1">
-                  <span className="font-bold">Novo cliente detectado:</span>
-                  <p>{interpretacao.cliente_novo.nome}</p>
-                  {interpretacao.cliente_novo.telefone && (
-                    <p className="text-[11px] text-slate-500">
-                      Tel: {interpretacao.cliente_novo.telefone}
+                <div className="text-xs text-emerald-950 bg-white p-2.5 rounded-lg border border-emerald-200 space-y-1">
+                  <span className="font-bold text-emerald-900 block">Novo cliente detectado:</span>
+                  <p className="font-semibold text-slate-900">{interpretacao.cliente_novo.nome}</p>
+                  <div className="text-[11px] text-slate-600 space-y-0.5 pt-0.5">
+                    <p>
+                      <span className="text-slate-400">Telefone:</span>{' '}
+                      {interpretacao.cliente_novo.telefone || (
+                        <span className="text-slate-400 italic">não informado</span>
+                      )}
                     </p>
-                  )}
-                  <span className="text-[10px] text-emerald-700 block">
-                    (Será cadastrado automaticamente ao aplicar)
+                    <p>
+                      <span className="text-slate-400">E-mail:</span>{' '}
+                      {interpretacao.cliente_novo.email || (
+                        <span className="text-slate-400 italic">não informado (será gerado)</span>
+                      )}
+                    </p>
+                    {interpretacao.cliente_novo.empresa && (
+                      <p>
+                        <span className="text-slate-400">Empresa:</span>{' '}
+                        {interpretacao.cliente_novo.empresa}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-emerald-700 block font-medium pt-1 border-t border-emerald-100">
+                    (Será cadastrado automaticamente com segurança ao aplicar)
                   </span>
                 </div>
               ) : (
