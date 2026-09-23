@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-23T13:05:31.457Z",
+  "generatedAt": "2026-09-23T13:21:25.419Z",
   "collections": [
     {
       "name": "users",
@@ -29,14 +29,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "admin",
@@ -103,14 +108,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -171,7 +181,13 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["rascunho", "enviado", "aprovado", "rejeitado", "cancelado"]
+          "selectValues": [
+            "rascunho",
+            "enviado",
+            "aprovado",
+            "rejeitado",
+            "cancelado"
+          ]
         },
         {
           "name": "numero",
@@ -191,14 +207,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -230,14 +251,22 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["starter", "pro"]
+          "selectValues": [
+            "starter",
+            "pro"
+          ]
         },
         {
           "name": "status",
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["trial", "ativo", "expirado", "inativo"]
+          "selectValues": [
+            "trial",
+            "ativo",
+            "expirado",
+            "inativo"
+          ]
         },
         {
           "name": "renovacao_em",
@@ -250,14 +279,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "trial_ate",
@@ -272,7 +306,9 @@
           "system": false
         }
       ],
-      "indexes": ["CREATE UNIQUE INDEX idx_planos_user_id ON planos (user_id)"]
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_planos_user_id ON planos (user_id)"
+      ]
     },
     {
       "name": "audios",
@@ -309,7 +345,12 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["orcamento", "cliente", "comando_status", "geral"]
+          "selectValues": [
+            "orcamento",
+            "cliente",
+            "comando_status",
+            "geral"
+          ]
         },
         {
           "name": "resultado_json",
@@ -322,7 +363,11 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["alta", "media", "baixa"]
+          "selectValues": [
+            "alta",
+            "media",
+            "baixa"
+          ]
         },
         {
           "name": "comando_executado",
@@ -335,14 +380,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [

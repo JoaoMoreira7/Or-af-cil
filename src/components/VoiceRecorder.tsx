@@ -402,7 +402,6 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           }}
         />
       )}
-
       {/* ESTADO 1: GRAVANDO (MODO WHATSAPP) */}
       {isRecording && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-red-50/90 border border-red-200 rounded-xl text-red-900 animate-pulse-subtle">
@@ -470,7 +469,6 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           </div>
         </div>
       )}
-
       {/* ESTADO 2: ÁUDIO GRAVADO PRONTO PARA REVISÃO/ENVIO (ESTILO WHATSAPP) */}
       {!isRecording && audioUrl && (
         <div className="space-y-3 p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl animate-fade-in">
@@ -563,7 +561,6 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           )}
         </div>
       )}
-
       {/* ESTADO 3: PARADO (BOTÃO PRINCIPAL ESTILO WHATSAPP) */}
       {!isRecording && !audioUrl && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -618,17 +615,24 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           </div>
         </div>
       )}
-
       {/* Informação sobre tolerância a erros e sotaques */}
       {!isRecording && !audioUrl && !compact && (
-        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-slate-500">
-          <Info className="w-3 h-3 text-emerald-600 shrink-0" />
-          <span>
-            Fale naturalmente: a IA entende sotaques regionais, erros de grafia, concordância e
-            gírias de negócios.
-          </span>
+        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5 text-[11px] text-slate-500">
+          <div className="flex items-center gap-1.5">
+            <Info className="w-3 h-3 text-emerald-600 shrink-0" />
+            <span>
+              Fale naturalmente: a IA entende sotaques regionais, erros de grafia, concordância e
+              gírias de negócios.
+            </span>
+          </div>
+          <a
+            href="/audios"
+            className="text-emerald-700 font-semibold hover:underline shrink-0 hidden sm:inline"
+          >
+            Ver histórico de áudios &rarr;
+          </a>
         </div>
-      )}
+      )}{' '}
     </div>
   )
 }
