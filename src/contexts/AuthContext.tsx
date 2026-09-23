@@ -7,6 +7,7 @@ export interface UserProfile {
   email: string
   name: string
   avatar?: string
+  admin?: boolean
 }
 
 interface AuthContextType {
@@ -32,6 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: rec.email || '',
         name: rec.name || rec.email?.split('@')[0] || 'Usuário',
         avatar: rec.avatar || '',
+        admin: !!rec.admin,
       }
     }
     return null
@@ -48,6 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: rec.email || '',
         name: rec.name || rec.email?.split('@')[0] || 'Usuário',
         avatar: rec.avatar || '',
+        admin: !!rec.admin,
       })
       setToken(pb.authStore.token)
     } else {

@@ -43,3 +43,26 @@ export const PublicOnlyRoute: React.FC<ProtectedRouteProps> = ({ children }) => 
 
   return <>{children}</>
 }
+
+export const AdminRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const { user, isAuthenticated, isLoading } = useAuth()
+  const location = useLocation()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  if (!user?.admin) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return <>{children}</>
+}

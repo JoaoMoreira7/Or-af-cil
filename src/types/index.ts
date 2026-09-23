@@ -45,8 +45,30 @@ export interface PlanoAssinatura {
   status: PlanoStatus
   trial_ate?: string
   renovacao_em?: string
+  aviso_teste_enviado?: boolean
   created: string
   updated: string
+}
+
+export interface UsuarioAssinanteAdmin {
+  id: string
+  name: string
+  email: string
+  admin: boolean
+  planoStatus: PlanoStatus
+  planoNome: string
+  trialAte?: string
+  renovacaoEm?: string
+  diasRestantesTrial?: number
+  created: string
+}
+
+export interface AdminMetricas {
+  totalUsuarios: number
+  totalEmTrial: number
+  totalAtivos: number
+  totalExpirados: number
+  receitaMensalEstimada: number
 }
 
 export function formatarMoedaBRL(valor: number): string {

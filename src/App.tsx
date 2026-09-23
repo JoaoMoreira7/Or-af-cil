@@ -4,7 +4,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider } from '@/contexts/AuthContext'
-import { ProtectedRoute, PublicOnlyRoute } from '@/components/ProtectedRoute'
+import { ProtectedRoute, PublicOnlyRoute, AdminRoute } from '@/components/ProtectedRoute'
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext'
 import Layout from '@/components/Layout'
 
@@ -18,6 +18,7 @@ import OrcamentoDetalhe from '@/pages/OrcamentoDetalhe'
 import OrcamentoForm from '@/pages/OrcamentoForm'
 import Planos from '@/pages/Planos'
 import Configuracoes from '@/pages/Configuracoes'
+import Admin from '@/pages/Admin'
 import TermosDeUso from '@/pages/TermosDeUso'
 import PoliticaDePrivacidade from '@/pages/PoliticaDePrivacidade'
 import NotFound from '@/pages/NotFound'
@@ -72,6 +73,14 @@ const App = () => (
               <Route path="/clientes" element={<Clientes />} />
               <Route path="/planos" element={<Planos />} />
               <Route path="/configuracoes" element={<Configuracoes />} />
+              <Route
+                path="/admin"
+                element={
+                  <AdminRoute>
+                    <Admin />
+                  </AdminRoute>
+                }
+              />
             </Route>
 
             {/* Fallback 404 */}

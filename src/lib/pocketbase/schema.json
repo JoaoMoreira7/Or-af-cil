@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-09-23T12:20:12.968Z",
+  "generatedAt": "2026-09-23T12:32:26.632Z",
   "collections": [
     {
       "name": "users",
       "type": "auth",
       "apiRules": {
-        "list": "id = @request.auth.id",
-        "view": "id = @request.auth.id",
+        "list": "@request.auth.id != '' && (id = @request.auth.id || @request.auth.admin = true)",
+        "view": "@request.auth.id != '' && (id = @request.auth.id || @request.auth.admin = true)",
         "create": "",
         "update": "id = @request.auth.id",
         "delete": "id = @request.auth.id"
@@ -37,6 +37,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "admin",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -205,8 +211,8 @@
       "name": "planos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && user_id = @request.auth.id",
-        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "list": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.admin = true)",
+        "view": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.admin = true)",
         "create": "@request.auth.id != '' && @request.body.user_id = @request.auth.id",
         "update": "@request.auth.id != '' && user_id = @request.auth.id",
         "delete": "@request.auth.id != '' && user_id = @request.auth.id"
@@ -256,6 +262,12 @@
         {
           "name": "trial_ate",
           "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aviso_teste_enviado",
+          "type": "bool",
           "required": false,
           "system": false
         }

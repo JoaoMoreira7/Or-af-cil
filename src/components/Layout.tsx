@@ -7,6 +7,7 @@ import {
   PlusCircle,
   CreditCard,
   Settings,
+  Shield,
   LogOut,
   Bell,
   Menu,
@@ -25,14 +26,18 @@ export default function Layout() {
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  // Rotas isentas de bloqueio por paywall: Planos e Configurações
-  const isRotaLiberada = location.pathname === '/planos' || location.pathname === '/configuracoes'
+  // Rotas isentas de bloqueio por paywall: Planos, Configurações e Admin
+  const isRotaLiberada =
+    location.pathname === '/planos' ||
+    location.pathname === '/configuracoes' ||
+    location.pathname === '/admin'
   const deveExibirPaywall = isBloqueado && !isRotaLiberada
 
   // Mapeamento dinâmico de títulos por rota
   const getPageTitle = () => {
     const path = location.pathname
     if (path === '/dashboard') return 'Dashboard'
+    if (path === '/admin') return 'Painel do Administrador'
     if (path === '/orcamentos') return 'Orçamentos'
     if (path === '/orcamentos/novo') return 'Novo Orçamento com IA'
     if (path.startsWith('/orcamentos/') && path.endsWith('/editar')) return 'Editar Orçamento'
@@ -43,7 +48,15 @@ export default function Layout() {
     return 'JM Sistemas'
   }
 
-  const navItems = [
+  type NavItem = {
+    label: string
+    path: string
+    icon: React.ComponentType<{ className?: string }>
+    isCta?: boolean
+    isAdmin?: boolean
+  }
+
+  const baseNavItems: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Orçamentos', path: '/orcamentos', icon: FileText },
     { label: 'Clientes', path: '/clientes', icon: Users },
@@ -51,6 +64,10 @@ export default function Layout() {
     { label: 'Planos', path: '/planos', icon: CreditCard },
     { label: 'Configurações', path: '/configuracoes', icon: Settings },
   ]
+
+  const navItems: NavItem[] = user?.admin
+    ? [...baseNavItems, { label: 'Admin', path: '/admin', icon: Shield, isAdmin: true }]
+    : baseNavItems
 
   const handleLogout = () => {
     logout()
@@ -349,7 +366,9 @@ export default function Layout() {
             { label: 'Início', path: '/dashboard', icon: LayoutDashboard },
             { label: 'Orçamentos', path: '/orcamentos', icon: FileText },
             { label: 'Novo', path: '/orcamentos/novo', icon: PlusCircle, isCenter: true },
-            { label: 'Clientes', path: '/clientes', icon: Users },
+            ...(user?.admin
+              ? [{ label: 'Admin', path: '/admin', icon: Shield }]
+              : [{ label: 'Clientes', path: '/clientes', icon: Users }]),
             { label: 'Planos', path: '/planos', icon: CreditCard },
           ].map((item) => {
             const Icon = item.icon
