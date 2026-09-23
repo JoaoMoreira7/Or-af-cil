@@ -88,15 +88,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await pb.collection('users').authWithPassword(email.trim(), pass)
     syncAuth()
 
-    // 3. Criar registro inicial de plano Starter
+    // 3. Criar registro inicial com Teste Grátis de 7 dias
     try {
-      const date = new Date()
-      date.setDate(date.getDate() + 30)
+      const trialDate = new Date()
+      trialDate.setDate(trialDate.getDate() + 7)
       await pb.collection('planos').create({
         user_id: createdUser.id,
         plano: 'starter',
-        status: 'ativo',
-        renovacao_em: date.toISOString(),
+        status: 'trial',
+        trial_ate: trialDate.toISOString(),
       })
     } catch {
       // silencioso se já existir

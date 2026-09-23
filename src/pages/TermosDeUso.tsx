@@ -97,14 +97,17 @@ export default function TermosDeUso() {
 
           <section>
             <h2 className="text-base font-bold text-slate-900 mb-2">
-              4. Planos e Cobrança (Simulada)
+              4. Planos, Teste Grátis e Cobrança (Simulada)
             </h2>
             <p>
-              A plataforma oferece os planos <strong>Starter (R$ 49,00/mês)</strong> e{' '}
-              <strong>Pro (R$ 97,00/mês)</strong>. Nesta versão de demonstração e homologação, toda
-              a cobrança, processamento de cartões e transações financeiras são estritamente{' '}
-              <strong>SIMULADAS</strong>. Nenhuma transação bancária ou débito real é efetuado nos
-              dados fornecidos no formulário de pagamento.
+              A plataforma oferece acesso completo através do plano{' '}
+              <strong>Starter (R$ 49,00/mês)</strong>, antecedido por um período de teste grátis de{' '}
+              <strong>7 dias</strong> para novos usuários. Após a conclusão do período de teste, o
+              acesso é bloqueado até a contratação do plano via PIX, Cartão de Crédito ou Boleto.
+              Nesta versão de demonstração e homologação, toda a cobrança, processamento de cartões
+              e transações financeiras são estritamente <strong>SIMULADAS</strong>. Nenhuma
+              transação bancária ou débito real é efetuado nos dados fornecidos nos formulários de
+              pagamento.
             </p>
           </section>
 

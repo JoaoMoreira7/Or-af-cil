@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T18:44:47.568Z",
+  "generatedAt": "2026-09-23T12:20:12.968Z",
   "collections": [
     {
       "name": "users",
@@ -231,7 +231,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["ativo", "inativo"]
+          "selectValues": ["trial", "ativo", "expirado", "inativo"]
         },
         {
           "name": "renovacao_em",
@@ -252,6 +252,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "trial_ate",
+          "type": "date",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": ["CREATE UNIQUE INDEX idx_planos_user_id ON planos (user_id)"]

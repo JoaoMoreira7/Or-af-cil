@@ -14,13 +14,20 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useSubscription } from '@/contexts/SubscriptionContext'
+import { TrialExpiredPaywall } from '@/components/TrialExpiredPaywall'
 import { Button } from '@/components/ui/button'
 
 export default function Layout() {
   const { user, logout } = useAuth()
+  const { isBloqueado, isTrial, diasRestantesTrial, isAtivo } = useSubscription()
   const location = useLocation()
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // Rotas isentas de bloqueio por paywall: Planos e Configurações
+  const isRotaLiberada = location.pathname === '/planos' || location.pathname === '/configuracoes'
+  const deveExibirPaywall = isBloqueado && !isRotaLiberada
 
   // Mapeamento dinâmico de títulos por rota
   const getPageTitle = () => {
@@ -252,6 +259,35 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* BADGE DE DIAS RESTANTES NO HEADER */}
+            {isTrial && (
+              <div
+                onClick={() => navigate('/planos')}
+                className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-800 cursor-pointer hover:bg-amber-100 transition-colors"
+                title="Clique para ver os detalhes do plano"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>
+                  Teste grátis:{' '}
+                  <strong>
+                    {diasRestantesTrial === 0
+                      ? 'Hoje é o último dia'
+                      : `${diasRestantesTrial} ${diasRestantesTrial === 1 ? 'dia restante' : 'dias restantes'}`}
+                  </strong>
+                </span>
+              </div>
+            )}
+
+            {isAtivo && (
+              <div
+                onClick={() => navigate('/planos')}
+                className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800 cursor-pointer hover:bg-emerald-100 transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Plano Ativo (R$ 49/mês)</span>
+              </div>
+            )}
+
             {/* CTA Desktop */}
             <Button
               onClick={() => navigate('/orcamentos/novo')}
@@ -276,9 +312,35 @@ export default function Layout() {
           </div>
         </header>
 
-        {/* PAGE CONTENT */}
+        {/* BANNER INFORMATIVO DE TRIAL / EXPIRAÇÃO NO TOPO (QUANDO APLICÁVEL) */}
+        {isTrial && !isBloqueado && (
+          <div className="no-print bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 text-xs flex items-center justify-between shadow-inner">
+            <div className="flex items-center gap-2 max-w-[1240px] mx-auto w-full justify-between">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                <span>
+                  Período de teste grátis:{' '}
+                  <strong>
+                    {diasRestantesTrial === 0
+                      ? 'Último dia de teste!'
+                      : `${diasRestantesTrial} ${diasRestantesTrial === 1 ? 'dia restante' : 'dias restantes'}`}
+                  </strong>
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate('/planos')}
+                className="text-xs bg-white/20 hover:bg-white text-white hover:text-blue-900 px-2.5 py-0.5 rounded-full font-semibold transition-colors"
+              >
+                Contratar por R$ 49/mês
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* PAGE CONTENT OU PAYWALL SE TESTE EXPIROU */}
         <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1240px] w-full mx-auto pb-24 md:pb-8">
-          <Outlet />
+          {deveExibirPaywall ? <TrialExpiredPaywall /> : <Outlet />}
         </main>
 
         {/* BOTTOM NAVIGATION MOBILE (64px) */}

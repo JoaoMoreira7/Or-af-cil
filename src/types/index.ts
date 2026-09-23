@@ -36,11 +36,14 @@ export interface Orçamento {
   }
 }
 
+export type PlanoStatus = 'trial' | 'ativo' | 'expirado' | 'inativo'
+
 export interface PlanoAssinatura {
   id: string
   user_id: string
   plano: 'starter' | 'pro'
-  status: 'ativo' | 'inativo'
+  status: PlanoStatus
+  trial_ate?: string
   renovacao_em?: string
   created: string
   updated: string
