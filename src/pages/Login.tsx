@@ -102,12 +102,15 @@ export default function Login() {
           </div>
 
           {/* ERROR BANNER WITH SHAKE ANIMATION */}
-          {errorMessage && (
-            <div className="mb-5 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm flex items-start gap-2.5 animate-shake-x">
+          {errorMessage ? (
+            <div
+              key="login-error-banner"
+              className="mb-5 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm flex items-start gap-2.5 animate-shake-x"
+            >
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
             </div>
-          )}
+          ) : null}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">

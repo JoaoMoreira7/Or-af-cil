@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Mic,
   Square,
@@ -62,9 +63,11 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const startXRef = useRef<number>(0)
   const isHoldModeRef = useRef<boolean>(false)
+  const isMountedRef = useRef<boolean>(true)
 
-  // Inicializa suporte a SpeechRecognition
+  // Inicializa suporte a SpeechRecognition e rastreamento de montagem
   useEffect(() => {
+    isMountedRef.current = true
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -73,10 +76,15 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     }
 
     return () => {
+      isMountedRef.current = false
       // Cleanup ao desmontar
       stopRecordingCleanup()
       if (audioUrl) {
-        URL.revokeObjectURL(audioUrl)
+        try {
+          URL.revokeObjectURL(audioUrl)
+        } catch {
+          /* noop */
+        }
       }
     }
   }, [audioUrl])
@@ -96,7 +104,11 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop()
+        if (typeof recognitionRef.current.abort === 'function') {
+          recognitionRef.current.abort()
+        } else {
+          recognitionRef.current.stop()
+        }
       } catch {
         /* intentionally ignored */
       }
@@ -104,7 +116,11 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     }
 
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop())
+      try {
+        streamRef.current.getTracks().forEach((track) => track.stop())
+      } catch {
+        /* intentionally ignored */
+      }
       streamRef.current = null
     }
   }
@@ -156,6 +172,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       }
 
       recorder.onstop = () => {
+        if (!isMountedRef.current) return
         const mime = recorder.mimeType || 'audio/webm'
         const blob = new Blob(audioChunksRef.current, { type: mime })
         setAudioBlob(blob)
@@ -165,11 +182,14 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
       recorder.start(100) // pedaços a cada 100ms
       mediaRecorderRef.current = recorder
-      setIsRecording(true)
+      if (isMountedRef.current) {
+        setIsRecording(true)
+      }
 
       // Inicia timer
       const startTime = Date.now()
       timerIntervalRef.current = window.setInterval(() => {
+        if (!isMountedRef.current) return
         const elapsed = (Date.now() - startTime) / 1000
         setRecordDuration(elapsed)
       }, 100)
@@ -178,7 +198,9 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       startSpeechRecognition()
     } catch (err) {
       console.error('Erro ao acessar microfone:', err)
-      setIsRecording(false)
+      if (isMountedRef.current) {
+        setIsRecording(false)
+      }
       stopRecordingCleanup()
     }
   }
@@ -218,8 +240,12 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       }
 
       recognition.onend = () => {
-        // Se ainda estiver gravando, tenta reiniciar
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        // Se ainda estiver montado e gravando, tenta reiniciar
+        if (
+          isMountedRef.current &&
+          mediaRecorderRef.current &&
+          mediaRecorderRef.current.state === 'recording'
+        ) {
           try {
             recognition.start()
           } catch {
@@ -625,12 +651,12 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
               gírias de negócios.
             </span>
           </div>
-          <a
-            href="/audios"
+          <Link
+            to="/audios"
             className="text-emerald-700 font-semibold hover:underline shrink-0 hidden sm:inline"
           >
             Ver histórico de áudios &rarr;
-          </a>
+          </Link>
         </div>
       )}{' '}
     </div>

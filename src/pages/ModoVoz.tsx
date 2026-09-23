@@ -50,6 +50,8 @@ export default function ModoVoz() {
   const recognitionRef = useRef<any>(null)
   const timerRef = useRef<number | null>(null)
 
+  const isMountedRef = useRef<boolean>(true)
+
   const stopAllMedia = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current)
@@ -58,7 +60,11 @@ export default function ModoVoz() {
 
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop()
+        if (typeof recognitionRef.current.abort === 'function') {
+          recognitionRef.current.abort()
+        } else {
+          recognitionRef.current.stop()
+        }
       } catch {
         /* noop */
       }
@@ -66,15 +72,23 @@ export default function ModoVoz() {
     }
 
     if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop())
+      try {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop())
+      } catch {
+        /* noop */
+      }
       mediaStreamRef.current = null
     }
 
-    setIsListening(false)
+    if (isMountedRef.current) {
+      setIsListening(false)
+    }
   }, [])
 
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
+      isMountedRef.current = false
       stopAllMedia()
     }
   }, [stopAllMedia])
@@ -144,8 +158,8 @@ export default function ModoVoz() {
         }
 
         recognition.onend = () => {
-          // Se ainda marcado como ouvindo, mantém ativo
-          if (mediaStreamRef.current) {
+          // Se ainda montado e marcado como ouvindo, mantém ativo
+          if (isMountedRef.current && mediaStreamRef.current) {
             try {
               recognition.start()
             } catch {

@@ -81,18 +81,25 @@ export default function Clientes() {
   const [deleteTarget, setDeleteTarget] = useState<Cliente | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  const isMountedRef = React.useRef(true)
+
   const fetchClientes = async () => {
     try {
       const lista = await clientesService.listar()
-      setClientes(lista)
+      if (isMountedRef.current) {
+        setClientes(lista || [])
+      }
     } catch (err) {
       console.error('Erro ao listar clientes:', err)
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
+    isMountedRef.current = true
     fetchClientes()
 
     // Se veio de reaproveitar áudio
@@ -120,6 +127,10 @@ export default function Clientes() {
       }
     } catch (eLoc) {
       console.warn('Erro ao carregar estado de navegação:', eLoc)
+    }
+
+    return () => {
+      isMountedRef.current = false
     }
   }, [])
 
@@ -151,9 +162,9 @@ export default function Clientes() {
     setModalOpen(true)
   }
 
-  // Preenchimento de Cliente via Áudio estilo WhatsApp
+  // Preenchimento de Cliente via Áudio estilo WhatsApp com proteção segura contra crashes
   const handleVoiceClientTranscript = async (transcription: string) => {
-    if (!transcription.trim()) return
+    if (!transcription || !transcription.trim()) return
 
     setVoiceInterpreting(true)
     setLastVoiceTranscript(transcription)
@@ -165,7 +176,7 @@ export default function Clientes() {
         userId: user?.id,
       })
 
-      const extraido = res.interpretacao?.cliente_novo
+      const extraido = res?.interpretacao?.cliente_novo
 
       if (extraido) {
         const nomeExtraido = extraido.nome ? String(extraido.nome).trim() : ''
@@ -195,6 +206,7 @@ export default function Clientes() {
         })
       }
     } catch (err: unknown) {
+      console.warn('Erro na interpretação de voz do cliente:', err)
       const msg = err instanceof Error ? err.message : 'Falha ao processar áudio'
       toast({
         variant: 'destructive',

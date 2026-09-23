@@ -31,7 +31,10 @@ export const PublicOnlyRoute: React.FC<ProtectedRouteProps> = ({ children }) => 
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0F172A]">
+      <div
+        key="public-loading"
+        className="min-h-screen flex items-center justify-center bg-[#0F172A]"
+      >
         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
       </div>
     )
@@ -41,7 +44,11 @@ export const PublicOnlyRoute: React.FC<ProtectedRouteProps> = ({ children }) => 
     return <Navigate to="/dashboard" replace />
   }
 
-  return <>{children}</>
+  return (
+    <div key="public-content" className="w-full min-h-screen">
+      {children}
+    </div>
+  )
 }
 
 export const AdminRoute: React.FC<ProtectedRouteProps> = ({ children }) => {

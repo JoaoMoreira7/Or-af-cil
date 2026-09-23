@@ -15,13 +15,14 @@ export function Toaster() {
   return (
     <ToastProvider>
       {toasts.map(function ({ id, title, description, action, ...props }) {
+        if (!id) return null
         return (
           <Toast key={id} {...props}>
             <div className="grid gap-1">
-              {title && <ToastTitle>{title}</ToastTitle>}
-              {description && <ToastDescription>{description}</ToastDescription>}
+              {title ? <ToastTitle>{title}</ToastTitle> : null}
+              {description ? <ToastDescription>{description}</ToastDescription> : null}
             </div>
-            {action}
+            {action || null}
             <ToastClose />
           </Toast>
         )

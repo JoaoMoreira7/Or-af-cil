@@ -5,21 +5,38 @@ import { Button } from '@/components/ui/button'
 interface Props {
   children: ReactNode
   fallbackTitle?: string
+  resetKey?: string
 }
 
 interface State {
   hasError: boolean
   error: Error | null
+  prevResetKey?: string
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
+    prevResetKey: this.props.resetKey,
   }
 
-  public static getDerivedStateFromError(error: Error): State {
+  public static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error }
+  }
+
+  public static getDerivedStateFromProps(
+    nextProps: Props,
+    prevState: State,
+  ): Partial<State> | null {
+    if (nextProps.resetKey !== undefined && nextProps.resetKey !== prevState.prevResetKey) {
+      return {
+        hasError: false,
+        error: null,
+        prevResetKey: nextProps.resetKey,
+      }
+    }
+    return null
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -37,6 +54,11 @@ export class ErrorBoundary extends Component<Props, State> {
   private handleGoHome = () => {
     this.setState({ hasError: false, error: null })
     window.location.href = '/dashboard'
+  }
+
+  private handleGoLogin = () => {
+    this.setState({ hasError: false, error: null })
+    window.location.href = '/login'
   }
 
   public render() {
@@ -82,6 +104,15 @@ export class ErrorBoundary extends Component<Props, State> {
               >
                 <Home className="w-3.5 h-3.5 mr-1.5" />
                 Ir para o Início
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={this.handleGoLogin}
+                className="w-full sm:w-auto h-9 text-xs text-slate-600 hover:text-slate-900"
+              >
+                Tela de Login
               </Button>
             </div>
           </div>
