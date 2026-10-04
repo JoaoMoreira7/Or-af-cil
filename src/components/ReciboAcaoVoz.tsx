@@ -81,6 +81,10 @@ export function ReciboAcaoVoz({
         return <DollarSign className="w-4 h-4 text-emerald-600" />
       case 'atualizar_preferencias_ia':
         return <HeartHandshake className="w-4 h-4 text-indigo-600" />
+      case 'documento_orcamento':
+        return <FileText className="w-4 h-4 text-blue-600" />
+      case 'documento_despesa':
+        return <DollarSign className="w-4 h-4 text-amber-600" />
       default:
         return <CheckCircle2 className="w-4 h-4 text-emerald-600" />
     }
@@ -100,8 +104,12 @@ export function ReciboAcaoVoz({
         return 'Baixa de Pagamento'
       case 'atualizar_preferencias_ia':
         return 'Preferências Atualizadas'
+      case 'documento_orcamento':
+        return 'Orçamento da Foto'
+      case 'documento_despesa':
+        return 'Despesa de Campo'
       default:
-        return 'Ação de Voz'
+        return 'Ação Registrada'
     }
   }
 
@@ -243,6 +251,10 @@ export function ReciboAcaoVoz({
                   'A cobrança voltará ao status pendente e a baixa será revertida.'}
                 {acao.tipo_acao === 'atualizar_preferencias_ia' &&
                   'As configurações do assistente (nome/tom/emojis) voltarão aos valores prévios.'}
+                {acao.tipo_acao === 'documento_orcamento' &&
+                  'O orçamento gerado a partir da foto será excluído do sistema.'}
+                {acao.tipo_acao === 'documento_despesa' &&
+                  'O registro da despesa vinculada à foto será desfeito.'}
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>

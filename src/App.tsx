@@ -25,6 +25,7 @@ import PoliticaDePrivacidade from '@/pages/PoliticaDePrivacidade'
 import AudiosHistorico from '@/pages/AudiosHistorico'
 import ModoVoz from '@/pages/ModoVoz'
 import ContasReceber from '@/pages/ContasReceber'
+import AssistenteDeCampo from '@/pages/AssistenteDeCampo'
 import NotFound from '@/pages/NotFound'
 
 const AppRoutes = () => {
@@ -94,6 +95,7 @@ const AppRoutes = () => {
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/audios" element={<AudiosHistorico />} />
           <Route path="/modo-voz" element={<ModoVoz />} />
+          <Route path="/assistente-campo" element={<AssistenteDeCampo />} />
           <Route path="/planos" element={<Planos />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
           <Route

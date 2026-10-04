@@ -19,6 +19,7 @@ import {
   AudioLines,
   Radio,
   DollarSign,
+  Camera,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSubscription } from '@/contexts/SubscriptionContext'
@@ -54,6 +55,7 @@ export default function Layout() {
     if (path === '/clientes') return 'Clientes'
     if (path === '/audios') return 'Histórico de Ditados & Áudios'
     if (path === '/modo-voz') return 'Modo Voz — Só Falar'
+    if (path === '/assistente-campo') return 'Assistente de Campo (Fotos & Notas)'
     if (path === '/planos') return 'Planos e Assinatura'
     if (path === '/configuracoes') return 'Configurações da Conta'
     return 'JM Sistemas'
@@ -71,6 +73,7 @@ export default function Layout() {
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Orçamentos', path: '/orcamentos', icon: FileText },
     { label: 'Contas a Receber', path: '/contas-a-receber', icon: DollarSign },
+    { label: 'Assistente de Campo', path: '/assistente-campo', icon: Camera },
     { label: 'Modo Voz', path: '/modo-voz', icon: Mic },
     { label: 'Áudios', path: '/audios', icon: AudioLines },
     { label: 'Clientes', path: '/clientes', icon: Users },
@@ -416,6 +419,25 @@ export default function Layout() {
                   type="button"
                   onClick={() => {
                     setMobileMoreOpen(false)
+                    navigate('/assistente-campo')
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                    location.pathname === '/assistente-campo'
+                      ? 'bg-violet-50 border-violet-300 text-violet-800'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center mb-1">
+                    <Camera className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-semibold">Assist. Campo</span>
+                  <span className="text-[10px] text-slate-500">Lê Fotos/Notas</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false)
                     navigate('/contas-a-receber')
                   }}
                   className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
@@ -609,6 +631,7 @@ export default function Layout() {
             onClick={() => setMobileMoreOpen((prev) => !prev)}
             className={`flex flex-col items-center justify-center py-1 px-2 transition-colors ${
               mobileMoreOpen ||
+              location.pathname === '/assistente-campo' ||
               location.pathname === '/contas-a-receber' ||
               location.pathname === '/clientes' ||
               location.pathname === '/planos' ||

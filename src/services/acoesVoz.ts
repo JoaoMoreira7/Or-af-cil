@@ -148,6 +148,39 @@ export const acoesVozService = {
           tom_resposta: prevTom,
           usar_emojis: prevEmojis,
         })
+      } else if (acao.tipo_acao === 'documento_orcamento') {
+        const orcamentoId = acao.registro_id || (dados.orcamento_id as string)
+        if (orcamentoId) {
+          try {
+            await orcamentosService.excluir(orcamentoId)
+          } catch (err) {
+            console.warn('Erro ao excluir orçamento de documento no desfazer:', err)
+          }
+        }
+        // Se houver documento_lido_id, atualiza ação aplicada de volta para 'nenhuma'
+        const docId = dados.documento_lido_id as string | undefined
+        if (docId) {
+          try {
+            await pb.collection('documentos_lidos').update(docId, {
+              acao_aplicada: 'nenhuma',
+              orcamento_gerado_id: null,
+            })
+          } catch {
+            /* intentionally ignored */
+          }
+        }
+      } else if (acao.tipo_acao === 'documento_despesa') {
+        const docId = dados.documento_lido_id as string | undefined
+        if (docId) {
+          try {
+            await pb.collection('documentos_lidos').update(docId, {
+              acao_aplicada: 'nenhuma',
+              orcamento_vinculado_id: null,
+            })
+          } catch {
+            /* intentionally ignored */
+          }
+        }
       }
 
       // Atualiza o registro na coleção acoes_voz para status = 'desfeito'

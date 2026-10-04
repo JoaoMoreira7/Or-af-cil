@@ -102,7 +102,63 @@ export type AcaoVozTipo =
   | 'gerar_cobranca'
   | 'baixa_pagamento'
   | 'atualizar_preferencias_ia'
+  | 'documento_orcamento'
+  | 'documento_despesa'
 export type AcaoVozStatus = 'ativo' | 'desfeito'
+
+export type DocumentoTipo =
+  | 'nota_fiscal'
+  | 'recibo'
+  | 'orcamento_papel'
+  | 'lista_materiais'
+  | 'comprovante'
+  | 'outro'
+
+export type DocumentoAcaoAplicada =
+  | 'nenhuma'
+  | 'orcamento_criado'
+  | 'despesa_vinculada'
+  | 'apenas_salvo'
+
+export interface DocumentoItemExtraido {
+  descricao: string
+  quantidade: number
+  valor_unitario: number
+  valor_total: number
+}
+
+export interface DocumentoDadosExtraidos {
+  tipo_documento: DocumentoTipo
+  fornecedor?: string
+  data_documento?: string
+  itens: DocumentoItemExtraido[]
+  valor_total: number
+  valor_impostos?: number
+  observacoes?: string
+  confianca?: 'alta' | 'media' | 'baixa'
+}
+
+export interface DocumentoLido {
+  id: string
+  user_id: string
+  foto?: string
+  tipo_documento: DocumentoTipo
+  fornecedor?: string
+  data_documento?: string
+  valor_total?: number
+  valor_impostos?: number
+  dados_extraidos?: DocumentoDadosExtraidos
+  acao_aplicada?: DocumentoAcaoAplicada
+  orcamento_vinculado_id?: string
+  orcamento_gerado_id?: string
+  observacoes?: string
+  created: string
+  updated: string
+  expand?: {
+    orcamento_vinculado_id?: Orçamento
+    orcamento_gerado_id?: Orçamento
+  }
+}
 
 export interface AcaoVozRegistro {
   id: string

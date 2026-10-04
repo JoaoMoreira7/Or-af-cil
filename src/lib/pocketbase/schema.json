@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-04T00:51:21.943Z",
+  "generatedAt": "2026-10-04T00:56:55.063Z",
   "collections": [
     {
       "name": "users",
@@ -380,7 +380,9 @@
             "mudanca_status",
             "gerar_cobranca",
             "baixa_pagamento",
-            "atualizar_preferencias_ia"
+            "atualizar_preferencias_ia",
+            "documento_orcamento",
+            "documento_despesa"
           ]
         },
         {
@@ -585,6 +587,122 @@
         }
       ],
       "indexes": ["CREATE UNIQUE INDEX idx_pref_ia_user_id ON preferencias_ia (user_id)"]
+    },
+    {
+      "name": "documentos_lidos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.body.user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "foto",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_documento",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "nota_fiscal",
+            "recibo",
+            "orcamento_papel",
+            "lista_materiais",
+            "comprovante",
+            "outro"
+          ]
+        },
+        {
+          "name": "fornecedor",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_documento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_total",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_impostos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extraidos",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "acao_aplicada",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["nenhuma", "orcamento_criado", "despesa_vinculada", "apenas_salvo"]
+        },
+        {
+          "name": "orcamento_vinculado_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "orcamentos"
+        },
+        {
+          "name": "orcamento_gerado_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "orcamentos"
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_documentos_lidos_user_id ON documentos_lidos (user_id)",
+        "CREATE INDEX idx_documentos_lidos_tipo ON documentos_lidos (tipo_documento)",
+        "CREATE INDEX idx_documentos_lidos_created ON documentos_lidos (created DESC)"
+      ]
     }
   ]
 }
