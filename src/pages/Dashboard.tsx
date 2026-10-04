@@ -18,6 +18,7 @@ import { Orçamento, Cliente, formatarMoedaBRL, formatarData } from '@/types'
 import { StatusBadge } from '@/components/StatusBadge'
 import { FollowUpProativo } from '@/components/FollowUpProativo'
 import { ResumoManhaCard } from '@/components/ResumoManhaCard'
+import { ResumoSemanalCard } from '@/components/ResumoSemanalCard'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -113,6 +114,15 @@ export default function Dashboard() {
           </Button>
         </div>
       </div>
+
+      {/* MELHORIA NOVO: RESUMO PROATIVO SEMANAL EM ÁUDIO (PODCAST DE 1 MINUTO - ESTILO MEU ASSESSOR) */}
+      {!loading && (
+        <ResumoSemanalCard
+          userName={user?.name || 'Gestor(a)'}
+          onAbrirOrcamentos={() => navigate('/orcamentos')}
+          onAbrirContasReceber={() => navigate('/contas-a-receber')}
+        />
+      )}
 
       {/* MELHORIA 3 — RESUMO DA MANHÃ (NO TOPO DO DASHBOARD) COM ATALHO PARA CONTAS A RECEBER */}
       {!loading && (

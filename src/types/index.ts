@@ -182,6 +182,32 @@ export interface ComandoConsultaDevedoresExtraido {
   mensagem_resposta: string
 }
 
+export interface ResumoSemanalMetricas {
+  orcamentos_criados: number
+  orcamentos_enviados: number
+  orcamentos_aprovados: number
+  valor_aprovado: number
+  cobrancas_pagas: number
+  valor_pago: number
+  cobrancas_pendentes: number
+  valor_pendente: number
+  novos_clientes: number
+  orcamentos_sem_resposta_5_dias: number
+}
+
+export interface ResumoSemanalData {
+  sucesso: boolean
+  resumo_texto: string
+  metricas: ResumoSemanalMetricas
+  preferencias_aplicadas?: {
+    nome_preferido?: string
+    tom_resposta?: TomRespostaIa
+    usar_emojis?: boolean
+  }
+  gerado_em: string
+  cache_chave?: string
+}
+
 export function formatarMoedaBRL(valor: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
