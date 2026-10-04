@@ -24,6 +24,7 @@ import TermosDeUso from '@/pages/TermosDeUso'
 import PoliticaDePrivacidade from '@/pages/PoliticaDePrivacidade'
 import AudiosHistorico from '@/pages/AudiosHistorico'
 import ModoVoz from '@/pages/ModoVoz'
+import ContasReceber from '@/pages/ContasReceber'
 import NotFound from '@/pages/NotFound'
 
 const AppRoutes = () => {
@@ -89,6 +90,7 @@ const AppRoutes = () => {
           <Route path="/orcamentos/novo" element={<OrcamentoForm />} />
           <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
           <Route path="/orcamentos/:id/editar" element={<OrcamentoForm />} />
+          <Route path="/contas-a-receber" element={<ContasReceber />} />
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/audios" element={<AudiosHistorico />} />
           <Route path="/modo-voz" element={<ModoVoz />} />

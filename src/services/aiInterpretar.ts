@@ -11,8 +11,23 @@ export interface ClienteNovoExtraido {
 
 import { ComandoStatusExtraido, AudioContexto } from '@/types'
 
+import {
+  ComandoGerarCobrancaExtraido,
+  ComandoBaixaExtraido,
+  ComandoPersonalizarIaExtraido,
+  ComandoConsultaDevedoresExtraido,
+} from '@/types'
+
 export interface InterpretacaoResultado {
-  intencao_detectada?: 'orcamento' | 'cliente' | 'comando_status' | 'desfazer'
+  intencao_detectada?:
+    | 'orcamento'
+    | 'cliente'
+    | 'comando_status'
+    | 'desfazer'
+    | 'gerar_cobranca'
+    | 'baixa_pagamento'
+    | 'personalizar_ia'
+    | 'consulta_devedores'
   comando_desfazer?: boolean
   transcricao_corrigida: string
   descricao_servico?: string
@@ -23,6 +38,10 @@ export interface InterpretacaoResultado {
   prazo?: string | null
   observacoes?: string | null
   comando_status?: ComandoStatusExtraido | null
+  comando_gerar_cobranca?: ComandoGerarCobrancaExtraido | null
+  comando_baixa?: ComandoBaixaExtraido | null
+  comando_personalizar_ia?: ComandoPersonalizarIaExtraido | null
+  comando_consulta_devedores?: ComandoConsultaDevedoresExtraido | null
   confianca: 'alta' | 'media' | 'baixa'
   duvidas: string[]
 }
@@ -40,6 +59,11 @@ export const aiInterpretarService = {
     transcricao: string
     contexto?: AudioContexto
     userId?: string
+    preferencias?: {
+      nome_preferido?: string
+      tom_resposta?: string
+      usar_emojis?: boolean
+    }
   }): Promise<RespostaInterpretacao> {
     const res = await fetch(`${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/interpretar`, {
       method: 'POST',
@@ -51,6 +75,7 @@ export const aiInterpretarService = {
         transcricao: params.transcricao,
         contexto: params.contexto || 'orcamento',
         userId: params.userId || pb.authStore.record?.id,
+        preferencias: params.preferencias,
       }),
     })
 

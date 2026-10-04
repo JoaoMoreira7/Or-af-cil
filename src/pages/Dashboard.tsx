@@ -114,13 +114,13 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* MELHORIA 3 — RESUMO DA MANHÃ (NO TOPO DO DASHBOARD) */}
+      {/* MELHORIA 3 — RESUMO DA MANHÃ (NO TOPO DO DASHBOARD) COM ATALHO PARA CONTAS A RECEBER */}
       {!loading && (
         <ResumoManhaCard
           orcamentos={orcamentos}
           userName={user?.name || 'Gestor(a)'}
           onVerAguardando={() => navigate('/orcamentos')}
-          onVerReceber={() => navigate('/orcamentos')}
+          onVerReceber={() => navigate('/contas-a-receber')}
         />
       )}
 
@@ -179,13 +179,17 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Card 3: Valor Aprovado BRL */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
+        {/* Card 3: Valor Aprovado BRL com atalho para Contas a Receber */}
+        <div
+          onClick={() => navigate('/contas-a-receber')}
+          className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 cursor-pointer group"
+          title="Ver Contas a Receber e Cobranças"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Valor Aprovado
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider group-hover:text-emerald-700 transition-colors">
+              Total a Receber
             </span>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-105 transition-transform">
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
@@ -197,7 +201,10 @@ export default function Dashboard() {
                 {formatarMoedaBRL(stats.valorAprovado)}
               </span>
             )}
-            <p className="text-xs text-slate-500 mt-1">Total em receitas confirmadas</p>
+            <p className="text-xs text-emerald-600 font-medium mt-1 flex items-center justify-between">
+              <span>Propostas aprovadas</span>
+              <span className="text-[11px] underline">Ver contas →</span>
+            </p>
           </div>
         </div>
 

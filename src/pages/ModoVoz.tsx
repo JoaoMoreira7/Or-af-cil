@@ -16,13 +16,25 @@ import {
   Volume2,
   Send,
   Radio,
+  DollarSign,
+  QrCode,
+  HeartHandshake,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { aiInterpretarService, InterpretacaoResultado } from '@/services/aiInterpretar'
 import { orcamentosService } from '@/services/orcamentos'
 import { clientesService } from '@/services/clientes'
 import { acoesVozService } from '@/services/acoesVoz'
-import { formatarMoedaBRL, OrçamentoStatus, AcaoVozRegistro } from '@/types'
+import { cobrancasService } from '@/services/cobrancas'
+import { preferenciasIaService } from '@/services/preferenciasIa'
+import { ModalCobrancaSimulada } from '@/components/ModalCobrancaSimulada'
+import {
+  formatarMoedaBRL,
+  OrçamentoStatus,
+  AcaoVozRegistro,
+  Cobranca,
+  PreferenciasIa,
+} from '@/types'
 import { ReciboAcaoVoz } from '@/components/ReciboAcaoVoz'
 import {
   AlertDialog,
@@ -66,6 +78,13 @@ export default function ModoVoz() {
   const [confirmarDesfazerVozAcao, setConfirmarDesfazerVozAcao] = useState<AcaoVozRegistro | null>(
     null,
   )
+
+  // Preferências de IA do usuário
+  const [preferenciasIa, setPreferenciasIa] = useState<PreferenciasIa | null>(null)
+
+  // Modal de cobrança gerada por voz
+  const [modalCobrancaVoz, setModalCobrancaVoz] = useState<Cobranca | null>(null)
+  const [modalCobrancaOpen, setModalCobrancaOpen] = useState(false)
 
   // Refs de gravação
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -128,11 +147,19 @@ export default function ModoVoz() {
   useEffect(() => {
     isMountedRef.current = true
     carregarAcoesUltimas24h()
+    if (user?.id) {
+      preferenciasIaService
+        .obter(user.id)
+        .then((p) => {
+          if (isMountedRef.current) setPreferenciasIa(p)
+        })
+        .catch(() => {})
+    }
     return () => {
       isMountedRef.current = false
       stopAllMedia()
     }
-  }, [stopAllMedia, carregarAcoesUltimas24h])
+  }, [stopAllMedia, carregarAcoesUltimas24h, user?.id])
 
   // Iniciar escuta contínua com microfone
   const startListening = async () => {
@@ -248,6 +275,13 @@ export default function ModoVoz() {
         transcricao: fullText,
         contexto: 'geral',
         userId: user?.id,
+        preferencias: preferenciasIa
+          ? {
+              nome_preferido: preferenciasIa.nome_preferido,
+              tom_resposta: preferenciasIa.tom_resposta,
+              usar_emojis: preferenciasIa.usar_emojis,
+            }
+          : undefined,
       })
 
       // Caso especial: Comando falado para Desfazer a última ação ("desfaz aquilo", "desfaz o último")
@@ -300,6 +334,153 @@ export default function ModoVoz() {
 
     setIsApplying(true)
     try {
+      // Caso A: Consulta de devedores ("quem está me devendo?") (Melhoria 6)
+      if (
+        resultado.intencao_detectada === 'consulta_devedores' ||
+        resultado.comando_consulta_devedores
+      ) {
+        setAppliedSuccess(
+          resultado.comando_consulta_devedores?.mensagem_resposta ||
+            'Resumo de contas a receber exibido na tela!',
+        )
+        toast({
+          title: 'Contas a Receber',
+          description: `Total pendente apurado: ${formatarMoedaBRL(resultado.comando_consulta_devedores?.total_devido || 0)}`,
+        })
+        return
+      }
+
+      // Caso B: Gerar cobrança vinculada ao orçamento aprovado (Melhoria 4)
+      if (resultado.comando_gerar_cobranca?.orcamento_id) {
+        const cmd = resultado.comando_gerar_cobranca
+        const novaCob = await cobrancasService.criar({
+          orcamento_id: cmd.orcamento_id,
+          cliente_id: cmd.cliente_id,
+          cliente_nome: cmd.cliente_nome,
+          orcamento_numero: cmd.orcamento_numero,
+          valor: cmd.valor,
+          user_id: user.id,
+        })
+
+        // Registra recibo na coleção acoes_voz
+        const recibo = await acoesVozService.registrar({
+          tipo_acao: 'gerar_cobranca',
+          titulo: `Cobrança gerada: ${cmd.orcamento_numero} (${formatarMoedaBRL(cmd.valor)})`,
+          descricao_resumo: `PIX copia-e-cola simulado gerado para ${cmd.cliente_nome}.`,
+          registro_id: novaCob.id,
+          dados_aplicados: {
+            cobranca_id: novaCob.id,
+            orcamento_id: cmd.orcamento_id,
+            orcamento_numero: cmd.orcamento_numero,
+            cliente_nome: cmd.cliente_nome,
+            valor: cmd.valor,
+            codigo_pix: novaCob.codigo_pix,
+          },
+          user_id: user.id,
+        })
+
+        setUltimoRecibo(recibo)
+        await carregarAcoesUltimas24h()
+        setModalCobrancaVoz(novaCob)
+        setModalCobrancaOpen(true)
+        setAppliedSuccess(
+          `Cobrança simulada do orçamento ${cmd.orcamento_numero} gerada com sucesso! Chave PIX pronta para envio.`,
+        )
+        toast({
+          title: 'Cobrança PIX Gerada!',
+          description: cmd.mensagem_confirmacao,
+        })
+        return
+      }
+
+      // Caso C: Registrar baixa de pagamento por voz ("o João pagou") (Melhoria 4 & 6)
+      if (resultado.comando_baixa?.orcamento_id) {
+        const cmd = resultado.comando_baixa
+        let cobId = cmd.cobranca_id
+        if (!cobId) {
+          const cobCriada = await cobrancasService.criar({
+            orcamento_id: cmd.orcamento_id,
+            cliente_nome: cmd.cliente_nome || 'Cliente',
+            orcamento_numero: cmd.orcamento_numero,
+            valor: cmd.valor,
+            user_id: user.id,
+          })
+          cobId = cobCriada.id
+        }
+
+        await cobrancasService.marcarComoPago(cobId)
+
+        // Registra recibo na coleção acoes_voz
+        const recibo = await acoesVozService.registrar({
+          tipo_acao: 'baixa_pagamento',
+          titulo: `Baixa confirmada: ${cmd.orcamento_numero} (${formatarMoedaBRL(cmd.valor)})`,
+          descricao_resumo: `Pagamento registrado para ${cmd.cliente_nome || 'Cliente'}.`,
+          registro_id: cobId,
+          dados_aplicados: {
+            cobranca_id: cobId,
+            orcamento_id: cmd.orcamento_id,
+            orcamento_numero: cmd.orcamento_numero,
+            cliente_nome: cmd.cliente_nome,
+            valor: cmd.valor,
+          },
+          user_id: user.id,
+        })
+
+        setUltimoRecibo(recibo)
+        await carregarAcoesUltimas24h()
+        setAppliedSuccess(
+          `Pagamento do orçamento ${cmd.orcamento_numero} baixado como PAGO com sucesso!`,
+        )
+        toast({
+          title: 'Baixa de Pagamento Realizada!',
+          description: cmd.mensagem_confirmacao,
+        })
+        return
+      }
+
+      // Caso D: Personalização da IA por comando de voz (Melhoria 5)
+      if (resultado.comando_personalizar_ia) {
+        const cmd = resultado.comando_personalizar_ia
+        const prefAnterior = preferenciasIa || (await preferenciasIaService.obter(user.id))
+
+        const atualizada = await preferenciasIaService.salvar({
+          user_id: user.id,
+          nome_preferido: cmd.nome_preferido,
+          tom_resposta: cmd.tom_resposta,
+          usar_emojis: cmd.usar_emojis,
+        })
+
+        setPreferenciasIa(atualizada)
+
+        // Registra recibo na coleção acoes_voz
+        const recibo = await acoesVozService.registrar({
+          tipo_acao: 'atualizar_preferencias_ia',
+          titulo: `Assistente Personalizado: "${atualizada.nome_preferido || 'você'}"`,
+          descricao_resumo: `Tom: ${atualizada.tom_resposta} · Emojis: ${atualizada.usar_emojis ? 'sim' : 'não'}`,
+          registro_id: atualizada.id,
+          dados_aplicados: {
+            nome_novo: atualizada.nome_preferido,
+            tom_novo: atualizada.tom_resposta,
+            emojis_novo: atualizada.usar_emojis,
+            nome_anterior: prefAnterior.nome_preferido,
+            tom_anterior: prefAnterior.tom_resposta,
+            emojis_anterior: prefAnterior.usar_emojis,
+          },
+          user_id: user.id,
+        })
+
+        setUltimoRecibo(recibo)
+        await carregarAcoesUltimas24h()
+        setAppliedSuccess(
+          `Preferências do assistente salvas! Vou te chamar de "${atualizada.nome_preferido || 'você'}" no tom ${atualizada.tom_resposta}.`,
+        )
+        toast({
+          title: 'Preferências Atualizadas por Voz!',
+          description: cmd.mensagem_confirmacao,
+        })
+        return
+      }
+
       // Caso 1: Comando de alterar status de orçamento
       if (resultado.comando_status?.orcamento_id && resultado.comando_status?.novo_status) {
         const orcId = resultado.comando_status.orcamento_id
@@ -545,6 +726,10 @@ export default function ModoVoz() {
       })
     } else if (acao.tipo_acao === 'mudanca_status' && acao.registro_id) {
       navigate(`/orcamentos/${acao.registro_id}`)
+    } else if (acao.tipo_acao === 'gerar_cobranca' || acao.tipo_acao === 'baixa_pagamento') {
+      navigate('/contas-a-receber')
+    } else if (acao.tipo_acao === 'atualizar_preferencias_ia') {
+      navigate('/configuracoes')
     }
   }
 
@@ -681,7 +866,95 @@ export default function ModoVoz() {
 
             {/* Ação mapeada */}
             <div className="space-y-2 text-xs">
-              {resultado.comando_status?.novo_status ? (
+              {resultado.comando_consulta_devedores ? (
+                <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-200 space-y-2 text-left">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-indigo-700" />
+                    <span className="font-bold text-indigo-900 text-xs uppercase tracking-wide">
+                      Resumo de Contas a Receber
+                    </span>
+                  </div>
+                  <div className="whitespace-pre-line text-slate-800 text-xs font-medium leading-relaxed bg-white/80 p-3 rounded-lg border border-indigo-100">
+                    {resultado.comando_consulta_devedores.mensagem_resposta}
+                  </div>
+                  <div className="pt-1 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500">
+                      Total pendente:{' '}
+                      <strong className="text-blue-700">
+                        {formatarMoedaBRL(resultado.comando_consulta_devedores.total_devido)}
+                      </strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/contas-a-receber')}
+                      className="text-xs font-bold text-blue-600 hover:underline"
+                    >
+                      Abrir tela de cobranças →
+                    </button>
+                  </div>
+                </div>
+              ) : resultado.comando_gerar_cobranca ? (
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 space-y-1.5">
+                  <span className="font-bold text-emerald-900 flex items-center gap-1.5">
+                    <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+                    Gerar Cobrança PIX para Orçamento:
+                  </span>
+                  <p className="text-emerald-950 font-medium">
+                    {resultado.comando_gerar_cobranca.mensagem_confirmacao}
+                  </p>
+                  <div className="text-[11px] text-emerald-800 bg-white/70 p-2 rounded border border-emerald-100">
+                    Proposta: <strong>{resultado.comando_gerar_cobranca.orcamento_numero}</strong> |
+                    Cliente:{' '}
+                    <strong>{resultado.comando_gerar_cobranca.cliente_nome || 'Cliente'}</strong> |
+                    Valor:{' '}
+                    <strong>{formatarMoedaBRL(resultado.comando_gerar_cobranca.valor)}</strong>
+                  </div>
+                </div>
+              ) : resultado.comando_baixa ? (
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 space-y-1.5">
+                  <span className="font-bold text-blue-900 flex items-center gap-1.5">
+                    <DollarSign className="w-3.5 h-3.5 text-blue-600" />
+                    Registrar Baixa de Pagamento:
+                  </span>
+                  <p className="text-blue-950 font-medium">
+                    {resultado.comando_baixa.mensagem_confirmacao}
+                  </p>
+                  <div className="text-[11px] text-blue-800 bg-white/70 p-2 rounded border border-blue-100">
+                    Orçamento: <strong>{resultado.comando_baixa.orcamento_numero}</strong> |
+                    Cliente: <strong>{resultado.comando_baixa.cliente_nome || 'Cliente'}</strong> |
+                    Valor quitado:{' '}
+                    <strong>{formatarMoedaBRL(resultado.comando_baixa.valor)}</strong>
+                  </div>
+                </div>
+              ) : resultado.comando_personalizar_ia ? (
+                <div className="p-3 bg-violet-50 rounded-xl border border-violet-200 space-y-1.5">
+                  <span className="font-bold text-violet-900 flex items-center gap-1.5">
+                    <HeartHandshake className="w-3.5 h-3.5 text-violet-600" />
+                    Personalizar Assistente de IA:
+                  </span>
+                  <p className="text-violet-950 font-medium">
+                    {resultado.comando_personalizar_ia.mensagem_confirmacao}
+                  </p>
+                  <div className="text-[11px] text-violet-800 bg-white/70 p-2 rounded border border-violet-100">
+                    Nome preferido:{' '}
+                    <strong>
+                      {resultado.comando_personalizar_ia.nome_preferido || 'Não alterado'}
+                    </strong>{' '}
+                    | Tom:{' '}
+                    <strong>
+                      {resultado.comando_personalizar_ia.tom_resposta || 'Não alterado'}
+                    </strong>{' '}
+                    | Emojis:{' '}
+                    <strong>
+                      {resultado.comando_personalizar_ia.usar_emojis !== undefined
+                        ? resultado.comando_personalizar_ia.usar_emojis
+                          ? 'Sim'
+                          : 'Não'
+                        : 'Manter'}
+                    </strong>
+                  </div>
+                </div>
+              ) : resultado.comando_status?.novo_status ? (
                 <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-1">
                   <span className="font-bold text-amber-900 flex items-center gap-1.5">
                     <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
@@ -951,11 +1224,17 @@ export default function ModoVoz() {
             rede por 450 reais&rdquo;
           </div>
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60">
-            <strong>Comando de status:</strong> &ldquo;Marcar o orçamento 3 como aprovado&rdquo;
+            <strong>Cobrança PIX:</strong> &ldquo;Gera a cobrança do orçamento 3&rdquo;
           </div>
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60">
-            <strong>Cliente:</strong> &ldquo;Cadastra o cliente Marcos Souza, fone 11 98888-0000 da
-            empresa Alfa&rdquo;
+            <strong>Baixa de pagamento:</strong> &ldquo;O João pagou o orçamento 3&rdquo;
+          </div>
+          <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60">
+            <strong>Contas a receber:</strong> &ldquo;Quem está me devendo?&rdquo;
+          </div>
+          <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60">
+            <strong>Personalizar assistente:</strong> &ldquo;Me chama de Zé&rdquo; / &ldquo;Tom
+            direto&rdquo;
           </div>
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60">
             <strong>Desfazer por voz:</strong> &ldquo;Desfaz aquilo&rdquo; ou &ldquo;Desfaz o
@@ -992,6 +1271,12 @@ export default function ModoVoz() {
                   'O orçamento gerado por voz será excluído do sistema.'}
                 {confirmarDesfazerVozAcao?.tipo_acao === 'mudanca_status' &&
                   'O orçamento retornará ao status anterior.'}
+                {confirmarDesfazerVozAcao?.tipo_acao === 'gerar_cobranca' &&
+                  'A cobrança simulada com chave PIX será excluída.'}
+                {confirmarDesfazerVozAcao?.tipo_acao === 'baixa_pagamento' &&
+                  'O pagamento voltará ao status pendente e a baixa será desfeita.'}
+                {confirmarDesfazerVozAcao?.tipo_acao === 'atualizar_preferencias_ia' &&
+                  'O nome e tom do assistente voltarão à configuração prévia.'}
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1012,6 +1297,14 @@ export default function ModoVoz() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* MODAL DE COBRANÇA GERADA POR VOZ (MELHORIA 4) */}
+      <ModalCobrancaSimulada
+        open={modalCobrancaOpen}
+        onOpenChange={setModalCobrancaOpen}
+        cobranca={modalCobrancaVoz}
+        onStatusChange={(atualizada) => setModalCobrancaVoz(atualizada)}
+      />
     </div>
   )
 }

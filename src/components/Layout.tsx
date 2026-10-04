@@ -18,6 +18,7 @@ import {
   MoreHorizontal,
   AudioLines,
   Radio,
+  DollarSign,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSubscription } from '@/contexts/SubscriptionContext'
@@ -48,6 +49,7 @@ export default function Layout() {
     if (path === '/orcamentos/novo') return 'Novo Orçamento com IA'
     if (path.startsWith('/orcamentos/') && path.endsWith('/editar')) return 'Editar Orçamento'
     if (path.startsWith('/orcamentos/')) return 'Detalhe do Orçamento'
+    if (path === '/contas-a-receber') return 'Contas a Receber'
     if (path === '/clientes') return 'Clientes'
     if (path === '/audios') return 'Histórico de Ditados & Áudios'
     if (path === '/modo-voz') return 'Modo Voz — Só Falar'
@@ -67,6 +69,7 @@ export default function Layout() {
   const baseNavItems: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Orçamentos', path: '/orcamentos', icon: FileText },
+    { label: 'Contas a Receber', path: '/contas-a-receber', icon: DollarSign },
     { label: 'Modo Voz', path: '/modo-voz', icon: Mic },
     { label: 'Áudios', path: '/audios', icon: AudioLines },
     { label: 'Clientes', path: '/clientes', icon: Users },
@@ -412,19 +415,19 @@ export default function Layout() {
                   type="button"
                   onClick={() => {
                     setMobileMoreOpen(false)
-                    navigate('/modo-voz')
+                    navigate('/contas-a-receber')
                   }}
                   className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
-                    location.pathname === '/modo-voz'
+                    location.pathname === '/contas-a-receber'
                       ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
                       : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                   }`}
                 >
                   <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1">
-                    <Mic className="w-4 h-4" />
+                    <DollarSign className="w-4 h-4" />
                   </div>
-                  <span className="text-xs font-semibold">Modo Voz</span>
-                  <span className="text-[10px] text-slate-500">Só Falar</span>
+                  <span className="text-xs font-semibold">A Receber</span>
+                  <span className="text-[10px] text-slate-500">Cobranças</span>
                 </button>
 
                 <button
@@ -605,6 +608,7 @@ export default function Layout() {
             onClick={() => setMobileMoreOpen((prev) => !prev)}
             className={`flex flex-col items-center justify-center py-1 px-2 transition-colors ${
               mobileMoreOpen ||
+              location.pathname === '/contas-a-receber' ||
               location.pathname === '/clientes' ||
               location.pathname === '/planos' ||
               location.pathname === '/configuracoes' ||

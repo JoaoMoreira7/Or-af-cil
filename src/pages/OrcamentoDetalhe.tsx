@@ -22,6 +22,9 @@ import { clientesService } from '@/services/clientes'
 import { Orçamento, Cliente, formatarMoedaBRL, formatarData, formatarDataHora } from '@/types'
 import { COMPANY_LEGAL } from '@/config/company'
 import { StatusBadge } from '@/components/StatusBadge'
+import { ModalCobrancaSimulada } from '@/components/ModalCobrancaSimulada'
+import { cobrancasService } from '@/services/cobrancas'
+import { Cobranca } from '@/types'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import {
@@ -54,6 +57,11 @@ export default function OrcamentoDetalhe() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  // Cobrança simulada vinculada (Melhoria 4)
+  const [cobranca, setCobranca] = useState<Cobranca | null>(null)
+  const [modalCobrancaOpen, setModalCobrancaOpen] = useState(false)
+  const [gerandoCobranca, setGerandoCobranca] = useState(false)
+
   const fetchOrcamento = async () => {
     if (!id) return
     try {
@@ -66,6 +74,14 @@ export default function OrcamentoDetalhe() {
         } catch {
           // fallback
         }
+      }
+
+      // Busca cobrança existente vinculada a este orçamento
+      try {
+        const cob = await cobrancasService.buscarPorOrcamentoId(data.id)
+        setCobranca(cob)
+      } catch {
+        // sem cobrança
       }
     } catch (err) {
       console.error('Erro ao buscar orçamento:', err)
@@ -214,6 +230,52 @@ export default function OrcamentoDetalhe() {
             </Select>
           </div>
 
+          {/* BOTÃO GERAR COBRANÇA (QUANDO STATUS = APROVADO) (MELHORIA 4) */}
+          {orcamento.status === 'aprovado' && (
+            <Button
+              variant="default"
+              size="sm"
+              disabled={gerandoCobranca}
+              onClick={async () => {
+                setGerandoCobranca(true)
+                try {
+                  const cob = await cobrancasService.criar({
+                    orcamento_id: orcamento.id,
+                    cliente_id: orcamento.cliente_id || undefined,
+                    cliente_nome: cliente?.nome || 'Cliente',
+                    orcamento_numero: orcamento.numero,
+                    valor: orcamento.valor_total,
+                  })
+                  setCobranca(cob)
+                  setModalCobrancaOpen(true)
+                } catch (err: unknown) {
+                  const msg = err instanceof Error ? err.message : 'Falha ao gerar cobrança'
+                  toast({
+                    variant: 'destructive',
+                    title: 'Erro ao gerar cobrança',
+                    description: msg,
+                  })
+                } finally {
+                  setGerandoCobranca(false)
+                }
+              }}
+              className="h-9 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+              title="Gerar cobrança simulada com PIX"
+            >
+              {gerandoCobranca ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  Gerando...
+                </>
+              ) : (
+                <>
+                  <DollarSign className="w-4 h-4 mr-1" />
+                  {cobranca ? 'Ver Cobrança PIX' : 'Gerar Cobrança'}
+                </>
+              )}
+            </Button>
+          )}
+
           <Button
             variant="outline"
             size="sm"
@@ -257,6 +319,71 @@ export default function OrcamentoDetalhe() {
           </Button>
         </div>
       </div>
+
+      {/* BANNER DE COBRANÇA PENDENTE / PAGA QUANDO APROVADO */}
+      {orcamento.status === 'aprovado' && (
+        <div className="no-print p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <DollarSign className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-slate-900">
+                  {cobranca?.status === 'pago'
+                    ? 'Pagamento Confirmado (Baixa realizada)'
+                    : 'Orçamento Aprovado — Cobrança disponível'}
+                </h4>
+                {cobranca && (
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                      cobranca.status === 'pago'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {cobranca.status}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                {cobranca?.status === 'pago'
+                  ? 'Esta proposta já foi quitada. Você pode visualizar o comprovante simulado.'
+                  : 'Gere o código PIX instantâneo simulado e envie a chave copia-e-cola diretamente pelo WhatsApp.'}
+              </p>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            size="sm"
+            onClick={async () => {
+              if (cobranca) {
+                setModalCobrancaOpen(true)
+                return
+              }
+              try {
+                const cob = await cobrancasService.criar({
+                  orcamento_id: orcamento.id,
+                  cliente_id: orcamento.cliente_id || undefined,
+                  cliente_nome: cliente?.nome || 'Cliente',
+                  orcamento_numero: orcamento.numero,
+                  valor: orcamento.valor_total,
+                })
+                setCobranca(cob)
+                setModalCobrancaOpen(true)
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : 'Falha'
+                toast({ variant: 'destructive', title: 'Erro', description: msg })
+              }
+            }}
+            className="w-full sm:w-auto shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 shadow-sm"
+          >
+            <DollarSign className="w-4 h-4 mr-1" />
+            {cobranca ? 'Ver Detalhes da Cobrança' : 'Gerar Cobrança'}
+          </Button>
+        </div>
+      )}
 
       {/* PRINT-FRIENDLY DOCUMENT CONTAINER */}
       <div className="print-area bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 sm:p-10 space-y-8">
@@ -458,6 +585,15 @@ export default function OrcamentoDetalhe() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* MODAL DE COBRANÇA SIMULADA (MELHORIA 4) */}
+      <ModalCobrancaSimulada
+        open={modalCobrancaOpen}
+        onOpenChange={setModalCobrancaOpen}
+        cobranca={cobranca}
+        clienteTelefone={cliente?.telefone}
+        onStatusChange={(nova) => setCobranca(nova)}
+      />
     </div>
   )
 }

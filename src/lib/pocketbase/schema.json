@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-04T00:15:04.036Z",
+  "generatedAt": "2026-10-04T00:19:50.611Z",
   "collections": [
     {
       "name": "users",
@@ -374,7 +374,14 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["criacao_cliente", "criacao_orcamento", "mudanca_status"]
+          "selectValues": [
+            "criacao_cliente",
+            "criacao_orcamento",
+            "mudanca_status",
+            "gerar_cobranca",
+            "baixa_pagamento",
+            "atualizar_preferencias_ia"
+          ]
         },
         {
           "name": "titulo",
@@ -433,6 +440,151 @@
         "CREATE INDEX idx_acoes_voz_status ON acoes_voz (status)",
         "CREATE INDEX idx_acoes_voz_created ON acoes_voz (created DESC)"
       ]
+    },
+    {
+      "name": "cobrancas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.body.user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "orcamento_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "orcamentos"
+        },
+        {
+          "name": "cliente_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "clientes"
+        },
+        {
+          "name": "cliente_nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "orcamento_numero",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "pago"]
+        },
+        {
+          "name": "codigo_pix",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pago_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_cobrancas_user_id ON cobrancas (user_id)",
+        "CREATE INDEX idx_cobrancas_orcamento_id ON cobrancas (orcamento_id)",
+        "CREATE INDEX idx_cobrancas_status ON cobrancas (status)",
+        "CREATE INDEX idx_cobrancas_created ON cobrancas (created DESC)"
+      ]
+    },
+    {
+      "name": "preferencias_ia",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.body.user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "nome_preferido",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tom_resposta",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["formal", "amigavel", "direto"]
+        },
+        {
+          "name": "usar_emojis",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_pref_ia_user_id ON preferencias_ia (user_id)"]
     }
   ]
 }

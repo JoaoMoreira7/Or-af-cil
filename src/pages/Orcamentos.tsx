@@ -12,7 +12,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Smartphone,
+  DollarSign,
 } from 'lucide-react'
+import { ModalCobrancaSimulada } from '@/components/ModalCobrancaSimulada'
+import { cobrancasService } from '@/services/cobrancas'
+import { Cobranca } from '@/types'
 import { useRealtime } from '@/hooks/use-realtime'
 import { orcamentosService } from '@/services/orcamentos'
 import { aiInterpretarService } from '@/services/aiInterpretar'
@@ -64,6 +68,36 @@ export default function Orcamentos() {
   const [voiceInterpreting, setVoiceInterpreting] = useState(false)
   const [comandoPendente, setComandoPendente] = useState<ComandoStatusExtraido | null>(null)
   const [applyingStatus, setApplyingStatus] = useState(false)
+
+  // Cobrança modal
+  const [cobrancaModal, setCobrancaModal] = useState<Cobranca | null>(null)
+  const [modalCobrancaOpen, setModalCobrancaOpen] = useState(false)
+  const [gerandoCobrancaId, setGerandoCobrancaId] = useState<string | null>(null)
+
+  const handleGerarCobrancaCard = async (e: React.MouseEvent, orc: Orçamento) => {
+    e.stopPropagation()
+    setGerandoCobrancaId(orc.id)
+    try {
+      const cob = await cobrancasService.criar({
+        orcamento_id: orc.id,
+        cliente_id: orc.cliente_id || undefined,
+        cliente_nome: orc.expand?.cliente_id?.nome || 'Cliente',
+        orcamento_numero: orc.numero,
+        valor: orc.valor_total,
+      })
+      setCobrancaModal(cob)
+      setModalCobrancaOpen(true)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao gerar cobrança'
+      toast({
+        variant: 'destructive',
+        title: 'Erro na cobrança',
+        description: msg,
+      })
+    } finally {
+      setGerandoCobrancaId(null)
+    }
+  }
 
   const fetchOrcamentos = async () => {
     try {
@@ -327,7 +361,7 @@ export default function Orcamentos() {
                     <th className="py-3 px-6">Descrição</th>
                     <th className="py-3 px-6">Valor Total</th>
                     <th className="py-3 px-6">Status</th>
-                    <th className="py-3 px-6 text-right">Data</th>
+                    <th className="py-3 px-6 text-right">Ação / Data</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -350,7 +384,23 @@ export default function Orcamentos() {
                         {formatarMoedaBRL(orc.valor_total)}
                       </td>
                       <td className="py-3.5 px-6">
-                        <StatusBadge status={orc.status} />
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={orc.status} />
+                          {orc.status === 'aprovado' && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleGerarCobrancaCard(e, orc)}
+                              disabled={gerandoCobrancaId === orc.id}
+                              className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 transition-colors flex items-center gap-1 shadow-2xs"
+                              title="Gerar PIX Copia-e-Cola simulado deste orçamento"
+                            >
+                              <DollarSign className="w-3 h-3 text-emerald-600" />
+                              <span>
+                                {gerandoCobrancaId === orc.id ? 'Gerando...' : 'Cobrança PIX'}
+                              </span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3.5 px-6 text-right text-slate-500 tabular-nums">
                         {formatarData(orc.created)}
@@ -371,7 +421,18 @@ export default function Orcamentos() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-blue-600">{orc.numero || '#---'}</span>
-                    <StatusBadge status={orc.status} />
+                    <div className="flex items-center gap-1.5">
+                      <StatusBadge status={orc.status} />
+                      {orc.status === 'aprovado' && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleGerarCobrancaCard(e, orc)}
+                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-0.5"
+                        >
+                          <DollarSign className="w-3 h-3" /> PIX
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <h4 className="font-semibold text-slate-900 text-sm">
@@ -452,6 +513,15 @@ export default function Orcamentos() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* MODAL COBRANÇA SIMULADA (MELHORIA 4) */}
+      <ModalCobrancaSimulada
+        open={modalCobrancaOpen}
+        onOpenChange={setModalCobrancaOpen}
+        cobranca={cobrancaModal}
+        clienteTelefone={cobrancaModal?.expand?.cliente_id?.telefone}
+        onStatusChange={(nova) => setCobrancaModal(nova)}
+      />
     </div>
   )
 }

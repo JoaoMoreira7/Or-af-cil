@@ -1,7 +1,9 @@
 import pb from '@/lib/pocketbase/client'
-import { AcaoVozRegistro, AcaoVozTipo, OrçamentoStatus } from '@/types'
+import { AcaoVozRegistro, AcaoVozTipo, OrçamentoStatus, TomRespostaIa } from '@/types'
 import { clientesService } from './clientes'
 import { orcamentosService } from './orcamentos'
+import { cobrancasService } from './cobrancas'
+import { preferenciasIaService } from './preferenciasIa'
 
 export interface CriarAcaoVozParams {
   tipo_acao: AcaoVozTipo
@@ -78,6 +80,9 @@ export const acoesVozService = {
    * - criacao_cliente: exclui o cliente criado
    * - criacao_orcamento: exclui o orçamento criado (e cliente secundário se tiver sido criado junto)
    * - mudanca_status: restaura o status anterior do orçamento
+   * - gerar_cobranca: exclui a cobrança criada
+   * - baixa_pagamento: reverte a cobrança para pendente
+   * - atualizar_preferencias_ia: restaura as preferências anteriores
    * Marca a ação como 'desfeito'
    */
   async desfazer(acao: AcaoVozRegistro): Promise<{ sucesso: boolean; mensagem: string }> {
@@ -109,7 +114,6 @@ export const acoesVozService = {
             throw new Error('Não foi possível excluir o orçamento criado.')
           }
         }
-        // Se um cliente novo também foi criado especificamente junto com este orçamento e marcado para remoção:
         const clienteCriadoId = dados.cliente_criado_junto_id as string | undefined
         if (clienteCriadoId) {
           try {
@@ -124,6 +128,26 @@ export const acoesVozService = {
         if (orcamentoId) {
           await orcamentosService.atualizarStatus(orcamentoId, statusAnterior)
         }
+      } else if (acao.tipo_acao === 'gerar_cobranca') {
+        const cobrancaId = acao.registro_id || (dados.cobranca_id as string)
+        if (cobrancaId) {
+          await cobrancasService.excluir(cobrancaId)
+        }
+      } else if (acao.tipo_acao === 'baixa_pagamento') {
+        const cobrancaId = acao.registro_id || (dados.cobranca_id as string)
+        if (cobrancaId) {
+          await cobrancasService.marcarComoPendente(cobrancaId)
+        }
+      } else if (acao.tipo_acao === 'atualizar_preferencias_ia') {
+        const prevNome = dados.nome_anterior as string | undefined
+        const prevTom = dados.tom_anterior as TomRespostaIa | undefined
+        const prevEmojis = dados.emojis_anterior as boolean | undefined
+        await preferenciasIaService.salvar({
+          user_id: acao.user_id,
+          nome_preferido: prevNome,
+          tom_resposta: prevTom,
+          usar_emojis: prevEmojis,
+        })
       }
 
       // Atualiza o registro na coleção acoes_voz para status = 'desfeito'

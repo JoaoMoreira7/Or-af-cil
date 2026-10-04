@@ -202,14 +202,12 @@ export function ResumoManhaCard({
             }).format(new Date())}
           </Badge>
         </div>
-
         {/* MENSAGEM DO ASSISTENTE */}
         <div className="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15">
           <p className="text-sm sm:text-base font-medium text-white/95 leading-relaxed">
             &ldquo;{textoAssistente}&rdquo;
           </p>
         </div>
-
         {/* 3 INDICADORES RESUMIDOS */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
           {/* 1. Aguardando Aprovação */}
@@ -256,12 +254,13 @@ export function ResumoManhaCard({
             </div>
           </div>
 
-          {/* 3. Total a Receber */}
+          {/* 3. Total a Receber (Atalho para Contas a Receber) */}
           <div
             onClick={onVerReceber}
             className={`p-3.5 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/15 transition-transform hover:-translate-y-0.5 ${
               onVerReceber ? 'cursor-pointer hover:bg-white/15' : ''
             }`}
+            title="Ver página Contas a Receber"
           >
             <div className="flex items-center justify-between text-blue-200 text-xs font-semibold">
               <span className="flex items-center gap-1.5">
@@ -274,13 +273,16 @@ export function ResumoManhaCard({
               <span className="text-xl sm:text-2xl font-black text-white tabular-nums block">
                 {formatarMoedaBRL(totalAReceber)}
               </span>
-              <span className="text-[11px] text-blue-200/80">
-                De {qtdAprovados}{' '}
-                {qtdAprovados === 1 ? 'orçamento aprovado' : 'orçamentos aprovados'}
+              <span className="text-[11px] text-blue-200/80 flex items-center justify-between">
+                <span>
+                  De {qtdAprovados}{' '}
+                  {qtdAprovados === 1 ? 'orçamento aprovado' : 'orçamentos aprovados'}
+                </span>
+                <span className="font-bold underline text-white/90">Abrir lista →</span>
               </span>
             </div>
           </div>
-        </div>
+        </div>{' '}
       </div>
     </div>
   )

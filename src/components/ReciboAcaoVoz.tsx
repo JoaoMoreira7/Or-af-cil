@@ -10,6 +10,9 @@ import {
   Loader2,
   AlertTriangle,
   History,
+  QrCode,
+  DollarSign,
+  HeartHandshake,
 } from 'lucide-react'
 import { AcaoVozRegistro } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -72,6 +75,12 @@ export function ReciboAcaoVoz({
         return <FileText className="w-4 h-4 text-blue-600" />
       case 'mudanca_status':
         return <RefreshCw className="w-4 h-4 text-amber-600" />
+      case 'gerar_cobranca':
+        return <QrCode className="w-4 h-4 text-emerald-600" />
+      case 'baixa_pagamento':
+        return <DollarSign className="w-4 h-4 text-emerald-600" />
+      case 'atualizar_preferencias_ia':
+        return <HeartHandshake className="w-4 h-4 text-indigo-600" />
       default:
         return <CheckCircle2 className="w-4 h-4 text-emerald-600" />
     }
@@ -85,6 +94,12 @@ export function ReciboAcaoVoz({
         return 'Orçamento Criado'
       case 'mudanca_status':
         return 'Status Alterado'
+      case 'gerar_cobranca':
+        return 'Cobrança Criada'
+      case 'baixa_pagamento':
+        return 'Baixa de Pagamento'
+      case 'atualizar_preferencias_ia':
+        return 'Preferências Atualizadas'
       default:
         return 'Ação de Voz'
     }
@@ -222,6 +237,12 @@ export function ReciboAcaoVoz({
                 {acao.tipo_acao === 'criacao_orcamento' &&
                   'O orçamento gerado por voz será excluído do sistema.'}
                 {acao.tipo_acao === 'mudanca_status' && 'O orçamento retornará ao status anterior.'}
+                {acao.tipo_acao === 'gerar_cobranca' &&
+                  'A cobrança simulada com chave PIX gerada por voz será excluída.'}
+                {acao.tipo_acao === 'baixa_pagamento' &&
+                  'A cobrança voltará ao status pendente e a baixa será revertida.'}
+                {acao.tipo_acao === 'atualizar_preferencias_ia' &&
+                  'As configurações do assistente (nome/tom/emojis) voltarão aos valores prévios.'}
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>

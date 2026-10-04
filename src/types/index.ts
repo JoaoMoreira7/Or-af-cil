@@ -95,7 +95,13 @@ export interface AudioRegistro {
   updated: string
 }
 
-export type AcaoVozTipo = 'criacao_cliente' | 'criacao_orcamento' | 'mudanca_status'
+export type AcaoVozTipo =
+  | 'criacao_cliente'
+  | 'criacao_orcamento'
+  | 'mudanca_status'
+  | 'gerar_cobranca'
+  | 'baixa_pagamento'
+  | 'atualizar_preferencias_ia'
 export type AcaoVozStatus = 'ativo' | 'desfeito'
 
 export interface AcaoVozRegistro {
@@ -110,6 +116,70 @@ export interface AcaoVozRegistro {
   desfeito_em?: string
   created: string
   updated: string
+}
+
+export type CobrancaStatus = 'pendente' | 'pago'
+
+export interface Cobranca {
+  id: string
+  user_id: string
+  orcamento_id: string
+  cliente_id?: string
+  cliente_nome: string
+  orcamento_numero: string
+  valor: number
+  status: CobrancaStatus
+  codigo_pix?: string
+  pago_em?: string
+  created: string
+  updated: string
+  expand?: {
+    orcamento_id?: Orçamento
+    cliente_id?: Cliente
+  }
+}
+
+export type TomRespostaIa = 'formal' | 'amigavel' | 'direto'
+
+export interface PreferenciasIa {
+  id?: string
+  user_id: string
+  nome_preferido?: string
+  tom_resposta: TomRespostaIa
+  usar_emojis: boolean
+  created?: string
+  updated?: string
+}
+
+export interface ComandoGerarCobrancaExtraido {
+  orcamento_id: string
+  orcamento_numero: string
+  cliente_id?: string
+  cliente_nome: string
+  valor: number
+  mensagem_confirmacao: string
+}
+
+export interface ComandoBaixaExtraido {
+  orcamento_id: string
+  orcamento_numero: string
+  cliente_nome?: string
+  cobranca_id?: string | null
+  valor: number
+  mensagem_confirmacao: string
+}
+
+export interface ComandoPersonalizarIaExtraido {
+  nome_preferido?: string
+  tom_resposta?: TomRespostaIa
+  usar_emojis?: boolean
+  mensagem_confirmacao: string
+}
+
+export interface ComandoConsultaDevedoresExtraido {
+  total_devido: number
+  qtd_orcamentos_pendentes: number
+  mensagem_resposta: string
 }
 
 export function formatarMoedaBRL(valor: number): string {

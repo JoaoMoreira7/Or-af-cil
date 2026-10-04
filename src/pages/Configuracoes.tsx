@@ -1,11 +1,26 @@
-import React, { useState } from 'react'
-import { User, Lock, Save, Loader2, Check, Shield } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import {
+  User,
+  Lock,
+  Save,
+  Loader2,
+  Check,
+  Shield,
+  Sparkles,
+  Bot,
+  Smile,
+  MessageSquare,
+} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
+import { preferenciasIaService } from '@/services/preferenciasIa'
+import { PreferenciasIa, TomRespostaIa } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 export default function Configuracoes() {
   const { user, updateUser } = useAuth()
@@ -14,6 +29,56 @@ export default function Configuracoes() {
   // Profile Form
   const [name, setName] = useState(user?.name || '')
   const [savingProfile, setSavingProfile] = useState(false)
+
+  // Personalização da IA (Melhoria 5)
+  const [nomePreferidoIa, setNomePreferidoIa] = useState('')
+  const [tomRespostaIa, setTomRespostaIa] = useState<TomRespostaIa>('amigavel')
+  const [usarEmojisIa, setUsarEmojisIa] = useState(true)
+  const [loadingPrefIa, setLoadingPrefIa] = useState(true)
+  const [savingPrefIa, setSavingPrefIa] = useState(false)
+
+  useEffect(() => {
+    const carregarPref = async () => {
+      try {
+        const pref = await preferenciasIaService.obter(user?.id)
+        setNomePreferidoIa(pref.nome_preferido || (user?.name || '').split(' ')[0] || '')
+        setTomRespostaIa(pref.tom_resposta || 'amigavel')
+        setUsarEmojisIa(pref.usar_emojis !== false)
+      } catch (err) {
+        console.warn('Erro ao obter preferências IA:', err)
+      } finally {
+        setLoadingPrefIa(false)
+      }
+    }
+    if (user?.id) carregarPref()
+  }, [user?.id, user?.name])
+
+  const handleSalvarPreferenciasIa = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user?.id) return
+    setSavingPrefIa(true)
+    try {
+      await preferenciasIaService.salvar({
+        user_id: user.id,
+        nome_preferido: nomePreferidoIa.trim(),
+        tom_resposta: tomRespostaIa,
+        usar_emojis: usarEmojisIa,
+      })
+      toast({
+        title: 'Preferências da IA salvas!',
+        description: `O assistente agora vai te chamar de "${nomePreferidoIa.trim() || 'você'}" no tom ${tomRespostaIa}.`,
+      })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao salvar preferências'
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao salvar preferências da IA',
+        description: msg,
+      })
+    } finally {
+      setSavingPrefIa(false)
+    }
+  }
 
   // Password Form
   const [oldPassword, setOldPassword] = useState('')
@@ -177,6 +242,154 @@ export default function Configuracoes() {
             </Button>
           </div>
         </form>
+      </div>
+
+      {/* CARD DE PERSONALIZAÇÃO DA IA (MELHORIA 5) */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm">
+        <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 text-white flex items-center justify-center shadow-xs">
+            <Bot className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900">Personalizar Assistente de IA</h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 uppercase tracking-wider">
+                Voz & Comandos
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              Defina como a IA deve te chamar, o tom das mensagens e uso de emojis. Você também pode
+              dizer &ldquo;me chama de Zé&rdquo; no Modo Voz!
+            </p>
+          </div>
+        </div>
+
+        {loadingPrefIa ? (
+          <div className="py-6 flex items-center justify-center text-xs text-slate-400 gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" /> Carregando preferências do assistente...
+          </div>
+        ) : (
+          <form onSubmit={handleSalvarPreferenciasIa} className="space-y-5 mt-5">
+            {/* Como a IA deve te chamar */}
+            <div className="space-y-1.5">
+              <Label htmlFor="pref-nome" className="text-xs font-semibold text-slate-700">
+                Como a IA deve te chamar (Nome ou Apelido)
+              </Label>
+              <Input
+                id="pref-nome"
+                value={nomePreferidoIa}
+                onChange={(e) => setNomePreferidoIa(e.target.value)}
+                placeholder="Ex: Zé, João, Patrão, Dra. Carla..."
+                className="h-10 text-sm max-w-md"
+              />
+              <p className="text-[11px] text-slate-400">
+                A IA usará este nome nas confirmações de voz, saudações do Dashboard e cobranças.
+              </p>
+            </div>
+
+            {/* Tom das Respostas */}
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-slate-700 block">
+                Tom das Respostas da IA
+              </Label>
+              <RadioGroup
+                value={tomRespostaIa}
+                onValueChange={(val: string) => setTomRespostaIa(val as TomRespostaIa)}
+                className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl"
+              >
+                {/* 1. Amigável */}
+                <label
+                  htmlFor="tom-amigavel"
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    tomRespostaIa === 'amigavel'
+                      ? 'border-violet-500 bg-violet-50/60 ring-2 ring-violet-500/20 text-violet-950'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-800'
+                  }`}
+                >
+                  <RadioGroupItem value="amigavel" id="tom-amigavel" className="mt-0.5" />
+                  <div>
+                    <span className="text-xs font-bold block">Amigável</span>
+                    <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                      Descontraído, prestativo e próximo do dia a dia.
+                    </span>
+                  </div>
+                </label>
+
+                {/* 2. Formal */}
+                <label
+                  htmlFor="tom-formal"
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    tomRespostaIa === 'formal'
+                      ? 'border-violet-500 bg-violet-50/60 ring-2 ring-violet-500/20 text-violet-950'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-800'
+                  }`}
+                >
+                  <RadioGroupItem value="formal" id="tom-formal" className="mt-0.5" />
+                  <div>
+                    <span className="text-xs font-bold block">Formal</span>
+                    <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                      Profissional, respeitoso e corporativo (Sr/Sra).
+                    </span>
+                  </div>
+                </label>
+
+                {/* 3. Direto */}
+                <label
+                  htmlFor="tom-direto"
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    tomRespostaIa === 'direto'
+                      ? 'border-violet-500 bg-violet-50/60 ring-2 ring-violet-500/20 text-violet-950'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-800'
+                  }`}
+                >
+                  <RadioGroupItem value="direto" id="tom-direto" className="mt-0.5" />
+                  <div>
+                    <span className="text-xs font-bold block">Direto</span>
+                    <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                      Curto, ágil e focado apenas nos números e ação.
+                    </span>
+                  </div>
+                </label>
+              </RadioGroup>
+            </div>
+
+            {/* Preferência de Emojis */}
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 max-w-md">
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="pref-emojis"
+                  className="text-xs font-semibold text-slate-800 cursor-pointer"
+                >
+                  Utilizar Emojis nas Respostas
+                </Label>
+                <p className="text-[11px] text-slate-500">
+                  Inclui emojis leves como ⚡, 💰 e ✅ para facilitar a leitura rápida.
+                </p>
+              </div>
+              <Switch id="pref-emojis" checked={usarEmojisIa} onCheckedChange={setUsarEmojisIa} />
+            </div>
+
+            <div className="pt-2">
+              <Button
+                type="submit"
+                disabled={savingPrefIa}
+                className="h-9 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-medium text-xs rounded-lg shadow-sm"
+              >
+                {savingPrefIa ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    Salvando preferências...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                    Salvar Preferências da IA
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        )}
       </div>
 
       {/* CARD DE SEGURANÇA E ALTERAÇÃO DE SENHA */}
