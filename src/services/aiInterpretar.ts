@@ -12,7 +12,8 @@ export interface ClienteNovoExtraido {
 import { ComandoStatusExtraido, AudioContexto } from '@/types'
 
 export interface InterpretacaoResultado {
-  intencao_detectada?: 'orcamento' | 'cliente' | 'comando_status'
+  intencao_detectada?: 'orcamento' | 'cliente' | 'comando_status' | 'desfazer'
+  comando_desfazer?: boolean
   transcricao_corrigida: string
   descricao_servico?: string
   cliente_sugerido_id?: string | null

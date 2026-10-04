@@ -31,6 +31,31 @@ routerAdd(
 
       const transNorm = normalizeText(transcricao)
 
+      // Verificação direta de comando de desfazer ("desfaz aquilo", "desfaz o último", "desfazer", "desfaz a última ação")
+      const ehComandoDesfazer =
+        transNorm.indexOf('desfaz') !== -1 ||
+        transNorm.indexOf('desfazer') !== -1 ||
+        transNorm.indexOf('reverter') !== -1 ||
+        transNorm.indexOf('voltar atras') !== -1
+
+      if (ehComandoDesfazer) {
+        return e.json(200, {
+          sucesso: true,
+          audio_id: null,
+          transcricao_original: transcricao,
+          interpretacao: {
+            intencao_detectada: 'desfazer',
+            comando_desfazer: true,
+            transcricao_corrigida: transcricao.trim(),
+            descricao_servico: 'Desfazer a última ação realizada por voz',
+            itens: [],
+            confianca: 'alta',
+            duvidas: [],
+          },
+          citations: [],
+        })
+      }
+
       // 1. Carrega clientes do usuário para matching difuso e dar contexto ao agente
       let clientesUsuario = []
       try {

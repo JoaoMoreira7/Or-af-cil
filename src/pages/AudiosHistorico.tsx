@@ -17,7 +17,10 @@ import {
   Smartphone,
 } from 'lucide-react'
 import { audiosService } from '@/services/audios'
-import { AudioRegistro, formatarDataHora, AudioContexto } from '@/types'
+import { acoesVozService } from '@/services/acoesVoz'
+import { AudioRegistro, formatarDataHora, AudioContexto, AcaoVozRegistro } from '@/types'
+import { ReciboAcaoVoz } from '@/components/ReciboAcaoVoz'
+import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -41,6 +44,7 @@ import { useToast } from '@/hooks/use-toast'
 export default function AudiosHistorico() {
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { user } = useAuth()
 
   const [audios, setAudios] = useState<AudioRegistro[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,6 +52,11 @@ export default function AudiosHistorico() {
   const [contextoFiltro, setContextoFiltro] = useState<string>('todos')
   const [selectedAudio, setSelectedAudio] = useState<AudioRegistro | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  // Ações de voz dos últimos 24h
+  const [acoes24h, setAcoes24h] = useState<AcaoVozRegistro[]>([])
+  const [loadingAcoes, setLoadingAcoes] = useState(false)
+  const [undoingId, setUndoingId] = useState<string | null>(null)
 
   const fetchAudios = async () => {
     try {
@@ -63,9 +72,23 @@ export default function AudiosHistorico() {
     }
   }
 
+  const fetchAcoes24h = async () => {
+    if (!user?.id) return
+    setLoadingAcoes(true)
+    try {
+      const lista = await acoesVozService.listarUltimas24Horas(user.id)
+      setAcoes24h(lista)
+    } catch (err) {
+      console.warn('Erro ao carregar ações 24h no histórico:', err)
+    } finally {
+      setLoadingAcoes(false)
+    }
+  }
+
   useEffect(() => {
     fetchAudios()
-  }, [contextoFiltro])
+    fetchAcoes24h()
+  }, [contextoFiltro, user?.id])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -73,6 +96,36 @@ export default function AudiosHistorico() {
     }, 250)
     return () => clearTimeout(timer)
   }, [busca])
+
+  const handleDesfazerAcaoHistorico = async (acao: AcaoVozRegistro) => {
+    setUndoingId(acao.id)
+    try {
+      const res = await acoesVozService.desfazer(acao)
+      if (res.sucesso) {
+        toast({
+          title: 'Ação desfeita',
+          description: res.mensagem,
+        })
+        await fetchAcoes24h()
+        await fetchAudios()
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Não foi possível desfazer',
+          description: res.mensagem,
+        })
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao reverter'
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: msg,
+      })
+    } finally {
+      setUndoingId(null)
+    }
+  }
 
   const handleDeleteAudio = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
@@ -194,6 +247,49 @@ export default function AudiosHistorico() {
           </Button>
         </div>
       </div>
+
+      {/* SEÇÃO MELHORIA 1: AÇÕES DOS ÚLTIMOS 24H COM DESFAZER */}
+      {acoes24h.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm font-bold text-slate-900">
+                Ações Aplicadas por Voz nas Últimas 24h
+              </span>
+              <Badge
+                variant="outline"
+                className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border-emerald-200"
+              >
+                {acoes24h.filter((a) => a.status === 'ativo').length} ativas
+              </Badge>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              Desfazer restaura clientes, orçamentos e status
+            </span>
+          </div>
+
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {acoes24h.map((acao) => (
+              <ReciboAcaoVoz
+                key={acao.id}
+                acao={acao}
+                onDesfazer={handleDesfazerAcaoHistorico}
+                onEditar={(ac) => {
+                  if (ac.tipo_acao === 'criacao_orcamento' && ac.registro_id) {
+                    navigate(`/orcamentos/${ac.registro_id}/editar`)
+                  } else if (ac.tipo_acao === 'criacao_cliente') {
+                    navigate('/clientes')
+                  } else if (ac.tipo_acao === 'mudanca_status' && ac.registro_id) {
+                    navigate(`/orcamentos/${ac.registro_id}`)
+                  }
+                }}
+                isUndoing={undoingId === acao.id}
+                compact
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* FILTER BAR */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">

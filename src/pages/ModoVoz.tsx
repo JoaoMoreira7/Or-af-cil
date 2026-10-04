@@ -21,7 +21,19 @@ import { useAuth } from '@/contexts/AuthContext'
 import { aiInterpretarService, InterpretacaoResultado } from '@/services/aiInterpretar'
 import { orcamentosService } from '@/services/orcamentos'
 import { clientesService } from '@/services/clientes'
-import { formatarMoedaBRL, OrçamentoStatus } from '@/types'
+import { acoesVozService } from '@/services/acoesVoz'
+import { formatarMoedaBRL, OrçamentoStatus, AcaoVozRegistro } from '@/types'
+import { ReciboAcaoVoz } from '@/components/ReciboAcaoVoz'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
@@ -43,6 +55,17 @@ export default function ModoVoz() {
   const [resultado, setResultado] = useState<InterpretacaoResultado | null>(null)
   const [isApplying, setIsApplying] = useState(false)
   const [appliedSuccess, setAppliedSuccess] = useState<string | null>(null)
+
+  // Recibo mais recente gerado e lista de ações dos últimos 24h (Melhoria 1)
+  const [ultimoRecibo, setUltimoRecibo] = useState<AcaoVozRegistro | null>(null)
+  const [acoesUltimas24h, setAcoesUltimas24h] = useState<AcaoVozRegistro[]>([])
+  const [loadingAcoes, setLoadingAcoes] = useState(false)
+  const [undoingId, setUndoingId] = useState<string | null>(null)
+
+  // Confirmação para comando de voz "desfaz aquilo"
+  const [confirmarDesfazerVozAcao, setConfirmarDesfazerVozAcao] = useState<AcaoVozRegistro | null>(
+    null,
+  )
 
   // Refs de gravação
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -85,13 +108,31 @@ export default function ModoVoz() {
     }
   }, [])
 
+  const carregarAcoesUltimas24h = useCallback(async () => {
+    if (!user?.id) return
+    setLoadingAcoes(true)
+    try {
+      const lista = await acoesVozService.listarUltimas24Horas(user.id)
+      if (isMountedRef.current) {
+        setAcoesUltimas24h(lista)
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar ações das 24h:', err)
+    } finally {
+      if (isMountedRef.current) {
+        setLoadingAcoes(false)
+      }
+    }
+  }, [user?.id])
+
   useEffect(() => {
     isMountedRef.current = true
+    carregarAcoesUltimas24h()
     return () => {
       isMountedRef.current = false
       stopAllMedia()
     }
-  }, [stopAllMedia])
+  }, [stopAllMedia, carregarAcoesUltimas24h])
 
   // Iniciar escuta contínua com microfone
   const startListening = async () => {
@@ -209,6 +250,28 @@ export default function ModoVoz() {
         userId: user?.id,
       })
 
+      // Caso especial: Comando falado para Desfazer a última ação ("desfaz aquilo", "desfaz o último")
+      if (
+        resp.interpretacao?.comando_desfazer ||
+        resp.interpretacao?.intencao_detectada === 'desfazer'
+      ) {
+        const ultimaAcao = await acoesVozService.obterUltimaAcaoAtiva24h(user?.id)
+        if (ultimaAcao) {
+          setConfirmarDesfazerVozAcao(ultimaAcao)
+          toast({
+            title: 'Comando de desfazer identificado',
+            description: `Deseja desfazer "${ultimaAcao.titulo}"? Confirme abaixo.`,
+          })
+        } else {
+          toast({
+            title: 'Nenhuma ação para desfazer',
+            description:
+              'Não foram encontradas ações ativas de voz realizadas nas últimas 24 horas.',
+          })
+        }
+        return
+      }
+
       setResultado(resp.interpretacao)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha na inteligência artificial'
@@ -239,12 +302,32 @@ export default function ModoVoz() {
     try {
       // Caso 1: Comando de alterar status de orçamento
       if (resultado.comando_status?.orcamento_id && resultado.comando_status?.novo_status) {
-        await orcamentosService.atualizarStatus(
-          resultado.comando_status.orcamento_id,
-          resultado.comando_status.novo_status as OrçamentoStatus,
-        )
+        const orcId = resultado.comando_status.orcamento_id
+        const novoStatus = resultado.comando_status.novo_status as OrçamentoStatus
+        const statusAnterior = resultado.comando_status.status_anterior || 'rascunho'
+        const numOrc = resultado.comando_status.orcamento_numero || ''
+
+        await orcamentosService.atualizarStatus(orcId, novoStatus)
+
+        // Registrar recibo na coleção acoes_voz
+        const recibo = await acoesVozService.registrar({
+          tipo_acao: 'mudanca_status',
+          titulo: `Status alterado: Orçamento ${numOrc} para "${novoStatus}"`,
+          descricao_resumo: `Status anterior: "${statusAnterior}". Reversão restaura o status prévio.`,
+          registro_id: orcId,
+          dados_aplicados: {
+            orcamento_id: orcId,
+            orcamento_numero: numOrc,
+            status_anterior: statusAnterior,
+            novo_status: novoStatus,
+          },
+          user_id: user.id,
+        })
+
+        setUltimoRecibo(recibo)
+        await carregarAcoesUltimas24h()
         setAppliedSuccess(
-          `Status do orçamento ${resultado.comando_status.orcamento_numero || ''} atualizado para "${resultado.comando_status.novo_status}" com sucesso!`,
+          `Status do orçamento ${numOrc} atualizado para "${novoStatus}" com sucesso!`,
         )
         toast({
           title: 'Status alterado com sucesso!',
@@ -262,7 +345,7 @@ export default function ModoVoz() {
             ? String(c.email).trim()
             : `${nomeCli.toLowerCase().replace(/\s+/g, '.')}@cliente.com`
 
-        await clientesService.criar({
+        const novoCliente = await clientesService.criar({
           nome: nomeCli,
           email: emailCli,
           telefone: c.telefone ? String(c.telefone).trim() : '',
@@ -270,6 +353,28 @@ export default function ModoVoz() {
           endereco: c.endereco ? String(c.endereco).trim() : '',
           user_id: user.id,
         })
+
+        // Registrar recibo na coleção acoes_voz
+        const recibo = await acoesVozService.registrar({
+          tipo_acao: 'criacao_cliente',
+          titulo: `Cliente criado: ${nomeCli}`,
+          descricao_resumo:
+            `${novoCliente.telefone ? `Tel: ${novoCliente.telefone}` : ''} ${novoCliente.empresa ? `· Empresa: ${novoCliente.empresa}` : ''}`.trim() ||
+            'Cadastrado via voz',
+          registro_id: novoCliente.id,
+          dados_aplicados: {
+            cliente_id: novoCliente.id,
+            nome: nomeCli,
+            email: emailCli,
+            telefone: novoCliente.telefone || '',
+            empresa: novoCliente.empresa || '',
+            endereco: novoCliente.endereco || '',
+          },
+          user_id: user.id,
+        })
+
+        setUltimoRecibo(recibo)
+        await carregarAcoesUltimas24h()
         setAppliedSuccess(`Cliente "${nomeCli}" cadastrado com sucesso na base!`)
         toast({
           title: 'Cliente cadastrado!',
@@ -281,6 +386,8 @@ export default function ModoVoz() {
       // Caso 3: Orçamento estruturado
       // Cria cliente antes se for cliente novo
       let cliId = resultado.cliente_sugerido_id
+      let clienteCriadoJuntoId: string | undefined = undefined
+
       if (!cliId && resultado.cliente_novo?.nome) {
         const c = resultado.cliente_novo
         const nomeCli = String(c.nome || '').trim()
@@ -298,6 +405,7 @@ export default function ModoVoz() {
           user_id: user.id,
         })
         cliId = criado.id
+        clienteCriadoJuntoId = criado.id
       }
 
       if (!cliId) {
@@ -344,6 +452,27 @@ export default function ModoVoz() {
         user_id: user.id,
       })
 
+      // Registrar recibo na coleção acoes_voz
+      const recibo = await acoesVozService.registrar({
+        tipo_acao: 'criacao_orcamento',
+        titulo: `Orçamento criado: ${novoOrc.numero}`,
+        descricao_resumo: `${resultado.descricao_servico || 'Serviço'} · Total: ${formatarMoedaBRL(novoOrc.valor_total)}`,
+        registro_id: novoOrc.id,
+        dados_aplicados: {
+          orcamento_id: novoOrc.id,
+          cliente_id: cliId,
+          cliente_criado_junto_id: clienteCriadoJuntoId,
+          descricao: novoOrc.descricao,
+          itens: novoOrc.itens,
+          valor_total: novoOrc.valor_total,
+          numero: novoOrc.numero,
+          transcricao_original: resultado.transcricao_corrigida,
+        },
+        user_id: user.id,
+      })
+
+      setUltimoRecibo(recibo)
+      await carregarAcoesUltimas24h()
       setAppliedSuccess(`Orçamento ${novoOrc.numero} gerado e salvo com sucesso!`)
       toast({
         title: 'Orçamento Criado!',
@@ -358,6 +487,64 @@ export default function ModoVoz() {
       })
     } finally {
       setIsApplying(false)
+    }
+  }
+
+  // Executar Desfazer de uma ação
+  const handleDesfazerAcao = async (acao: AcaoVozRegistro) => {
+    setUndoingId(acao.id)
+    try {
+      const res = await acoesVozService.desfazer(acao)
+      if (res.sucesso) {
+        toast({
+          title: 'Ação desfeita com sucesso!',
+          description: res.mensagem,
+        })
+        if (ultimoRecibo?.id === acao.id) {
+          setUltimoRecibo((prev) => (prev ? { ...prev, status: 'desfeito' } : null))
+        }
+        await carregarAcoesUltimas24h()
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Não foi possível desfazer',
+          description: res.mensagem,
+        })
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao reverter'
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao desfazer',
+        description: msg,
+      })
+    } finally {
+      setUndoingId(null)
+    }
+  }
+
+  // Reabrir tela/formulário para "Editar" com dados já preenchidos
+  const handleEditarAcao = (acao: AcaoVozRegistro) => {
+    const dados = (acao.dados_aplicados || {}) as Record<string, unknown>
+    if (acao.tipo_acao === 'criacao_orcamento' && acao.registro_id) {
+      navigate(`/orcamentos/${acao.registro_id}/editar`)
+    } else if (acao.tipo_acao === 'criacao_cliente') {
+      navigate('/clientes', {
+        state: {
+          textoReaproveitado: acao.titulo,
+          interpretacaoSalva: {
+            cliente_novo: {
+              nome: dados.nome,
+              email: dados.email,
+              telefone: dados.telefone,
+              empresa: dados.empresa,
+              endereco: dados.endereco,
+            },
+          },
+        },
+      })
+    } else if (acao.tipo_acao === 'mudanca_status' && acao.registro_id) {
+      navigate(`/orcamentos/${acao.registro_id}`)
     }
   }
 
@@ -410,17 +597,25 @@ export default function ModoVoz() {
           </div>
         )}
 
-        {/* MENSAGEM DE SUCESSO APÓS APLICAR */}
-        {appliedSuccess && (
-          <div className="w-full p-5 rounded-2xl bg-emerald-50 border-2 border-emerald-500 text-emerald-950 text-center space-y-3 animate-scale-in">
-            <div className="w-12 h-12 mx-auto rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg">
-              <Check className="w-6 h-6 stroke-[3]" />
+        {/* RECIBO APÓS APLICAR AÇÃO DE VOZ (MELHORIA 1) */}
+        {appliedSuccess && ultimoRecibo && (
+          <div className="w-full space-y-3 animate-scale-in text-left">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-emerald-600 stroke-[3]" />
+                Recibo do Comando Aplicado
+              </span>
+              <span className="text-[11px] text-slate-500">Válido por 24h</span>
             </div>
-            <div>
-              <h3 className="font-bold text-base text-emerald-900">Ação Concluída com Sucesso!</h3>
-              <p className="text-xs text-emerald-800 mt-1">{appliedSuccess}</p>
-            </div>
-            <div className="pt-2 flex items-center justify-center gap-2">
+
+            <ReciboAcaoVoz
+              acao={ultimoRecibo}
+              onDesfazer={handleDesfazerAcao}
+              onEditar={handleEditarAcao}
+              isUndoing={undoingId === ultimoRecibo.id}
+            />
+
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
               <Button
                 type="button"
                 size="sm"
@@ -439,7 +634,7 @@ export default function ModoVoz() {
                 size="sm"
                 variant="outline"
                 onClick={() => navigate('/orcamentos')}
-                className="text-xs h-9 border-emerald-300"
+                className="text-xs h-9 border-slate-300"
               >
                 Ver Orçamentos
               </Button>
@@ -704,6 +899,47 @@ export default function ModoVoz() {
         )}
       </div>
 
+      {/* LISTA DE AÇÕES DOS ÚLTIMOS 24H (MELHORIA 1) */}
+      <div className="w-full pt-6 border-t border-slate-200 space-y-3 text-left">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
+              Ações dos Últimos 24h
+            </span>
+            <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full">
+              {acoesUltimas24h.length}
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-500">
+            Diga &ldquo;desfaz aquilo&rdquo; para reverter a mais recente
+          </span>
+        </div>
+
+        {loadingAcoes ? (
+          <div className="space-y-2">
+            <div className="h-16 bg-slate-100 animate-pulse rounded-xl" />
+            <div className="h-16 bg-slate-100 animate-pulse rounded-xl" />
+          </div>
+        ) : acoesUltimas24h.length === 0 ? (
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-center text-xs text-slate-500">
+            Nenhuma ação registrada nas últimas 24 horas. Fale um comando acima para testar.
+          </div>
+        ) : (
+          <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+            {acoesUltimas24h.map((acao) => (
+              <ReciboAcaoVoz
+                key={acao.id}
+                acao={acao}
+                onDesfazer={handleDesfazerAcao}
+                onEditar={handleEditarAcao}
+                isUndoing={undoingId === acao.id}
+                compact
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* RODAPÉ INFORMATIVO: EXEMPLOS DE FRASES QUE A IA ENTENDE */}
       <div className="pt-4 border-t border-slate-100 text-[11px] text-slate-500 space-y-1.5">
         <span className="font-semibold text-slate-700 flex items-center justify-center gap-1">
@@ -722,10 +958,60 @@ export default function ModoVoz() {
             empresa Alfa&rdquo;
           </div>
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60">
-            <strong>Cancelamento:</strong> &ldquo;Cancela a proposta número 1&rdquo;
+            <strong>Desfazer por voz:</strong> &ldquo;Desfaz aquilo&rdquo; ou &ldquo;Desfaz o
+            último&rdquo;
           </div>
         </div>
       </div>
+
+      {/* CONFIRMAÇÃO DO COMANDO DE VOZ PARA DESFAZER */}
+      <AlertDialog
+        open={!!confirmarDesfazerVozAcao}
+        onOpenChange={(open) => !open && setConfirmarDesfazerVozAcao(null)}
+      >
+        <AlertDialogContent className="max-w-[420px] rounded-2xl bg-white text-slate-900 p-6">
+          <AlertDialogHeader>
+            <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mb-2">
+              <RotateCcw className="w-5 h-5" />
+            </div>
+            <AlertDialogTitle className="text-base font-bold text-slate-900">
+              Desfazer Última Ação por Voz?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+              <p>
+                Você pediu para desfazer:{' '}
+                <strong className="text-slate-900">
+                  &ldquo;{confirmarDesfazerVozAcao?.titulo}&rdquo;
+                </strong>
+                .
+              </p>
+              <p className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                {confirmarDesfazerVozAcao?.tipo_acao === 'criacao_cliente' &&
+                  'O cliente criado por voz será excluído da base.'}
+                {confirmarDesfazerVozAcao?.tipo_acao === 'criacao_orcamento' &&
+                  'O orçamento gerado por voz será excluído do sistema.'}
+                {confirmarDesfazerVozAcao?.tipo_acao === 'mudanca_status' &&
+                  'O orçamento retornará ao status anterior.'}
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel className="h-9 text-xs">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (confirmarDesfazerVozAcao) {
+                  const target = confirmarDesfazerVozAcao
+                  setConfirmarDesfazerVozAcao(null)
+                  await handleDesfazerAcao(target)
+                }
+              }}
+              className="h-9 text-xs bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+            >
+              Sim, Desfazer Agora
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

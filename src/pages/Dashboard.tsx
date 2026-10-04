@@ -16,6 +16,8 @@ import { orcamentosService } from '@/services/orcamentos'
 import { clientesService } from '@/services/clientes'
 import { Orçamento, Cliente, formatarMoedaBRL, formatarData } from '@/types'
 import { StatusBadge } from '@/components/StatusBadge'
+import { FollowUpProativo } from '@/components/FollowUpProativo'
+import { ResumoManhaCard } from '@/components/ResumoManhaCard'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -111,6 +113,19 @@ export default function Dashboard() {
           </Button>
         </div>
       </div>
+
+      {/* MELHORIA 3 — RESUMO DA MANHÃ (NO TOPO DO DASHBOARD) */}
+      {!loading && (
+        <ResumoManhaCard
+          orcamentos={orcamentos}
+          userName={user?.name || 'Gestor(a)'}
+          onVerAguardando={() => navigate('/orcamentos')}
+          onVerReceber={() => navigate('/orcamentos')}
+        />
+      )}
+
+      {/* MELHORIA 2 — FOLLOW-UP PROATIVO DE ORÇAMENTOS PENDENTES HÁ 5+ DIAS */}
+      {!loading && <FollowUpProativo orcamentos={orcamentos} clientes={clientes} diasLimite={5} />}
 
       {/* 4 STATS CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">

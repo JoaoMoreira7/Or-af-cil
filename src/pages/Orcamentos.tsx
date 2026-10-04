@@ -24,6 +24,7 @@ import {
   OrçamentoStatus,
 } from '@/types'
 import { StatusBadge } from '@/components/StatusBadge'
+import { FollowUpProativo } from '@/components/FollowUpProativo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -200,6 +201,9 @@ export default function Orcamentos() {
           </Button>
         </div>
       </div>
+
+      {/* FOLLOW-UP PROATIVO DE ORÇAMENTOS PENDENTES HÁ 5+ DIAS (MELHORIA 2) */}
+      <FollowUpProativo orcamentos={orcamentos} />
 
       {/* BARRA DE COMANDO DE VOZ RÁPIDO PARA ORÇAMENTOS (STATUS E AÇÕES) */}
       <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/80 rounded-2xl p-4 shadow-sm space-y-2">

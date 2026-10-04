@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-23T14:36:02.300Z",
+  "generatedAt": "2026-10-04T00:15:04.036Z",
   "collections": [
     {
       "name": "users",
@@ -349,6 +349,89 @@
         "CREATE INDEX idx_audios_user_id ON audios (user_id)",
         "CREATE INDEX idx_audios_contexto ON audios (contexto)",
         "CREATE INDEX idx_audios_created ON audios (created DESC)"
+      ]
+    },
+    {
+      "name": "acoes_voz",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.body.user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "tipo_acao",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["criacao_cliente", "criacao_orcamento", "mudanca_status"]
+        },
+        {
+          "name": "titulo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao_resumo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "registro_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_aplicados",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ativo", "desfeito"]
+        },
+        {
+          "name": "desfeito_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_acoes_voz_user_id ON acoes_voz (user_id)",
+        "CREATE INDEX idx_acoes_voz_status ON acoes_voz (status)",
+        "CREATE INDEX idx_acoes_voz_created ON acoes_voz (created DESC)"
       ]
     }
   ]

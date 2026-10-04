@@ -71,7 +71,7 @@ export interface AdminMetricas {
   receitaMensalEstimada: number
 }
 
-export type AudioContexto = 'orcamento' | 'cliente' | 'comando_status' | 'geral'
+export type AudioContexto = 'orcamento' | 'cliente' | 'comando_status' | 'desfazer' | 'geral'
 
 export interface ComandoStatusExtraido {
   orcamento_id?: string | null
@@ -91,6 +91,23 @@ export interface AudioRegistro {
   resultado_json?: Record<string, unknown>
   confianca?: 'alta' | 'media' | 'baixa'
   comando_executado?: boolean
+  created: string
+  updated: string
+}
+
+export type AcaoVozTipo = 'criacao_cliente' | 'criacao_orcamento' | 'mudanca_status'
+export type AcaoVozStatus = 'ativo' | 'desfeito'
+
+export interface AcaoVozRegistro {
+  id: string
+  user_id: string
+  tipo_acao: AcaoVozTipo
+  titulo: string
+  descricao_resumo?: string
+  registro_id?: string
+  dados_aplicados: Record<string, unknown>
+  status: AcaoVozStatus
+  desfeito_em?: string
   created: string
   updated: string
 }
