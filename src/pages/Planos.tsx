@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useSubscription } from '@/contexts/SubscriptionContext'
 import { formatarData } from '@/types'
 import { useToast } from '@/hooks/use-toast'
+import { PLANO_CONFIG } from '@/config/plans'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -64,9 +65,9 @@ export default function Planos() {
 
   // Códigos fictícios
   const fakePixCode =
-    '00020126580014br.gov.bcb.pix0136jmsistemas-simulacao-homologacao-2026520400005303986540549.005802BR5920JM SISTEMAS SAAS LTDA6009SAO PAULO62140510JMSIST49006304E8A2'
+    '00020126580014br.gov.bcb.pix0136jmsistemas-simulacao-homologacao-2026520400005303986540549.905802BR5920JM SISTEMAS SAAS LTDA6009SAO PAULO62140510JMSIST49906304F2B8'
 
-  const fakeBoletoLinha = '34191.79001 01043.510047 91020.150008 5 94520000004900'
+  const fakeBoletoLinha = '34191.79001 01043.510047 91020.150008 5 94520000004990'
 
   const handleOpenCheckout = () => {
     setCardNome(user?.name || '')
@@ -164,7 +165,7 @@ export default function Planos() {
 
       toast({
         title: 'Pagamento simulado aprovado com sucesso!',
-        description: `Seu plano Starter (R$ 49/mês) foi ativado ${labelMetodo}. Acesso 100% liberado por +30 dias!`,
+        description: `Seu plano ${PLANO_CONFIG.nome} (${PLANO_CONFIG.precoMensalExtenso}) foi ativado ${labelMetodo}. Acesso 100% liberado por +30 dias!`,
       })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha ao processar simulação de pagamento'
@@ -309,21 +310,24 @@ export default function Planos() {
                 </span>
               ) : (
                 <span className="text-rose-300 font-medium">
-                  Seu teste expirou. Contrate o plano por R$ 49,00/mês para desbloquear o sistema.
+                  Seu teste expirou. Contrate o plano por {PLANO_CONFIG.precoMensalExtenso} para
+                  desbloquear o sistema.
                 </span>
               )}
             </p>
           </div>
 
           <div className="sm:text-right pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
-            <span className="text-3xl font-extrabold tabular-nums text-white">R$ 49,00</span>
+            <span className="text-3xl font-extrabold tabular-nums text-white">
+              {PLANO_CONFIG.precoFormatado}
+            </span>
             <span className="text-xs text-slate-400 ml-1">/mês</span>
             <p className="text-[11px] text-blue-200 mt-1">Cobrança mensal simulada</p>
           </div>
         </div>
       </div>
 
-      {/* PLANO ÚNICO: R$ 49/mês (STARTER) */}
+      {/* PLANO ÚNICO: R$ 49,90/mês (STARTER) */}
       <div className="max-w-xl mx-auto">
         <div className="relative bg-white rounded-3xl border-2 border-blue-600 p-6 sm:p-8 shadow-xl">
           {/* Badge de Destaque */}
@@ -334,13 +338,15 @@ export default function Planos() {
           </div>
 
           <div className="text-center pt-2">
-            <h4 className="text-2xl font-bold text-slate-900">Plano Starter</h4>
+            <h4 className="text-2xl font-bold text-slate-900">Plano {PLANO_CONFIG.nome}</h4>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
               Tudo o que você precisa para emitir propostas impecáveis e fechar negócios.
             </p>
 
             <div className="my-6">
-              <span className="text-5xl font-extrabold text-slate-900 tabular-nums">R$ 49,00</span>
+              <span className="text-5xl font-extrabold text-slate-900 tabular-nums">
+                {PLANO_CONFIG.precoFormatado}
+              </span>
               <span className="text-sm font-medium text-slate-500 ml-1">/mês</span>
               <p className="text-xs text-emerald-600 font-semibold mt-1">
                 7 dias de teste grátis inclusos no cadastro
@@ -383,16 +389,16 @@ export default function Planos() {
             {isAtivo ? (
               <span className="flex items-center gap-2">
                 <Check className="w-5 h-5 text-emerald-300" />
-                Renovar ou Alterar Pagamento (R$ 49,00)
+                Renovar ou Alterar Pagamento ({PLANO_CONFIG.precoFormatado})
               </span>
             ) : isBloqueado ? (
               <span className="flex items-center gap-2">
                 <Lock className="w-5 h-5 text-amber-300" />
-                Desbloquear Acesso por R$ 49,00/mês
+                Desbloquear Acesso por {PLANO_CONFIG.precoMensalExtenso}
               </span>
             ) : (
               <span className="flex items-center gap-2">
-                <span>Contratar Plano por R$ 49,00/mês</span>
+                <span>Contratar Plano por {PLANO_CONFIG.precoMensalExtenso}</span>
                 <ArrowRight className="w-5 h-5" />
               </span>
             )}
@@ -411,11 +417,13 @@ export default function Planos() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2 text-slate-900">
               <CreditCard className="w-5 h-5 text-blue-600" />
-              Contratar Plano Starter
+              Contratar Plano {PLANO_CONFIG.nome}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
               Valor da assinatura:{' '}
-              <strong className="text-slate-900 text-sm">R$ 49,00 / mês</strong>
+              <strong className="text-slate-900 text-sm">
+                {PLANO_CONFIG.precoFormatado} / mês
+              </strong>
             </DialogDescription>
           </DialogHeader>
 
@@ -510,7 +518,8 @@ export default function Planos() {
                 </div>
 
                 <span className="text-[11px] text-slate-500 mt-2 font-mono">
-                  Valor: <strong>R$ 49,00</strong> • Beneficiário: JM Sistemas Ltda
+                  Valor: <strong>{PLANO_CONFIG.precoFormatado}</strong> • Beneficiário: JM Sistemas
+                  Ltda
                 </span>
               </div>
 
@@ -588,7 +597,6 @@ export default function Planos() {
                     <p className="text-[11px] text-red-600">{cardErrors.cardNome}</p>
                   )}
                 </div>
-
                 <div className="space-y-1">
                   <Label htmlFor="card-numero" className="text-xs font-semibold text-slate-700">
                     Número do cartão
@@ -604,7 +612,6 @@ export default function Planos() {
                     <p className="text-[11px] text-red-600">{cardErrors.cardNumero}</p>
                   )}
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label htmlFor="card-validade" className="text-xs font-semibold text-slate-700">
@@ -638,7 +645,6 @@ export default function Planos() {
                     )}
                   </div>
                 </div>
-
                 <Button
                   type="submit"
                   disabled={processingPayment}
@@ -650,9 +656,9 @@ export default function Planos() {
                       Processando pagamento simulado...
                     </>
                   ) : (
-                    'Confirmar Pagamento no Cartão (R$ 49,00)'
+                    `Confirmar Pagamento no Cartão (${PLANO_CONFIG.precoFormatado})`
                   )}
-                </Button>
+                </Button>{' '}
               </form>
             </TabsContent>
 
@@ -666,7 +672,9 @@ export default function Planos() {
                       Boleto Bancário Simulado
                     </span>
                   </div>
-                  <span className="text-xs font-extrabold text-slate-900">R$ 49,00</span>
+                  <span className="text-xs font-extrabold text-slate-900">
+                    {PLANO_CONFIG.precoFormatado}
+                  </span>
                 </div>
 
                 <div className="space-y-1">

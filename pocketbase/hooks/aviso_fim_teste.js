@@ -96,12 +96,12 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
             </p>
             
             <p style="font-size: 15px; margin-bottom: 24px;">
-              Para continuar emitindo orçamentos profissionais sem interrupções, assine agora o <strong>Plano Starter por apenas R$ 49,00/mês</strong>.
+              Para continuar emitindo orçamentos profissionais sem interrupções, assine agora o <strong>Plano Starter por apenas R$ 49,90/mês</strong>.
             </p>
             
             <div style="text-align: center; margin-bottom: 30px;">
               <a href="https://finalizacao-do-sistema-913b5.shrd00.internal.goskip.dev/planos" style="display: inline-block; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px; padding: 14px 28px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-                Garantir meu acesso por R$ 49/mês
+                Garantir meu acesso por R$ 49,90/mês
               </a>
             </div>
             

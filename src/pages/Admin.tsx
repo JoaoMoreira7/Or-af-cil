@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { adminService } from '@/services/admin'
 import { AdminMetricas, UsuarioAssinanteAdmin, formatarMoedaBRL, formatarData } from '@/types'
 import { useToast } from '@/hooks/use-toast'
+import { PLANO_CONFIG } from '@/config/plans'
 
 export default function Admin() {
   const { toast } = useToast()
@@ -178,7 +179,9 @@ export default function Admin() {
               {loading ? '...' : metricas?.totalAtivos || 0}
             </div>
             <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-              <span>Plano Starter R$ 49/mês</span>
+              <span>
+                Plano {PLANO_CONFIG.nome} {PLANO_CONFIG.precoMensalExtenso}
+              </span>
             </p>
           </CardContent>
         </Card>
@@ -198,7 +201,7 @@ export default function Admin() {
               {loading ? '...' : formatarMoedaBRL(metricas?.receitaMensalEstimada || 0)}
             </div>
             <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-              <span>Ativos × R$ 49,00 / mês</span>
+              <span>Ativos × {PLANO_CONFIG.precoFormatado} / mês</span>
             </p>
           </CardContent>
         </Card>
@@ -382,9 +385,9 @@ export default function Admin() {
             </span>
           </div>
           <p className="text-xs text-slate-400 leading-relaxed max-w-2xl">
-            O sistema opera com plano único Starter (R$ 49,00/mês) com cobrança simulada (PIX,
-            Boleto e Cartão). O cron job automático dispara e-mails de alerta em pt-BR aos usuários
-            com 2 dias de teste restantes.
+            O sistema opera com plano único {PLANO_CONFIG.nome} ({PLANO_CONFIG.precoMensalExtenso})
+            com cobrança simulada (PIX, Boleto e Cartão). O cron job automático dispara e-mails de
+            alerta em pt-BR aos usuários com 2 dias de teste restantes.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs">

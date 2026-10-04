@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Lock, ArrowRight, CheckCircle2, ShieldCheck, Sparkles, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSubscription } from '@/contexts/SubscriptionContext'
+import { PLANO_CONFIG } from '@/config/plans'
 
 export const TrialExpiredPaywall: React.FC = () => {
   const navigate = useNavigate()
@@ -27,7 +28,7 @@ export const TrialExpiredPaywall: React.FC = () => {
         <p className="text-sm text-slate-600 mt-3 leading-relaxed">
           Para continuar criando orçamentos profissionais, cadastrando clientes e aproveitando a
           nossa Inteligência Artificial, contrate o plano completo por apenas{' '}
-          <strong className="text-slate-900 font-bold">R$ 49,00/mês</strong>.
+          <strong className="text-slate-900 font-bold">{PLANO_CONFIG.precoMensalExtenso}</strong>.
         </p>
 
         {/* Card do plano resumo */}
@@ -40,7 +41,9 @@ export const TrialExpiredPaywall: React.FC = () => {
               <h3 className="text-lg font-bold text-slate-900">Acesso Total & Ilimitado</h3>
             </div>
             <div className="text-right">
-              <span className="text-2xl font-extrabold text-slate-900">R$ 49,00</span>
+              <span className="text-2xl font-extrabold text-slate-900">
+                {PLANO_CONFIG.precoFormatado}
+              </span>
               <span className="text-xs text-slate-500 block">/mês</span>
             </div>
           </div>
@@ -68,7 +71,7 @@ export const TrialExpiredPaywall: React.FC = () => {
             onClick={() => navigate('/planos')}
             className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:brightness-110 text-white font-bold text-base shadow-lg shadow-blue-500/20 active:scale-[0.99] transition-all"
           >
-            <span>Contratar Plano por R$ 49,00/mês</span>
+            <span>Contratar Plano por {PLANO_CONFIG.precoMensalExtenso}</span>
             <ArrowRight className="w-5 h-5 ml-2" />
           </Button>
 

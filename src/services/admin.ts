@@ -1,6 +1,7 @@
 import pb from '@/lib/pocketbase/client'
 import { PlanoAssinatura, UsuarioAssinanteAdmin, AdminMetricas } from '@/types'
 import { RecordModel } from 'pocketbase'
+import { PLANO_CONFIG } from '@/config/plans'
 
 export interface UserRecordModel extends RecordModel {
   name?: string
@@ -70,7 +71,10 @@ export const adminService = {
           email: u.email || '',
           admin: !!u.admin,
           planoStatus: status,
-          planoNome: plano?.plano === 'pro' ? 'Pro' : 'Starter (R$ 49/mês)',
+          planoNome:
+            plano?.plano === 'pro'
+              ? 'Pro'
+              : `${PLANO_CONFIG.nome} (${PLANO_CONFIG.precoMensalExtenso})`,
           trialAte: plano?.trial_ate,
           renovacaoEm: plano?.renovacao_em,
           diasRestantesTrial: diasRestantes,
@@ -78,7 +82,7 @@ export const adminService = {
         }
       })
 
-      const VALOR_MENSAL_STARTER = 49
+      const VALOR_MENSAL_STARTER = PLANO_CONFIG.precoMensal
       const receitaMensalEstimada = totalAtivos * VALOR_MENSAL_STARTER
 
       const metricas: AdminMetricas = {

@@ -1,6 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { COMPANY_LEGAL } from '@/config/company'
+import { PLANO_CONFIG } from '@/config/plans'
 import { AlertTriangle, ArrowLeft } from 'lucide-react'
 
 export default function TermosDeUso() {
@@ -101,13 +102,15 @@ export default function TermosDeUso() {
             </h2>
             <p>
               A plataforma oferece acesso completo através do plano{' '}
-              <strong>Starter (R$ 49,00/mês)</strong>, antecedido por um período de teste grátis de{' '}
-              <strong>7 dias</strong> para novos usuários. Após a conclusão do período de teste, o
-              acesso é bloqueado até a contratação do plano via PIX, Cartão de Crédito ou Boleto.
-              Nesta versão de demonstração e homologação, toda a cobrança, processamento de cartões
-              e transações financeiras são estritamente <strong>SIMULADAS</strong>. Nenhuma
-              transação bancária ou débito real é efetuado nos dados fornecidos nos formulários de
-              pagamento.
+              <strong>
+                {PLANO_CONFIG.nome} ({PLANO_CONFIG.precoMensalExtenso})
+              </strong>
+              , antecedido por um período de teste grátis de <strong>7 dias</strong> para novos
+              usuários. Após a conclusão do período de teste, o acesso é bloqueado até a contratação
+              do plano via PIX, Cartão de Crédito ou Boleto. Nesta versão de demonstração e
+              homologação, toda a cobrança, processamento de cartões e transações financeiras são
+              estritamente <strong>SIMULADAS</strong>. Nenhuma transação bancária ou débito real é
+              efetuado nos dados fornecidos nos formulários de pagamento.
             </p>
           </section>
 
