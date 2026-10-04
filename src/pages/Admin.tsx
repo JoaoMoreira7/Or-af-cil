@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
 import {
   Users,
   CreditCard,
@@ -8,15 +8,19 @@ import {
   Search,
   RefreshCw,
   AlertTriangle,
-  ArrowUpRight,
   CheckCircle2,
   XCircle,
+  Mail,
+  Send,
+  Sparkles,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { adminService } from '@/services/admin'
+import { resumoSemanalService } from '@/services/resumoSemanal'
+import { useAuth } from '@/contexts/AuthContext'
 import { AdminMetricas, UsuarioAssinanteAdmin, formatarMoedaBRL, formatarData } from '@/types'
 import { useToast } from '@/hooks/use-toast'
 import { PLANO_CONFIG } from '@/config/plans'
@@ -30,6 +34,22 @@ export default function Admin() {
   const [statusFilter, setStatusFilter] = useState<'todos' | 'ativo' | 'trial' | 'expirado'>(
     'todos',
   )
+
+  // Estado para disparo de e-mail de teste do Resumo Semanal
+  const { user } = useAuth()
+  const isMountedRef = useRef(true)
+  const [emailTeste, setEmailTeste] = useState<string>(user?.email || 'jaocarloss@gmail.com')
+  const [enviandoTeste, setEnviandoTeste] = useState<boolean>(false)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    if (user?.email && !emailTeste) {
+      setEmailTeste(user.email)
+    }
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [user?.email, emailTeste])
 
   const carregarDados = async () => {
     setLoading(true)
@@ -45,7 +65,51 @@ export default function Admin() {
         variant: 'destructive',
       })
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
+    }
+  }
+
+  const handleDispararEmailTeste = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const emailDest = emailTeste.trim()
+    if (!emailDest || !emailDest.includes('@')) {
+      toast({
+        title: 'E-mail inválido',
+        description: 'Por favor, informe um endereço de e-mail válido para o disparo de teste.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setEnviandoTeste(true)
+    try {
+      const res = await resumoSemanalService.dispararTesteEmail(emailDest)
+      if (isMountedRef.current) {
+        toast({
+          title: 'Disparo de teste realizado!',
+          description:
+            res.mensagem ||
+            `E-mail do Resumo da Semana enviado com sucesso para ${emailDest} (Semana ${res.chave_semana || 'atual'}).`,
+        })
+      }
+    } catch (err: unknown) {
+      if (isMountedRef.current) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Falha ao processar disparo de teste do resumo semanal'
+        toast({
+          title: 'Erro no disparo de teste',
+          description: msg,
+          variant: 'destructive',
+        })
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setEnviandoTeste(false)
+      }
     }
   }
 
@@ -121,6 +185,90 @@ export default function Admin() {
           Atualizar Dados
         </Button>
       </div>
+
+      {/* CARD DE TESTE DO RESUMO DA SEMANA */}
+      <Card className="border-blue-200 bg-gradient-to-br from-blue-50/70 via-indigo-50/30 to-white shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 border-b border-blue-100/80">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="p-2 rounded-lg bg-blue-600 text-white shadow-xs">
+                <Mail className="w-4 h-4" />
+              </span>
+              <div>
+                <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span>Disparo de Teste: Resumo Semanal por E-mail</span>
+                  <Badge
+                    variant="outline"
+                    className="border-blue-300 bg-blue-100/60 text-blue-700 text-[10px] font-semibold"
+                  >
+                    <Sparkles className="w-3 h-3 mr-1 text-blue-600" />
+                    Skip AI
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-600">
+                  Valide a entrega e a formatação do e-mail do resumo semanal antes do envio oficial
+                  na próxima segunda-feira (12:00 UTC).
+                </CardDescription>
+              </div>
+            </div>
+
+            <Badge
+              variant="secondary"
+              className="bg-white/90 text-slate-700 border-slate-200 text-[11px] self-start sm:self-auto"
+            >
+              Sem bloquear o cron
+            </Badge>
+          </div>
+        </CardHeader>
+
+        <CardContent className="pt-4">
+          <form onSubmit={handleDispararEmailTeste} className="space-y-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex-1">
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                <Input
+                  type="email"
+                  required
+                  placeholder="admin@exemplo.com"
+                  value={emailTeste}
+                  onChange={(e) => setEmailTeste(e.target.value)}
+                  disabled={enviandoTeste}
+                  className="pl-9 text-xs sm:text-sm h-10 border-blue-200 bg-white focus-visible:ring-blue-500"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={enviandoTeste}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium h-10 px-5 gap-2 shadow-xs transition-all whitespace-nowrap"
+              >
+                {enviandoTeste ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Gerando & Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Enviar e-mail de teste do Resumo da Semana
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              💡 <strong>Como funciona:</strong> O backend compila os números reais dos últimos 7
+              dias (orçamentos fechados, novas propostas, clientes e valores a receber), aplica a IA
+              com a persona cadastrada e dispara o e-mail HTML idêntico ao modelo de produção, sem
+              gravar trava anti-duplicidade na coleção{' '}
+              <code className="font-mono bg-blue-100/60 px-1 py-0.5 rounded text-blue-900">
+                resumos_semanais_enviados
+              </code>
+              .
+            </p>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* CARDS DE MÉTRICAS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -31,7 +31,50 @@ export interface DisparoEmailResumoResultado {
   error?: string
 }
 
+export interface DisparoTesteResumoResultado {
+  sucesso: boolean
+  email_enviado?: boolean
+  destinatario?: string
+  chave_semana?: string
+  usou_ia?: boolean
+  metricas?: Record<string, unknown>
+  aviso_envio?: string
+  mensagem?: string
+  error?: string
+}
+
 export const resumoSemanalService = {
+  /**
+   * Dispara e-mail de teste do resumo semanal para o endereço informado (apenas admin).
+   * Não grava na coleção de enviados para não bloquear o envio real de segunda-feira.
+   */
+  async dispararTesteEmail(email: string): Promise<DisparoTesteResumoResultado> {
+    if (!pb.authStore.token) {
+      throw new Error('Usuário não autenticado')
+    }
+
+    const res = await fetch(
+      `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/resumo-semanal-teste`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: pb.authStore.token,
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+        }),
+      },
+    )
+
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      throw new Error(data?.error || 'Erro ao disparar e-mail de teste do resumo semanal')
+    }
+
+    return data as DisparoTesteResumoResultado
+  },
+
   /**
    * Dispara ou força o envio do e-mail do resumo semanal para o usuário autenticado.
    */
