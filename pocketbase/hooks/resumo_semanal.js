@@ -350,6 +350,258 @@ routerAdd(
         // Mantém fallback inteligente
       }
 
+      // Se solicitado disparo de e-mail de teste/manual através do mesmo endpoint
+      let envioEmailInfo = null
+      if (body.enviar_email === true || body.disparar_email === true) {
+        try {
+          // Identifica e-mail do destinatário
+          let emailDest = ''
+          let nomeDest = prefNome || 'Parceiro(a)'
+          try {
+            const uRec = $app.findRecordById('_pb_users_auth_', userId)
+            if (uRec) {
+              emailDest = uRec.getString('email') || ''
+              nomeDest = uRec.getString('name') || prefNome || 'Parceiro(a)'
+            }
+          } catch (_) {}
+
+          if (emailDest) {
+            // Calcula chave ISO da semana atual
+            const targetData = new Date(agora.valueOf())
+            const dayNr = (agora.getDay() + 6) % 7
+            targetData.setDate(targetData.getDate() - dayNr + 3)
+            const firstThursday = targetData.valueOf()
+            targetData.setMonth(0, 1)
+            if (targetData.getDay() !== 4) {
+              targetData.setMonth(0, 1 + ((4 - targetData.getDay() + 7) % 7))
+            }
+            const weekNumber = 1 + Math.ceil((firstThursday - targetData.valueOf()) / 604800000)
+            const weekStr = weekNumber < 10 ? '0' + weekNumber : '' + weekNumber
+            const chaveSemanaAtual = targetData.getFullYear() + '-W' + weekStr
+
+            const assuntoEmail = 'Seu resumo da semana — JM Sistemas'
+            const emojiDestaque = prefEmojis ? '📊 ' : ''
+            const saudacao =
+              prefTom === 'formal'
+                ? 'Prezado(a) ' + prefNome
+                : prefTom === 'direto'
+                  ? 'Olá, ' + prefNome
+                  : 'Olá, ' + prefNome + '!'
+
+            const semMovimentacao =
+              metricas.orcamentos_criados === 0 &&
+              metricas.orcamentos_aprovados === 0 &&
+              metricas.cobrancas_pagas === 0 &&
+              metricas.novos_clientes === 0
+
+            const textoEditorialEmail = (textoGerado || fallbackTexto).replace(
+              /\n\s*\n/g,
+              '<br/><br/>',
+            )
+
+            const corpoHtml = `
+              <!DOCTYPE html>
+              <html lang="pt-BR">
+              <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <title>${assuntoEmail}</title>
+              </head>
+              <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; line-height: 1.6;">
+                <div style="max-width: 620px; margin: 30px auto; background-color: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.03); border: 1px solid #e2e8f0;">
+                  
+                  <div style="background: linear-gradient(135deg, #1e3a8a, #2563eb, #7c3aed); padding: 32px 28px; text-align: left; color: #ffffff;">
+                    <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); padding: 6px 14px; border-radius: 9999px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">
+                      JM Sistemas • Inteligência Comercial
+                    </div>
+                    <h1 style="margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3; color: #ffffff;">
+                      ${emojiDestaque}Resumo da Semana
+                    </h1>
+                    <p style="margin: 6px 0 0 0; font-size: 14px; color: #dbeafe; opacity: 0.95;">
+                      Semana ${chaveSemanaAtual} • Balanço dos últimos 7 dias
+                    </p>
+                  </div>
+
+                  <div style="padding: 28px;">
+                    <h2 style="font-size: 18px; color: #0f172a; margin: 0 0 16px 0; font-weight: 600;">
+                      ${saudacao}
+                    </h2>
+
+                    <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 16px 18px; border-radius: 8px; margin-bottom: 24px; font-size: 15px; color: #166534; line-height: 1.6;">
+                      ${textoEditorialEmail}
+                    </div>
+
+                    <h3 style="font-size: 14px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 14px 0;">
+                      Destaques da Operação
+                    </h3>
+
+                    <div style="margin-bottom: 24px;">
+                      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout: fixed;">
+                        <tr>
+                          <td width="48%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; vertical-align: top;">
+                            <div style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">
+                              ${prefEmojis ? '✅ ' : ''}Orçamentos Aprovados
+                            </div>
+                            <div style="font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 2px;">
+                              ${metricas.orcamentos_aprovados}
+                            </div>
+                            <div style="font-size: 13px; font-weight: 600; color: #16a34a;">
+                              ${formatarMoeda(metricas.valor_aprovado)}
+                            </div>
+                          </td>
+
+                          <td width="4%"></td>
+
+                          <td width="48%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; vertical-align: top;">
+                            <div style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">
+                              ${prefEmojis ? '📝 ' : ''}Novos Orçamentos
+                            </div>
+                            <div style="font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 2px;">
+                              ${metricas.orcamentos_criados}
+                            </div>
+                            <div style="font-size: 13px; color: #64748b;">
+                              ${metricas.orcamentos_enviados} enviado(s)
+                            </div>
+                          </td>
+                        </tr>
+
+                        <tr><td colspan="3" height="12"></td></tr>
+
+                        <tr>
+                          <td width="48%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; vertical-align: top;">
+                            <div style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">
+                              ${prefEmojis ? '💰 ' : ''}Saldo a Receber
+                            </div>
+                            <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 2px;">
+                              ${formatarMoeda(metricas.valor_pendente)}
+                            </div>
+                            <div style="font-size: 12px; color: #64748b;">
+                              ${metricas.cobrancas_pagas} recebimento(s) pago(s)
+                            </div>
+                          </td>
+
+                          <td width="4%"></td>
+
+                          <td width="48%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; vertical-align: top;">
+                            <div style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">
+                              ${prefEmojis ? '👥 ' : ''}Novos Clientes
+                            </div>
+                            <div style="font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 2px;">
+                              ${metricas.novos_clientes}
+                            </div>
+                            <div style="font-size: 12px; color: ${metricas.orcamentos_sem_resposta_5_dias > 0 ? '#d97706' : '#64748b'};">
+                              ${metricas.orcamentos_sem_resposta_5_dias > 0 ? '⚠️ ' + metricas.orcamentos_sem_resposta_5_dias + ' sem resposta (5d+)' : 'Contatos atualizados'}
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+
+                    ${
+                      semMovimentacao
+                        ? `
+                      <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px 16px; margin-bottom: 24px; text-align: center;">
+                        <p style="margin: 0; font-size: 14px; color: #1e40af; font-weight: 500;">
+                          💡 <strong>Dica da Semana:</strong> Cadastre novos orçamentos ou use o <em>Assistente de Voz</em> no celular para ditar serviços em poucos segundos!
+                        </p>
+                      </div>
+                    `
+                        : ''
+                    }
+
+                    <div style="text-align: center; margin: 32px 0 16px 0;">
+                      <a href="https://finalizacao-do-sistema-913b5.shrd00.internal.goskip.dev/orcamentos" style="display: inline-block; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 15px; padding: 14px 28px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">
+                        Acessar Painel de Orçamentos
+                      </a>
+                    </div>
+                  </div>
+
+                  <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center;">
+                    <p style="margin: 0 0 6px 0; font-size: 12px; color: #64748b;">
+                      JM Sistemas — Plataforma de Gestão Inteligente com IA
+                    </p>
+                    <p style="margin: 0; font-size: 11px; color: #94a3b8;">
+                      Este e-mail semanal é enviado automaticamente para usuários ativos às segundas-feiras.
+                    </p>
+                  </div>
+                </div>
+              </body>
+              </html>
+            `
+
+            // Envio via MailerMessage
+            try {
+              const remetente = $app.settings().meta.senderAddress || 'suporte@jmsistemas.com.br'
+              const emailMessage = new MailerMessage({
+                from: {
+                  address: remetente,
+                  name: 'JM Sistemas',
+                },
+                to: [{ address: emailDest, name: nomeDest }],
+                subject: assuntoEmail,
+                html: corpoHtml,
+              })
+
+              $app.newMailClient().send(emailMessage)
+              console.log(`[resumo-semanal:disparo-via-post] E-mail enviado para ${emailDest}`)
+              envioEmailInfo = {
+                destinatario: emailDest,
+                enviado: true,
+                assunto: assuntoEmail,
+              }
+            } catch (mailErr) {
+              console.warn(`[resumo-semanal:disparo-via-post] Aviso SMTP: ${mailErr}`)
+              envioEmailInfo = {
+                destinatario: emailDest,
+                enviado: false,
+                simulado: true,
+                aviso: mailErr.message || String(mailErr),
+              }
+            }
+
+            // Grava registro de controle
+            try {
+              const colRegistro = $app.findCollectionByNameOrId('resumos_semanais_enviados')
+              let reg = null
+              try {
+                const ex = $app.findRecordsByFilter(
+                  'resumos_semanais_enviados',
+                  "user_id = '" + userId + "' && chave_semana = '" + chaveSemanaAtual + "'",
+                  '-created',
+                  1,
+                  0,
+                )
+                if (ex.length > 0) reg = ex[0]
+              } catch (_) {}
+
+              if (!reg) {
+                reg = new Record(colRegistro)
+                reg.set('user_id', userId)
+                reg.set('chave_semana', chaveSemanaAtual)
+              }
+
+              reg.set('email_destinatario', emailDest)
+              reg.set('enviado_em', agora.toISOString())
+              reg.set('status_envio', 'sucesso')
+              reg.set('usou_ia', true)
+              reg.set('metricas', metricas)
+              reg.set('assunto', assuntoEmail)
+              $app.save(reg)
+              if (envioEmailInfo) {
+                envioEmailInfo.registro_id = reg.id
+              }
+            } catch (regErr) {
+              console.warn(
+                '[resumo-semanal:disparo-via-post] Erro ao gravar registro de envio:',
+                regErr,
+              )
+            }
+          }
+        } catch (emailBlockErr) {
+          console.warn('[resumo-semanal:disparo-via-post] Falha no bloco de envio:', emailBlockErr)
+        }
+      }
+
       return e.json(200, {
         sucesso: true,
         resumo_texto: textoGerado,
@@ -360,6 +612,7 @@ routerAdd(
           usar_emojis: prefEmojis,
         },
         gerado_em: agora.toISOString(),
+        envio_email: envioEmailInfo,
       })
     } catch (err) {
       return e.json(500, {

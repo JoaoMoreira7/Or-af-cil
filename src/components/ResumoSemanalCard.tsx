@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
+  Mail,
+  Send,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ResumoSemanalData, formatarMoedaBRL } from '@/types'
 import { resumoSemanalService } from '@/services/resumoSemanal'
+import { toast } from '@/hooks/use-toast'
 
 export interface ResumoSemanalCardProps {
   userName?: string
@@ -39,6 +42,7 @@ export const ResumoSemanalCard: React.FC<ResumoSemanalCardProps> = ({
   const [data, setData] = useState<ResumoSemanalData | null>(null)
   const [loading, setLoading] = useState(true)
   const [regenerating, setRegenerating] = useState(false)
+  const [enviandoEmail, setEnviandoEmail] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
   // Estados de reprodução de voz nativa (SpeechSynthesis)
@@ -290,6 +294,40 @@ export const ResumoSemanalCard: React.FC<ResumoSemanalCardProps> = ({
     }
   }
 
+  // Disparo manual de e-mail de teste/resumo semanal
+  const handleEnviarEmail = async () => {
+    try {
+      setEnviandoEmail(true)
+      const res = await resumoSemanalService.dispararEmail({ forcarReenvio: true })
+      if (!isMountedRef.current) return
+
+      if (res.sucesso) {
+        toast({
+          title: 'Resumo enviado por e-mail!',
+          description: `E-mail transacional enviado com sucesso para ${res.destinatario || 'sua conta'}.`,
+        })
+      } else {
+        toast({
+          title: 'Aviso de envio',
+          description: res.error || 'Não foi possível confirmar o envio por e-mail.',
+          variant: 'destructive',
+        })
+      }
+    } catch (err: unknown) {
+      if (!isMountedRef.current) return
+      toast({
+        title: 'Falha ao enviar e-mail',
+        description:
+          err instanceof Error ? err.message : 'Erro ao disparar e-mail do resumo semanal',
+        variant: 'destructive',
+      })
+    } finally {
+      if (isMountedRef.current) {
+        setEnviandoEmail(false)
+      }
+    }
+  }
+
   const metricas = data?.metricas
 
   return (
@@ -389,6 +427,33 @@ export const ResumoSemanalCard: React.FC<ResumoSemanalCardProps> = ({
                 <TooltipContent side="top">
                   <p className="text-xs">
                     Recalcular métricas dos últimos 7 dias e pedir um novo roteiro para a IA
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            {/* BOTÃO TESTAR/ENVIAR E-MAIL AGORA */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={loading || enviandoEmail}
+                    onClick={handleEnviarEmail}
+                    className="h-9 px-3 rounded-xl border-white/20 bg-white/10 hover:bg-white/20 text-white text-xs font-medium"
+                  >
+                    <Mail
+                      className={`w-3.5 h-3.5 mr-1.5 ${enviandoEmail ? 'animate-pulse text-amber-300' : ''}`}
+                    />
+                    {enviandoEmail ? 'Enviando...' : 'Receber por e-mail'}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs">
+                    Disparar o e-mail HTML do resumo semanal para o seu endereço agora (teste
+                    manual)
                   </p>
                 </TooltipContent>
               </Tooltip>
