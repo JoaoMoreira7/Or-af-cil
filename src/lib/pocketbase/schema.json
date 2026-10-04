@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-04T00:56:55.063Z",
+  "generatedAt": "2026-10-04T01:03:00.148Z",
   "collections": [
     {
       "name": "users",
@@ -702,6 +702,87 @@
         "CREATE INDEX idx_documentos_lidos_user_id ON documentos_lidos (user_id)",
         "CREATE INDEX idx_documentos_lidos_tipo ON documentos_lidos (tipo_documento)",
         "CREATE INDEX idx_documentos_lidos_created ON documentos_lidos (created DESC)"
+      ]
+    },
+    {
+      "name": "resumos_semanais_enviados",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.admin = true)",
+        "view": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.admin = true)",
+        "create": "@request.auth.id != '' && (@request.body.user_id = @request.auth.id || @request.auth.admin = true)",
+        "update": "@request.auth.id != '' && @request.auth.admin = true",
+        "delete": "@request.auth.id != '' && @request.auth.admin = true"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "chave_semana",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "email_destinatario",
+          "type": "email",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "enviado_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_envio",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["sucesso", "falha_envio", "fallback"]
+        },
+        {
+          "name": "usou_ia",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "metricas",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "assunto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_resumos_semanais_user_semana ON resumos_semanais_enviados (user_id, chave_semana)",
+        "CREATE INDEX idx_resumos_semanais_user_created ON resumos_semanais_enviados (user_id, created DESC)"
       ]
     }
   ]

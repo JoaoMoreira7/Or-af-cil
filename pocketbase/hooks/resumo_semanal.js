@@ -13,7 +13,6 @@ routerAdd(
       const agora = new Date()
       // Últimos 7 dias
       const seteDiasAtras = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000)
-      const seteDiasIso = seteDiasAtras.toISOString().replace('T', ' ')
       // Limite para orçamentos sem resposta há 5+ dias
       const cincoDiasAtras = new Date(agora.getTime() - 5 * 24 * 60 * 60 * 1000)
 
