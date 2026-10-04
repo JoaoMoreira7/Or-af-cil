@@ -20,7 +20,53 @@ export function getChaveSemanaAtual(d = new Date()): string {
 
 const STORAGE_KEY_PREFIX = 'jm_resumo_semanal_'
 
+export interface DisparoEmailResumoResultado {
+  sucesso: boolean
+  ja_enviado?: boolean
+  destinatario?: string
+  chave_semana?: string
+  usou_ia?: boolean
+  registro_id?: string
+  mensagem?: string
+  error?: string
+}
+
 export const resumoSemanalService = {
+  /**
+   * Dispara ou força o envio do e-mail do resumo semanal para o usuário autenticado.
+   */
+  async dispararEmail(options?: {
+    userId?: string
+    forcarReenvio?: boolean
+  }): Promise<DisparoEmailResumoResultado> {
+    const uid = options?.userId || pb.authStore.record?.id
+    if (!uid) {
+      throw new Error('Usuário não autenticado')
+    }
+
+    const res = await fetch(
+      `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/resumo-semanal/enviar-email`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: pb.authStore.token,
+        },
+        body: JSON.stringify({
+          userId: uid,
+          forcarReenvio: !!options?.forcarReenvio,
+        }),
+      },
+    )
+
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      throw new Error(data?.error || 'Erro ao disparar e-mail do resumo semanal')
+    }
+
+    return data as DisparoEmailResumoResultado
+  },
+
   /**
    * Obtém o resumo semanal do usuário.
    * Se já houver resumo em cache para a semana atual (e forcarRegeneracao = false),
