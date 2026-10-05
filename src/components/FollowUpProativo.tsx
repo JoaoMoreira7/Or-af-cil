@@ -14,7 +14,7 @@ import { COMPANY_LEGAL } from '@/config/company'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-const DISMISSED_FOLLOWUPS_KEY = 'jm_followups_dispensados'
+const DISMISSED_FOLLOWUPS_KEY = 'orcafacil_followups_dispensados'
 
 export interface FollowUpItem {
   orcamento: Orçamento

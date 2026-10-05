@@ -18,7 +18,7 @@ export function getChaveSemanaAtual(d = new Date()): string {
   return `${target.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`
 }
 
-const STORAGE_KEY_PREFIX = 'jm_resumo_semanal_'
+const STORAGE_KEY_PREFIX = 'orcafacil_resumo_semanal_'
 
 export interface DisparoEmailResumoResultado {
   sucesso: boolean

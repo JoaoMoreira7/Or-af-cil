@@ -276,7 +276,7 @@ routerAdd(
       let textoGerado = fallbackTexto
       try {
         const promptSistema =
-          'Você é o assistente virtual executivo da plataforma JM Sistemas (estilo o app Meu Assessor).\n' +
+          'Você é o assistente virtual executivo da plataforma OrçaFácil (estilo o app Meu Assessor).\n' +
           'Sua missão é produzir um "podcast de 1 minuto" em texto corrido em português do Brasil (pt-BR) ' +
           'para ser LIDO EM VOZ ALTA por um sintetizador de voz (Web Speech API).\n\n' +
           'REGRAS DO TEXTO:\n' +
@@ -379,7 +379,7 @@ routerAdd(
             const weekStr = weekNumber < 10 ? '0' + weekNumber : '' + weekNumber
             const chaveSemanaAtual = targetData.getFullYear() + '-W' + weekStr
 
-            const assuntoEmail = 'Seu resumo da semana — JM Sistemas'
+            const assuntoEmail = 'Seu resumo da semana — OrçaFácil'
             const emojiDestaque = prefEmojis ? '📊 ' : ''
             const saudacao =
               prefTom === 'formal'
@@ -412,7 +412,7 @@ routerAdd(
                   
                   <div style="background: linear-gradient(135deg, #1e3a8a, #2563eb, #7c3aed); padding: 32px 28px; text-align: left; color: #ffffff;">
                     <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); padding: 6px 14px; border-radius: 9999px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">
-                      JM Sistemas • Inteligência Comercial
+                      OrçaFácil • Inteligência Comercial
                     </div>
                     <h1 style="margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3; color: #ffffff;">
                       ${emojiDestaque}Resumo da Semana
@@ -518,7 +518,7 @@ routerAdd(
 
                   <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center;">
                     <p style="margin: 0 0 6px 0; font-size: 12px; color: #64748b;">
-                      JM Sistemas — Plataforma de Gestão Inteligente com IA
+                      OrçaFácil — Plataforma de Gestão Inteligente com IA
                     </p>
                     <p style="margin: 0; font-size: 11px; color: #94a3b8;">
                       Este e-mail semanal é enviado automaticamente para usuários ativos às segundas-feiras.
@@ -531,11 +531,11 @@ routerAdd(
 
             // Envio via MailerMessage
             try {
-              const remetente = $app.settings().meta.senderAddress || 'suporte@jmsistemas.com.br'
+              const remetente = $app.settings().meta.senderAddress || 'suporte@orcafacil.com.br'
               const emailMessage = new MailerMessage({
                 from: {
                   address: remetente,
-                  name: 'JM Sistemas',
+                  name: 'OrçaFácil',
                 },
                 to: [{ address: emailDest, name: nomeDest }],
                 subject: assuntoEmail,

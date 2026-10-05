@@ -284,7 +284,7 @@ routerAdd(
 
       try {
         const promptSistema =
-          'Você é o assistente executivo e de negócios da plataforma JM Sistemas (gestão de orçamentos e serviços com IA).\n' +
+          'Você é o assistente executivo e de negócios da plataforma OrçaFácil (gestão de orçamentos e serviços com IA).\n' +
           'Sua missão é redigir um resumo executivo de alta clareza em português do Brasil (pt-BR) para ser enviado no e-mail de segunda-feira.\n\n' +
           'DIRETRIZES DA PERSONA:\n' +
           '- Nome do usuário: ' +
@@ -366,7 +366,7 @@ routerAdd(
             : 'Olá, ' + prefNome + '!'
 
       const emojiDestaque = prefEmojis ? '📊 ' : ''
-      const assuntoEmail = '[TESTE] Seu resumo da semana — JM Sistemas'
+      const assuntoEmail = '[TESTE] Seu resumo da semana — OrçaFácil'
 
       const corpoHtml = `
         <!DOCTYPE html>
@@ -381,7 +381,7 @@ routerAdd(
             
             <div style="background: linear-gradient(135deg, #1e3a8a, #2563eb, #7c3aed); padding: 32px 28px; text-align: left; color: #ffffff;">
               <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); padding: 6px 14px; border-radius: 9999px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">
-                JM Sistemas • Disparo de Teste (Admin)
+                OrçaFácil • Disparo de Teste (Admin)
               </div>
               <h1 style="margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3; color: #ffffff;">
                 ${emojiDestaque}Resumo da Semana
@@ -492,7 +492,7 @@ routerAdd(
 
             <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center;">
               <p style="margin: 0 0 6px 0; font-size: 12px; color: #64748b;">
-                JM Sistemas — Plataforma de Gestão Inteligente com IA
+                OrçaFácil — Plataforma de Gestão Inteligente com IA
               </p>
               <p style="margin: 0; font-size: 11px; color: #94a3b8;">
                 Disparo de teste administrativo. O envio real do cron acontece toda segunda-feira às 09:00 BRT.
@@ -508,11 +508,11 @@ routerAdd(
       let emailEnviado = false
       let erroEnvio = null
       try {
-        const remetente = $app.settings().meta.senderAddress || 'suporte@jmsistemas.com.br'
+        const remetente = $app.settings().meta.senderAddress || 'suporte@orcafacil.com.br'
         const emailMessage = new MailerMessage({
           from: {
             address: remetente,
-            name: 'JM Sistemas',
+            name: 'OrçaFácil',
           },
           to: [{ address: targetEmail, name: targetUserName }],
           subject: assuntoEmail,
