@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-05T14:07:37.309Z",
+  "generatedAt": "2026-10-05T14:26:57.796Z",
   "collections": [
     {
       "name": "users",
@@ -783,6 +783,97 @@
       "indexes": [
         "CREATE UNIQUE INDEX idx_resumos_semanais_user_semana ON resumos_semanais_enviados (user_id, chave_semana)",
         "CREATE INDEX idx_resumos_semanais_user_created ON resumos_semanais_enviados (user_id, created DESC)"
+      ]
+    },
+    {
+      "name": "pagamentos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.admin = true || @request.auth.email = 'jaocarloss@gmail.com')",
+        "view": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.admin = true || @request.auth.email = 'jaocarloss@gmail.com')",
+        "create": "@request.auth.id != '' && (@request.body.user_id = @request.auth.id || @request.auth.admin = true || @request.auth.email = 'jaocarloss@gmail.com')",
+        "update": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.admin = true || @request.auth.email = 'jaocarloss@gmail.com')",
+        "delete": "@request.auth.id != '' && (@request.auth.admin = true || @request.auth.email = 'jaocarloss@gmail.com')"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "forma_pagamento",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pix", "cartao", "boleto"]
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pago", "pendente", "cancelado"]
+        },
+        {
+          "name": "data_compra",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_vencimento",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "referencia_transacao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "plano_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "metadados",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_pagamentos_user_id ON pagamentos (user_id)",
+        "CREATE INDEX idx_pagamentos_status ON pagamentos (status)",
+        "CREATE INDEX idx_pagamentos_forma ON pagamentos (forma_pagamento)",
+        "CREATE INDEX idx_pagamentos_data_compra ON pagamentos (data_compra DESC)",
+        "CREATE INDEX idx_pagamentos_created ON pagamentos (created DESC)"
       ]
     }
   ]

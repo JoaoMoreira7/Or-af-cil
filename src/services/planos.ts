@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
-import { PlanoAssinatura } from '@/types'
+import { PlanoAssinatura, FormaPagamentoAssinatura } from '@/types'
+import { gatewayPagamentoService } from '@/services/gatewayPagamento'
 
 export const planosService = {
   async obterPlanoUsuario(userId: string): Promise<PlanoAssinatura | null> {
@@ -16,26 +17,20 @@ export const planosService = {
   async assinarPlano(
     userId: string,
     plano: 'starter' | 'pro' = 'starter',
+    formaPagamento: FormaPagamentoAssinatura = 'pix',
   ): Promise<PlanoAssinatura> {
-    const dataRenovacao = new Date()
-    dataRenovacao.setDate(dataRenovacao.getDate() + 30)
-
     try {
+      // Registra a venda através do gateway de pagamento oficial
+      await gatewayPagamentoService.processarAssinatura({
+        userId,
+        formaPagamento,
+      })
+
       const atual = await this.obterPlanoUsuario(userId)
-      if (atual) {
-        return await pb.collection('planos').update<PlanoAssinatura>(atual.id, {
-          plano,
-          status: 'ativo',
-          renovacao_em: dataRenovacao.toISOString(),
-        })
-      } else {
-        return await pb.collection('planos').create<PlanoAssinatura>({
-          user_id: userId,
-          plano,
-          status: 'ativo',
-          renovacao_em: dataRenovacao.toISOString(),
-        })
+      if (!atual) {
+        throw new Error('Falha ao obter registro atualizado da assinatura')
       }
+      return atual
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha ao processar assinatura do plano'
       throw new Error(msg)

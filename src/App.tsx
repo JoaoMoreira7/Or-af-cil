@@ -4,7 +4,12 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider } from '@/contexts/AuthContext'
-import { ProtectedRoute, PublicOnlyRoute, AdminRoute } from '@/components/ProtectedRoute'
+import {
+  ProtectedRoute,
+  PublicOnlyRoute,
+  AdminRoute,
+  OwnerOnlyRoute,
+} from '@/components/ProtectedRoute'
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext'
 import Layout from '@/components/Layout'
 import ErrorBoundary from '@/components/ErrorBoundary'
@@ -20,6 +25,7 @@ import OrcamentoForm from '@/pages/OrcamentoForm'
 import Planos from '@/pages/Planos'
 import Configuracoes from '@/pages/Configuracoes'
 import Admin from '@/pages/Admin'
+import AdminVendas from '@/pages/AdminVendas'
 import TermosDeUso from '@/pages/TermosDeUso'
 import PoliticaDePrivacidade from '@/pages/PoliticaDePrivacidade'
 import AudiosHistorico from '@/pages/AudiosHistorico'
@@ -104,6 +110,14 @@ const AppRoutes = () => {
               <AdminRoute>
                 <Admin />
               </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/vendas"
+            element={
+              <OwnerOnlyRoute>
+                <AdminVendas />
+              </OwnerOnlyRoute>
             }
           />
         </Route>

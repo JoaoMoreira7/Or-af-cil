@@ -1,7 +1,17 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { planosService } from '@/services/planos'
-import { PlanoAssinatura } from '@/types'
+import { gatewayPagamentoService } from '@/services/gatewayPagamento'
+import { PlanoAssinatura, FormaPagamentoAssinatura } from '@/types'
+
+interface AssinarPlanoParams {
+  formaPagamento?: FormaPagamentoAssinatura
+  dadosCartao?: {
+    nomeTitular: string
+    numeroMascarado: string
+    validade: string
+  }
+}
 
 interface SubscriptionContextType {
   plano: PlanoAssinatura | null
@@ -13,7 +23,7 @@ interface SubscriptionContextType {
   recarregarPlano: () => Promise<void>
   simularFimDeTeste: () => Promise<void>
   restaurarTesteDemo: (dias?: number) => Promise<void>
-  assinarPlanoSimulado: () => Promise<PlanoAssinatura>
+  assinarPlanoSimulado: (params?: AssinarPlanoParams) => Promise<PlanoAssinatura>
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined)
@@ -92,13 +102,22 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }
 
-  const assinarPlanoSimulado = async () => {
+  const assinarPlanoSimulado = async (params?: AssinarPlanoParams) => {
     if (!user?.id) throw new Error('Usuário não autenticado')
     setLoading(true)
     try {
-      const p = await planosService.assinarPlano(user.id, 'starter')
-      setPlano(p)
-      return p
+      const forma = params?.formaPagamento || 'pix'
+      // Processa através do gateway de pagamentos registrando a venda na coleção pagamentos
+      await gatewayPagamentoService.processarAssinatura({
+        userId: user.id,
+        formaPagamento: forma,
+        dadosCartao: params?.dadosCartao,
+      })
+
+      // Atualiza o estado do plano local
+      const planoAtualizado = await planosService.obterPlanoUsuario(user.id)
+      setPlano(planoAtualizado)
+      return planoAtualizado!
     } finally {
       setLoading(false)
     }

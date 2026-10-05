@@ -13,7 +13,10 @@ import {
   Mail,
   Send,
   Sparkles,
+  TrendingUp,
+  ArrowRight,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -26,6 +29,7 @@ import { useToast } from '@/hooks/use-toast'
 import { PLANO_CONFIG } from '@/config/plans'
 
 export default function Admin() {
+  const navigate = useNavigate()
   const { toast } = useToast()
   const [metricas, setMetricas] = useState<AdminMetricas | null>(null)
   const [assinantes, setAssinantes] = useState<UsuarioAssinanteAdmin[]>([])
@@ -38,6 +42,7 @@ export default function Admin() {
   // Estado para disparo de e-mail de teste do Resumo Semanal
   const { user } = useAuth()
   const isMountedRef = useRef(true)
+  const isDono = user?.email?.toLowerCase().trim() === 'jaocarloss@gmail.com'
   const [emailTeste, setEmailTeste] = useState<string>(user?.email || 'jaocarloss@gmail.com')
   const [enviandoTeste, setEnviandoTeste] = useState<boolean>(false)
 
@@ -158,7 +163,7 @@ export default function Admin() {
       {/* CABEÇALHO DO PAINEL ADMIN */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="p-2 rounded-lg bg-blue-600/10 text-blue-600">
               <ShieldCheck className="w-5 h-5" />
             </span>
@@ -168,6 +173,11 @@ export default function Admin() {
             <Badge variant="outline" className="border-blue-300 bg-blue-50 text-blue-700 text-xs">
               Acesso Restrito
             </Badge>
+            {isDono && (
+              <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-xs font-bold">
+                👑 Dono da Plataforma
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-slate-500 mt-1">
             Visão consolidada de usuários cadastrados, períodos de teste grátis e assinaturas
@@ -175,16 +185,58 @@ export default function Admin() {
           </p>
         </div>
 
-        <Button
-          onClick={carregarDados}
-          disabled={loading}
-          variant="outline"
-          className="border-slate-300 hover:bg-slate-100 self-start sm:self-auto gap-2"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar Dados
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* BOTÃO EXCLUSIVO DO DONO: PAINEL DE VENDAS */}
+          {isDono && (
+            <Button
+              type="button"
+              onClick={() => navigate('/admin/vendas')}
+              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs sm:text-sm h-9 px-3.5 shadow-sm gap-1.5"
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span>Controle de Vendas</span>
+              <ArrowRight className="w-3.5 h-3.5 ml-1" />
+            </Button>
+          )}
+
+          <Button
+            onClick={carregarDados}
+            disabled={loading}
+            variant="outline"
+            className="border-slate-300 hover:bg-slate-100 self-start sm:self-auto gap-2 h-9"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar Dados
+          </Button>
+        </div>
       </div>
+
+      {/* BANNER DE DESTAQUE PARA O DONO SE ESTIVER NA TELA ADMIN */}
+      {isDono && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200/90 text-slate-800 text-xs sm:text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-emerald-600 text-white shrink-0 mt-0.5 sm:mt-0 shadow-xs">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-slate-900 text-sm">
+                Área Exclusiva: Controle Financeiro & Histórico de Vendas
+              </span>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Você tem acesso exclusivo ao registro completo de vendas (PIX, Cartão, Boleto),
+                métricas de receita acumulada e ações manuais de cancelamento/reativação.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => navigate('/admin/vendas')}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs whitespace-nowrap self-stretch sm:self-auto shadow-xs"
+          >
+            Acessar Controle de Vendas
+          </Button>
+        </div>
+      )}
 
       {/* CARD DE TESTE DO RESUMO DA SEMANA */}
       <Card className="border-blue-200 bg-gradient-to-br from-blue-50/70 via-indigo-50/30 to-white shadow-sm overflow-hidden">

@@ -71,6 +71,40 @@ export interface AdminMetricas {
   receitaMensalEstimada: number
 }
 
+export type FormaPagamentoAssinatura = 'pix' | 'cartao' | 'boleto'
+export type PagamentoStatus = 'pago' | 'pendente' | 'cancelado'
+
+export interface PagamentoRegistro {
+  id: string
+  user_id: string
+  valor: number
+  forma_pagamento: FormaPagamentoAssinatura
+  status: PagamentoStatus
+  data_compra: string
+  data_vencimento: string
+  referencia_transacao: string
+  plano_nome?: string
+  metadados?: Record<string, unknown>
+  created: string
+  updated: string
+  expand?: {
+    user_id?: {
+      id: string
+      name?: string
+      email?: string
+      admin?: boolean
+    }
+  }
+}
+
+export interface VendasMetricas {
+  totalVendido: number // quantidade de assinaturas vendidas
+  ativosAgora: number // assinantes ativos
+  canceladosOuExpirados: number // cancelados ou expirados
+  receitaMensalAtual: number // ativos * 49.90
+  receitaTotalAcumulada: number // soma dos pagamentos com status 'pago'
+}
+
 export type AudioContexto = 'orcamento' | 'cliente' | 'comando_status' | 'desfazer' | 'geral'
 
 export interface ComandoStatusExtraido {

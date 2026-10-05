@@ -39,7 +39,8 @@ export default function Layout() {
   const isRotaLiberada =
     location.pathname === '/planos' ||
     location.pathname === '/configuracoes' ||
-    location.pathname === '/admin'
+    location.pathname === '/admin' ||
+    location.pathname === '/admin/vendas'
   const deveExibirPaywall = isBloqueado && !isRotaLiberada
 
   // Mapeamento dinâmico de títulos por rota
@@ -47,6 +48,7 @@ export default function Layout() {
     const path = location.pathname
     if (path === '/dashboard') return 'Dashboard'
     if (path === '/admin') return 'Painel do Administrador'
+    if (path === '/admin/vendas') return 'Controle de Vendas (Dono)'
     if (path === '/orcamentos') return 'Orçamentos'
     if (path === '/orcamentos/novo') return 'Novo Orçamento com IA'
     if (path.startsWith('/orcamentos/') && path.endsWith('/editar')) return 'Editar Orçamento'
@@ -82,9 +84,20 @@ export default function Layout() {
     { label: 'Configurações', path: '/configuracoes', icon: Settings },
   ]
 
-  const navItems: NavItem[] = user?.admin
-    ? [...baseNavItems, { label: 'Admin', path: '/admin', icon: Shield, isAdmin: true }]
-    : baseNavItems
+  const isDono = user?.email?.toLowerCase().trim() === 'jaocarloss@gmail.com'
+
+  let navItems: NavItem[] = [...baseNavItems]
+  if (user?.admin) {
+    navItems.push({ label: 'Admin', path: '/admin', icon: Shield, isAdmin: true })
+  }
+  if (isDono) {
+    navItems.push({
+      label: 'Vendas (Dono)',
+      path: '/admin/vendas',
+      icon: DollarSign,
+      isAdmin: true,
+    })
+  }
 
   const handleLogout = () => {
     logout()
@@ -547,6 +560,27 @@ export default function Layout() {
                     </div>
                     <span className="text-xs font-semibold">Admin</span>
                     <span className="text-[10px] text-slate-500">Gestão</span>
+                  </button>
+                )}
+
+                {isDono && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMoreOpen(false)
+                      navigate('/admin/vendas')
+                    }}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                      location.pathname === '/admin/vendas'
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1">
+                      <DollarSign className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs font-semibold">Vendas</span>
+                    <span className="text-[10px] text-slate-500">Dono</span>
                   </button>
                 )}
               </div>

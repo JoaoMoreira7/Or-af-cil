@@ -157,15 +157,30 @@ export default function Planos() {
     try {
       // Simula tempo de processamento
       await new Promise((resolve) => setTimeout(resolve, 1200))
-      await assinarPlanoSimulado()
+
+      const cardDigits = cardNumero.replace(/\D/g, '')
+      const numeroMascarado =
+        cardDigits.length >= 4 ? `**** **** **** ${cardDigits.slice(-4)}` : '**** **** **** 0000'
+
+      await assinarPlanoSimulado({
+        formaPagamento: metodo,
+        dadosCartao:
+          metodo === 'cartao'
+            ? {
+                nomeTitular: cardNome.trim(),
+                numeroMascarado,
+                validade: cardValidade,
+              }
+            : undefined,
+      })
 
       setModalOpen(false)
       const labelMetodo =
         metodo === 'pix' ? 'via PIX' : metodo === 'cartao' ? 'no Cartão de Crédito' : 'via Boleto'
 
       toast({
-        title: 'Pagamento simulado aprovado com sucesso!',
-        description: `Seu plano ${PLANO_CONFIG.nome} (${PLANO_CONFIG.precoMensalExtenso}) foi ativado ${labelMetodo}. Acesso 100% liberado por +30 dias!`,
+        title: 'Pagamento simulado aprovado e registrado!',
+        description: `Seu plano ${PLANO_CONFIG.nome} (${PLANO_CONFIG.precoMensalExtenso}) foi ativado ${labelMetodo}. Venda registrada e acesso 100% liberado por +30 dias!`,
       })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha ao processar simulação de pagamento'

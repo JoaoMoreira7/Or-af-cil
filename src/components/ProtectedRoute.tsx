@@ -73,3 +73,32 @@ export const AdminRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   return <>{children}</>
 }
+
+/**
+ * Rota restrita EXCLUSIVAMENTE ao dono do app (jaocarloss@gmail.com).
+ * Nem mesmo administradores genéricos têm acesso.
+ */
+export const OwnerOnlyRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const { user, isAuthenticated, isLoading } = useAuth()
+  const location = useLocation()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  const isDono = user?.email?.toLowerCase().trim() === 'jaocarloss@gmail.com'
+
+  if (!isDono) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return <>{children}</>
+}
