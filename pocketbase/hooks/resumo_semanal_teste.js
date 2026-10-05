@@ -495,7 +495,7 @@ routerAdd(
                 OrçaFácil — Plataforma de Gestão Inteligente com IA
               </p>
               <p style="margin: 0; font-size: 11px; color: #94a3b8;">
-                Disparo de teste administrativo. O envio real do cron acontece toda segunda-feira às 09:00 BRT.
+                Disparo de teste administrativo do OrçaFácil. O envio real do cron acontece toda segunda-feira às 09:00 BRT.
               </p>
             </div>
 

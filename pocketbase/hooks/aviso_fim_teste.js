@@ -109,7 +109,7 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
             
             <p style="font-size: 12px; color: #64748b; text-align: center; margin: 0;">
               OrçaFácil — Orçamentos Profissionais e Gestão com IA para Prestadores de Serviço.<br />
-              Mensagem automática enviada pelo sistema.
+              Mensagem automática enviada pela plataforma OrçaFácil.
             </p>
           </div>
         `

@@ -529,9 +529,8 @@ routerAdd(
                 OrçaFácil — Plataforma de Gestão Inteligente com IA
               </p>
               <p style="margin: 0; font-size: 11px; color: #94a3b8;">
-                Este e-mail semanal é enviado automaticamente para usuários ativos às segundas-feiras.
-              </p>
-            </div>
+                Este e-mail semanal é enviado automaticamente pelo OrçaFácil para usuários ativos às segundas-feiras.
+              </p>            </div>
 
           </div>
         </body>
