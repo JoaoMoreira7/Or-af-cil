@@ -1,5 +1,5 @@
 /**
- * DADOS LEGAIS DA EMPRESA — JM SISTEMAS
+ * DADOS LEGAIS DA EMPRESA — ORÇAFÁCIL
  *
  * ATENÇÃO: Os dados abaixo são PLACEHOLDERS claramente identificados para testes
  * e demonstração do sistema. Edite este arquivo único antes de publicar ou colocar
@@ -23,13 +23,13 @@ export interface CompanyLegalData {
 
 export const COMPANY_LEGAL: CompanyLegalData = {
   razaoSocial: '[RAZÃO SOCIAL EXEMPLO LTDA - PLACEHOLDER]',
-  nomeFantasia: 'JM Sistemas',
+  nomeFantasia: 'OrçaFácil',
   cnpj: '00.000.000/0001-00 [CNPJ PLACEHOLDER]',
   endereco:
     'Avenida Exemplo de Negócios, nº 1000, Bloco B, Sala 500 — Bairro Comercial, São Paulo - SP, CEP 00000-000 [ENDEREÇO PLACEHOLDER]',
   comarca: 'Comarca da Capital do Estado de São Paulo [COMARCA PLACEHOLDER]',
-  emailContato: 'contato@jmsistemas-exemplo.com.br',
-  emailSuporte: 'suporte@jmsistemas-exemplo.com.br',
-  emailJuridico: 'juridico@jmsistemas-exemplo.com.br',
+  emailContato: 'contato@orcafacil-exemplo.com.br',
+  emailSuporte: 'suporte@orcafacil-exemplo.com.br',
+  emailJuridico: 'juridico@orcafacil-exemplo.com.br',
   responsavelLegal: '[NOME DO REPRESENTANTE LEGAL - PLACEHOLDER]',
 }

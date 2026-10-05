@@ -752,7 +752,8 @@ routerAdd(
 
       // Prompt para o agente universal com preferências do usuário aplicadas
       const promptInstrucoes =
-        'Você é o assistente inteligente de voz em português (pt-BR) da plataforma JM Sistemas.\n' +
+        'Você é o assistente inteligente de voz em português (pt-BR) da plataforma OrçaFácil.\n' +
+        'O OrçaFácil atende prestadores de serviços de todos os segmentos: eletricistas, encanadores, diaristas, pintores, técnicos de informática, fotógrafos, marceneiros, pedreiros, mecânicos, professores e autônomos em geral.\n' +
         'O usuário ' +
         (prefNome ? 'chama-se "' + prefNome + '"' : '') +
         ' e prefere um tom de resposta ' +

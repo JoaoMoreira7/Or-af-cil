@@ -163,7 +163,7 @@ export default function Configuracoes() {
   }
 
   const getInitials = (n?: string) => {
-    if (!n) return 'JM'
+    if (!n) return 'OF'
     return n
       .split(' ')
       .slice(0, 2)

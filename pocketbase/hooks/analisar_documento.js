@@ -79,8 +79,8 @@ routerAdd(
             {
               role: 'system',
               content:
-                'Você é a persona "Assistente de Campo" (estilo Luna / Meu Assessor) da plataforma JM Sistemas.\n' +
-                'Você analisa fotos de notas fiscais, cupons fiscais, recibos, orçamentos em papel ou listas de materiais.\n' +
+                'Você é a persona "Assistente de Campo" (estilo Luna / Meu Assessor) da plataforma OrçaFácil.\n' +
+                'Você analisa fotos de notas fiscais, cupons fiscais, recibos, orçamentos em papel ou listas de materiais de prestadores de serviços de diversos segmentos.\n' +
                 'Extraia com rigor e precisão em formato JSON:\n' +
                 '{\n' +
                 '  "tipo_documento": "nota_fiscal" | "recibo" | "orcamento_papel" | "lista_materiais" | "comprovante" | "outro",\n' +
@@ -142,7 +142,7 @@ routerAdd(
       if (textoParaAnalisar && !leituraAutomaticaPorVisao) {
         try {
           const promptTexto =
-            'Você é a persona "Assistente de Campo" da plataforma JM Sistemas. O usuário enviou um documento/foto com o seguinte texto/conteúdo:\n\n' +
+            'Você é a persona "Assistente de Campo" da plataforma OrçaFácil. O usuário enviou um documento/foto com o seguinte texto/conteúdo:\n\n' +
             textoParaAnalisar +
             '\n\n' +
             'Analise as informações do documento comercial e estruture os dados em formato JSON estrito:\n' +

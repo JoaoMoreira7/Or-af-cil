@@ -58,7 +58,7 @@ export default function Layout() {
     if (path === '/assistente-campo') return 'Assistente de Campo (Fotos & Notas)'
     if (path === '/planos') return 'Planos e Assinatura'
     if (path === '/configuracoes') return 'Configurações da Conta'
-    return 'JM Sistemas'
+    return 'OrçaFácil'
   }
 
   type NavItem = {
@@ -92,7 +92,7 @@ export default function Layout() {
   }
 
   const getInitials = (name?: string) => {
-    if (!name) return 'JM'
+    if (!name) return 'OF'
     return name
       .split(' ')
       .slice(0, 2)
@@ -111,11 +111,11 @@ export default function Layout() {
             onClick={() => navigate('/dashboard')}
           >
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 flex items-center justify-center text-white font-extrabold text-lg shadow-md shrink-0">
-              JM
+              OF
             </div>
             <div className="hidden lg:flex flex-col">
               <span className="font-bold text-white text-base tracking-tight leading-none">
-                JM Sistemas
+                OrçaFácil
               </span>
               <span className="text-[11px] text-slate-400 font-medium tracking-wide uppercase mt-1 flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-violet-400" /> Gestão & IA
@@ -210,9 +210,9 @@ export default function Layout() {
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-blue-600 to-violet-600 flex items-center justify-center text-white font-bold text-base">
-                  JM
+                  OF
                 </div>
-                <span className="font-bold text-white text-base">JM Sistemas</span>
+                <span className="font-bold text-white text-base">OrçaFácil</span>
               </div>
               <button
                 onClick={() => setMobileMenuOpen(false)}

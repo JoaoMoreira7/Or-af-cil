@@ -36,7 +36,7 @@ export const TrialExpiredPaywall: React.FC = () => {
           <div className="flex items-center justify-between pb-3 border-b border-slate-200/60">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
-                Plano JM Sistemas
+                Plano OrçaFácil
               </span>
               <h3 className="text-lg font-bold text-slate-900">Acesso Total & Ilimitado</h3>
             </div>

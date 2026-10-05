@@ -68,12 +68,12 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
           `[cron:aviso_fim_teste] Enviando aviso para ${emailDestinatario} (expira em ${Math.round(diffHoras / 24)} dias)...`,
         )
 
-        const assunto = 'Seu teste grátis do JM Sistemas termina em 2 dias'
+        const assunto = 'Seu teste grátis do OrçaFácil termina em 2 dias'
         const corpoHtml = `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; line-height: 1.6;">
             <div style="text-align: center; margin-bottom: 24px;">
               <div style="display: inline-block; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; font-weight: bold; font-size: 20px; padding: 12px 20px; border-radius: 12px;">
-                JM Sistemas
+                OrçaFácil
               </div>
             </div>
             
@@ -82,7 +82,7 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
             </h2>
             
             <p style="font-size: 15px; margin-bottom: 16px;">
-              Esperamos que você esteja aproveitando a praticidade de gerenciar seus orçamentos e clientes no <strong>JM Sistemas</strong> com o apoio da nossa Inteligência Artificial.
+              Esperamos que você esteja aproveitando a praticidade de gerar orçamentos ágeis e gerenciar clientes no <strong>OrçaFácil</strong> com o apoio da nossa Inteligência Artificial.
             </p>
             
             <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 6px; margin-bottom: 20px;">
@@ -108,7 +108,7 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
             <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
             
             <p style="font-size: 12px; color: #64748b; text-align: center; margin: 0;">
-              JM Sistemas — Gestão Inteligente de Orçamentos e Serviços.<br />
+              OrçaFácil — Orçamentos Profissionais e Gestão com IA para Prestadores de Serviço.<br />
               Mensagem automática enviada pelo sistema.
             </p>
           </div>
@@ -118,8 +118,8 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
         try {
           const emailMessage = new MailerMessage({
             from: {
-              address: $app.settings().meta.senderAddress || 'suporte@jmsistemas.com.br',
-              name: 'JM Sistemas',
+              address: $app.settings().meta.senderAddress || 'suporte@orcafacil.com.br',
+              name: 'OrçaFácil',
             },
             to: [{ address: emailDestinatario, name: nomeDestinatario }],
             subject: assunto,

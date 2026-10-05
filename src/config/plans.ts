@@ -1,5 +1,5 @@
 /**
- * CONFIGURAÇÃO DO PLANO ÚNICO — JM SISTEMAS
+ * CONFIGURAÇÃO DO PLANO ÚNICO — ORÇAFÁCIL
  *
  * Centraliza os dados de precificação e nomenclatura do plano único da plataforma
  * para garantir consistência em telas, cobranças, notificações e relatórios administrativos.

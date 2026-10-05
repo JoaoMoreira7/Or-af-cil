@@ -787,7 +787,7 @@ export default function AssistenteDeCampo() {
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Tire foto de notas fiscais, recibos, orçamentos em papel ou listas de materiais. A IA
-            extrai os dados para criar orçamentos ou registrar custos de obra.
+            extrai os dados para criar orçamentos ou registrar custos e compras de materiais.
           </p>
         </div>
 
@@ -1356,7 +1356,7 @@ export default function AssistenteDeCampo() {
                   setClienteNovoNome(e.target.value)
                   if (e.target.value) setSelectedClienteId('')
                 }}
-                placeholder="Ex: João da Obra Jardim América"
+                placeholder="Ex: João Silva - Atendimento Residencial"
                 className="mt-1 h-9 text-xs"
               />
             </div>

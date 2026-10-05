@@ -65,7 +65,7 @@ export default function Planos() {
 
   // Códigos fictícios
   const fakePixCode =
-    '00020126580014br.gov.bcb.pix0136jmsistemas-simulacao-homologacao-2026520400005303986540549.905802BR5920JM SISTEMAS SAAS LTDA6009SAO PAULO62140510JMSIST49906304F2B8'
+    '00020126580014br.gov.bcb.pix0136orcafacil-simulacao-homologacao-2026520400005303986540549.905802BR5920ORCAFACIL SAAS LTDA6009SAO PAULO62140510ORCFAC49906304F2B8'
 
   const fakeBoletoLinha = '34191.79001 01043.510047 91020.150008 5 94520000004990'
 
@@ -518,7 +518,7 @@ export default function Planos() {
                 </div>
 
                 <span className="text-[11px] text-slate-500 mt-2 font-mono">
-                  Valor: <strong>{PLANO_CONFIG.precoFormatado}</strong> • Beneficiário: JM Sistemas
+                  Valor: <strong>{PLANO_CONFIG.precoFormatado}</strong> • Beneficiário: OrçaFácil
                   Ltda
                 </span>
               </div>

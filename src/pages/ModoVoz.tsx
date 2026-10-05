@@ -1220,8 +1220,8 @@ export default function ModoVoz() {
         </span>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60">
-            <strong>Orçamento:</strong> &ldquo;Faz um orçamento pro João Carlos de cabeamento de
-            rede por 450 reais&rdquo;
+            <strong>Orçamento (vários segmentos):</strong> &ldquo;Orçamento pro Carlos de pintura e
+            elétrica por 650 reais&rdquo; ou &ldquo;Ensaio fotográfico por 800 pro João&rdquo;
           </div>
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60">
             <strong>Cobrança PIX:</strong> &ldquo;Gera a cobrança do orçamento 3&rdquo;

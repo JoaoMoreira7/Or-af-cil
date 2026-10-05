@@ -20,7 +20,7 @@ export function gerarCodigoPixSimulado(params: {
 }): string {
   const numLimpo = params.orcamentoNumero.replace(/\D/g, '') || '001'
   const valCentavos = Math.round(params.valor * 100)
-  return `00020126580014br.gov.bcb.pix0136jmsistemas-simulacao-cobranca-orc${numLimpo}520400005303986540${params.valor.toFixed(2)}5802BR5920JM SISTEMAS SAAS LTDA6009SAO PAULO62140510ORC${numLimpo}${valCentavos}6304E8A2`
+  return `00020126580014br.gov.bcb.pix0136orcafacil-simulacao-cobranca-orc${numLimpo}520400005303986540${params.valor.toFixed(2)}5802BR5920ORCAFACIL SAAS LTDA6009SAO PAULO62140510ORC${numLimpo}${valCentavos}6304E8A2`
 }
 
 export const cobrancasService = {

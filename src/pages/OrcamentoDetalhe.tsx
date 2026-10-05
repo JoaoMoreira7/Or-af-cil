@@ -392,7 +392,7 @@ export default function OrcamentoDetalhe() {
           <div>
             <div className="flex items-center gap-2.5 mb-2">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-violet-600 flex items-center justify-center text-white font-black text-lg">
-                JM
+                OF
               </div>
               <div>
                 <h1 className="text-xl font-bold text-slate-900 tracking-tight">

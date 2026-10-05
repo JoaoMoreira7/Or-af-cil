@@ -452,7 +452,7 @@ export default function OrcamentoForm() {
             processVoiceOrTextWithAI(transcript)
           }}
           isProcessing={aiLoading}
-          placeholder="Ex: 'Grava um orçamento pro João Carlos de instalação de 3 ar condiciado a 350 reais cada...'"
+          placeholder="Ex: 'Instalação elétrica da sala 450 reais pro Carlos' ou 'Fotografia de evento 800 reais' ou 'Formatação de notebook 150 pro Pedro'..."
         />
       </div>
 
@@ -793,7 +793,7 @@ export default function OrcamentoForm() {
                 rows={3}
                 value={descricao}
                 onChange={(e) => setDescricao(e.target.value)}
-                placeholder="Ex: Instalação de infraestrutura de rede e configuração de servidores corporativos..."
+                placeholder="Ex: Pintura externa residencial, instalação elétrica, fotografia de casamento, marcenaria sob medida..."
                 className="text-sm"
               />
             </div>
@@ -1006,7 +1006,7 @@ export default function OrcamentoForm() {
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
                 rows={4}
-                placeholder="Se preferir digitar, descreva aqui (ex: 'Fazer manutenção em 3 servidores pro Carlos por 900 reais')"
+                placeholder="Se preferir digitar, descreva aqui (ex: 'Instalação de 2 luminárias e troca de disjuntor pro Carlos por 280 reais')"
                 className="text-xs bg-white resize-none"
               />
             </div>

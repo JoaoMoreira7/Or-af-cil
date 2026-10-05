@@ -76,9 +76,9 @@ export default function Login() {
       <div className="w-full max-w-6xl mx-auto flex items-center justify-between py-2">
         <Link to="/" className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-500 to-violet-600 flex items-center justify-center text-white font-extrabold text-base shadow-lg">
-            JM
+            OF
           </div>
-          <span className="font-bold text-lg text-white tracking-tight">JM Sistemas</span>
+          <span className="font-bold text-lg text-white tracking-tight">OrçaFácil</span>
         </Link>
         <Link
           to="/signup"
@@ -93,11 +93,11 @@ export default function Login() {
         <div className="bg-white text-slate-900 rounded-2xl shadow-2xl p-6 sm:p-8 border border-slate-100">
           <div className="text-center mb-6">
             <div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-tr from-blue-600 to-violet-600 flex items-center justify-center text-white font-bold text-xl shadow-md mb-3">
-              JM
+              OF
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Acesse sua conta</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Acesse o OrçaFácil</h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Gerencie orçamentos e clientes com agilidade e IA
+              Orçamentos profissionais e gestão para prestadores de serviços de todos os segmentos
             </p>
           </div>
 
@@ -196,7 +196,7 @@ export default function Login() {
 
       {/* FOOTER */}
       <footer className="w-full max-w-6xl mx-auto py-3 text-center text-xs text-slate-400 flex flex-wrap items-center justify-center gap-4">
-        <span>© {new Date().getFullYear()} JM Sistemas. Todos os direitos reservados.</span>
+        <span>© {new Date().getFullYear()} OrçaFácil. Todos os direitos reservados.</span>
         <span className="text-slate-600">•</span>
         <Link to="/termos-de-uso" className="hover:text-slate-200 underline">
           Termos de Uso
