@@ -79,7 +79,7 @@ routerAdd(
             {
               role: 'system',
               content:
-                'Você é a persona "Assistente de Campo" (estilo Luna / Meu Assessor) da plataforma OrçaFácil.\n' +
+                'Você é a persona "Assistente de Campo" da plataforma OrçaFácil.\n' +
                 'Você analisa fotos de notas fiscais, cupons fiscais, recibos, orçamentos em papel ou listas de materiais de prestadores de serviços de diversos segmentos.\n' +
                 'Extraia com rigor e precisão em formato JSON:\n' +
                 '{\n' +

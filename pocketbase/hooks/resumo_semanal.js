@@ -242,7 +242,7 @@ routerAdd(
           (novosClientesSemana > 0 ? novosClientesSemana + ' novos clientes. ' : '') +
           'Boa semana.'
       } else {
-        // amigável padrão estilo "podcast de 1 minuto" do Meu Assessor
+        // amigável padrão de podcast de 1 minuto
         fallbackTexto =
           emojiIcon +
           'Olá, ' +
@@ -276,7 +276,7 @@ routerAdd(
       let textoGerado = fallbackTexto
       try {
         const promptSistema =
-          'Você é o assistente virtual executivo da plataforma OrçaFácil (estilo o app Meu Assessor).\n' +
+          'Você é o assistente virtual executivo da plataforma OrçaFácil.\n' +
           'Sua missão é produzir um "podcast de 1 minuto" em texto corrido em português do Brasil (pt-BR) ' +
           'para ser LIDO EM VOZ ALTA por um sintetizador de voz (Web Speech API).\n\n' +
           'REGRAS DO TEXTO:\n' +

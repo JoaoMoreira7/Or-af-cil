@@ -339,7 +339,7 @@ export const ResumoSemanalCard: React.FC<ResumoSemanalCardProps> = ({
       <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-violet-600/15 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative z-10 p-5 sm:p-7 space-y-5">
-        {/* CABEÇALHO COM TÍTULO ESTILO PODCAST MEU ASSESSOR */}
+        {/* CABEÇALHO COM TÍTULO DO PODCAST SEMANAL */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
@@ -351,7 +351,7 @@ export const ResumoSemanalCard: React.FC<ResumoSemanalCardProps> = ({
                   Podcast Semanal IA · 1 Minuto
                 </span>
                 <Badge className="bg-indigo-500/20 text-indigo-200 border-indigo-400/30 text-[10px] font-semibold px-2 py-0.5">
-                  Estilo Meu Assessor
+                  Resumo Executivo em Áudio
                 </Badge>
               </div>
               <h3 className="text-lg sm:text-xl font-extrabold text-white flex items-center gap-2">

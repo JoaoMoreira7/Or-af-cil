@@ -115,7 +115,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* MELHORIA NOVO: RESUMO PROATIVO SEMANAL EM ÁUDIO (PODCAST DE 1 MINUTO - ESTILO MEU ASSESSOR) */}
+      {/* RESUMO PROATIVO SEMANAL EM ÁUDIO (PODCAST DE 1 MINUTO) */}
       {!loading && (
         <ResumoSemanalCard
           userName={user?.name || 'Gestor(a)'}
