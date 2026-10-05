@@ -338,6 +338,9 @@ export default function Planos() {
           </div>
 
           <div className="text-center pt-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-1">
+              Feito para quem vive de serviço
+            </p>
             <h4 className="text-2xl font-bold text-slate-900">Plano {PLANO_CONFIG.nome}</h4>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
               Tudo o que você precisa para emitir propostas impecáveis e fechar negócios.

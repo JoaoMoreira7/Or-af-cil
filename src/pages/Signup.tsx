@@ -78,14 +78,17 @@ export default function Signup() {
       <div className="w-full max-w-[440px] mx-auto my-auto py-6">
         <div className="bg-white text-slate-900 rounded-2xl shadow-2xl p-6 sm:p-8 border border-slate-100">
           <div className="text-center mb-6">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-tr from-blue-600 to-violet-600 flex items-center justify-center text-white font-bold text-xl shadow-md mb-3">
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-tr from-blue-600 to-violet-600 flex items-center justify-center text-white font-bold text-xl shadow-md mb-2">
               OF
             </div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-1">
+              Feito para quem vive de serviço
+            </p>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
               Crie sua conta no OrçaFácil
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Para eletricistas, encanadores, técnicos de TI, fotógrafos, marceneiros e todos os
+              Para eletricistas, fotógrafos, marceneiros, diaristas, técnicos e todos os
               profissionais autônomos
             </p>
           </div>

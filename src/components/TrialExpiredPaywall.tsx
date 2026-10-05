@@ -17,17 +17,23 @@ export const TrialExpiredPaywall: React.FC = () => {
           <Lock className="w-8 h-8" />
         </div>
 
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200 mb-3">
-          Período de teste encerrado
-        </span>
+        <div className="flex flex-col items-center gap-1.5 mb-3">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
+            Período de teste encerrado
+          </span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-blue-600">
+            Feito para quem vive de serviço
+          </span>
+        </div>
 
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
           Seu teste grátis de 7 dias chegou ao fim
         </h2>
 
         <p className="text-sm text-slate-600 mt-3 leading-relaxed">
-          Para continuar criando orçamentos profissionais, cadastrando clientes e aproveitando a
-          nossa Inteligência Artificial, contrate o plano completo por apenas{' '}
+          O OrçaFácil é feito para quem vive de serviço. Para continuar criando orçamentos
+          profissionais, cadastrando clientes e aproveitando a nossa Inteligência Artificial,
+          contrate o plano completo por apenas{' '}
           <strong className="text-slate-900 font-bold">{PLANO_CONFIG.precoMensalExtenso}</strong>.
         </p>
 
@@ -36,7 +42,7 @@ export const TrialExpiredPaywall: React.FC = () => {
           <div className="flex items-center justify-between pb-3 border-b border-slate-200/60">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
-                Plano OrçaFácil
+                Plano OrçaFácil • Feito para quem vive de serviço
               </span>
               <h3 className="text-lg font-bold text-slate-900">Acesso Total & Ilimitado</h3>
             </div>
