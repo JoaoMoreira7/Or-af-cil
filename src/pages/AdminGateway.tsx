@@ -331,8 +331,13 @@ export default function AdminGateway() {
     return false
   }
 
+  const URL_WEBHOOK_PADRAO = import.meta.env.VITE_POCKETBASE_URL
+    ? `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/asaas/webhook`
+    : 'https://finalizacao-do-sistema-913b5.shrd00.internal.goskip.dev/backend/v1/asaas/webhook'
+  const urlWebhookExibicao = status?.webhook?.url || URL_WEBHOOK_PADRAO
+
   const handleCopiarUrlWebhook = async () => {
-    const url = status?.webhook.url || ''
+    const url = urlWebhookExibicao
     if (!url) return
 
     const sucesso = await copiarTextoRobusto(url)
@@ -411,7 +416,10 @@ export default function AdminGateway() {
             <span className="p-2 rounded-xl bg-gradient-to-tr from-slate-900 via-indigo-900 to-emerald-700 text-white shadow-sm">
               <CreditCard className="w-5 h-5" />
             </span>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+            <h2
+              translate="no"
+              className="notranslate text-2xl font-bold tracking-tight text-slate-900"
+            >
               Gateway de Pagamento (Asaas)
             </h2>
             <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-xs font-bold">
@@ -754,7 +762,7 @@ export default function AdminGateway() {
             <div className="flex gap-2">
               <Input
                 readOnly
-                value={status?.webhook.url || ''}
+                value={urlWebhookExibicao}
                 onClick={(e) => (e.target as HTMLInputElement).select()}
                 onFocus={(e) => (e.target as HTMLInputElement).select()}
                 className="font-mono text-xs bg-slate-50 text-slate-800 select-all cursor-text focus:ring-2 focus:ring-indigo-500 focus:bg-white"
@@ -800,12 +808,30 @@ export default function AdminGateway() {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="font-mono font-bold text-slate-800 bg-white px-2.5 py-1 rounded-md border border-slate-200">
-                {status?.webhook.token_mascarado || 'Sem token'}
-              </span>
-              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]">
-                Ativo
-              </Badge>
+              {status?.webhook?.token_configurado ? (
+                <>
+                  <span
+                    translate="no"
+                    className="notranslate font-mono font-bold text-slate-800 bg-white px-2.5 py-1 rounded-md border border-slate-200"
+                  >
+                    {status.webhook.token_mascarado}
+                  </span>
+                  <Badge
+                    translate="no"
+                    className="notranslate bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]"
+                  >
+                    Ativa
+                  </Badge>
+                </>
+              ) : (
+                <Badge
+                  translate="no"
+                  variant="outline"
+                  className="notranslate text-amber-700 border-amber-300 bg-amber-50 text-[10px]"
+                >
+                  Sem token
+                </Badge>
+              )}
             </div>
           </div>
 
@@ -846,11 +872,19 @@ export default function AdminGateway() {
                   key={ev.code}
                   className="p-3 rounded-xl border border-slate-200 bg-white text-xs flex flex-col justify-between"
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                  <div
+                    translate="no"
+                    className="notranslate flex items-center gap-1.5 font-bold text-slate-900"
+                  >
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>{ev.label}</span>
                   </div>
-                  <div className="font-mono text-[10px] text-blue-600 mt-1">{ev.code}</div>
+                  <div
+                    translate="no"
+                    className="notranslate font-mono text-[10px] text-blue-600 mt-1"
+                  >
+                    {ev.code}
+                  </div>
                   <p className="text-[11px] text-slate-500 mt-1">{ev.desc}</p>
                 </div>
               ))}
