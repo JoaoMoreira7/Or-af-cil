@@ -2,7 +2,7 @@
   "name": "orcafacil-web",
   "description": "OrçaFácil — Orçamentos Profissionais e Gestão com IA",
   "private": true,
-  "version": "0.0.41",
+  "version": "0.0.42",
   "type": "module",
   "scripts": {
     "start": "vite dev",
