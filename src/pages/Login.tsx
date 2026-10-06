@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2, Sparkles, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -24,6 +24,19 @@ export default function Login() {
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotLoading, setForgotLoading] = useState(false)
 
+  const isMountedRef = useRef(true)
+  const forgotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      if (forgotTimerRef.current) {
+        clearTimeout(forgotTimerRef.current)
+      }
+    }
+  }, [])
+
   const { login } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -40,17 +53,21 @@ export default function Login() {
     try {
       setLoading(true)
       await login(email, password)
+      if (!isMountedRef.current) return
       toast({
         title: 'Bem-vindo(a) de volta!',
         description: 'Login realizado com sucesso.',
       })
       navigate('/dashboard')
     } catch (err: unknown) {
+      if (!isMountedRef.current) return
       const msg =
         err instanceof Error ? err.message : 'Credenciais inválidas. Verifique seu e-mail e senha.'
       setErrorMessage(msg.includes('Failed to authenticate') ? 'E-mail ou senha incorretos.' : msg)
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
     }
   }
 
@@ -59,7 +76,9 @@ export default function Login() {
     if (!forgotEmail) return
 
     setForgotLoading(true)
-    setTimeout(() => {
+    if (forgotTimerRef.current) clearTimeout(forgotTimerRef.current)
+    forgotTimerRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return
       setForgotLoading(false)
       setForgotModalOpen(false)
       setForgotEmail('')

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   FileText,
@@ -27,36 +27,50 @@ export default function Dashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
 
+  const isMountedRef = useRef(true)
   const [orcamentos, setOrcamentos] = useState<Orçamento[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Carregar dados
-  const fetchData = async () => {
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  // Carregar dados protegido contra atualizações pós-desmonte
+  const fetchData = useCallback(async () => {
     try {
       const [listaOrcamentos, listaClientes] = await Promise.all([
         orcamentosService.listar(),
         clientesService.listar(),
       ])
+      if (!isMountedRef.current) return
       setOrcamentos(listaOrcamentos)
       setClientes(listaClientes)
     } catch (err) {
+      if (!isMountedRef.current) return
       console.error('Erro ao carregar dados do dashboard:', err)
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [fetchData])
 
-  // Realtime updates
+  // Realtime updates com checagem de montagem
   useRealtime('orcamentos', () => {
+    if (!isMountedRef.current) return
     fetchData()
   })
 
   useRealtime('clientes', () => {
+    if (!isMountedRef.current) return
     fetchData()
   })
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   User,
   Lock,
@@ -26,6 +26,15 @@ export default function Configuracoes() {
   const { user, updateUser } = useAuth()
   const { toast } = useToast()
 
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
   // Profile Form
   const [name, setName] = useState(user?.name || '')
   const [savingProfile, setSavingProfile] = useState(false)
@@ -39,16 +48,21 @@ export default function Configuracoes() {
   const [savingPrefIa, setSavingPrefIa] = useState(false)
   useEffect(() => {
     const carregarPref = async () => {
+      setLoadingPrefIa(true)
       try {
         const pref = await preferenciasIaService.obter(user?.id)
+        if (!isMountedRef.current) return
         setNomePreferidoIa(pref.nome_preferido || (user?.name || '').split(' ')[0] || '')
         setTomRespostaIa(pref.tom_resposta || 'amigavel')
         setUsarEmojisIa(pref.usar_emojis !== false)
         setContextoGastoPadrao(pref.contexto_gasto_padrao || 'empresa')
       } catch (err) {
+        if (!isMountedRef.current) return
         console.warn('Erro ao obter preferências IA:', err)
       } finally {
-        setLoadingPrefIa(false)
+        if (isMountedRef.current) {
+          setLoadingPrefIa(false)
+        }
       }
     }
     if (user?.id) carregarPref()
@@ -66,11 +80,13 @@ export default function Configuracoes() {
         usar_emojis: usarEmojisIa,
         contexto_gasto_padrao: contextoGastoPadrao,
       })
+      if (!isMountedRef.current) return
       toast({
         title: 'Preferências da IA salvas!',
         description: `O assistente agora vai te chamar de "${nomePreferidoIa.trim() || 'você'}" no tom ${tomRespostaIa}.`,
       })
     } catch (err: unknown) {
+      if (!isMountedRef.current) return
       const msg = err instanceof Error ? err.message : 'Falha ao salvar preferências'
       toast({
         variant: 'destructive',
@@ -78,7 +94,9 @@ export default function Configuracoes() {
         description: msg,
       })
     } finally {
-      setSavingPrefIa(false)
+      if (isMountedRef.current) {
+        setSavingPrefIa(false)
+      }
     }
   }
 
@@ -103,11 +121,13 @@ export default function Configuracoes() {
     setSavingProfile(true)
     try {
       await updateUser({ name: name.trim() })
+      if (!isMountedRef.current) return
       toast({
         title: 'Perfil atualizado',
         description: 'Suas informações cadastrais foram salvas com sucesso.',
       })
     } catch (err: unknown) {
+      if (!isMountedRef.current) return
       const msg = err instanceof Error ? err.message : 'Falha ao atualizar perfil'
       toast({
         variant: 'destructive',
@@ -115,7 +135,9 @@ export default function Configuracoes() {
         description: msg,
       })
     } finally {
-      setSavingProfile(false)
+      if (isMountedRef.current) {
+        setSavingProfile(false)
+      }
     }
   }
 
@@ -148,6 +170,8 @@ export default function Configuracoes() {
         passwordConfirm: confirmPassword,
       })
 
+      if (!isMountedRef.current) return
+
       setOldPassword('')
       setNewPassword('')
       setConfirmPassword('')
@@ -157,10 +181,13 @@ export default function Configuracoes() {
         description: 'Sua nova senha já está valendo para os próximos acessos.',
       })
     } catch (err: unknown) {
+      if (!isMountedRef.current) return
       const msg = err instanceof Error ? err.message : 'Falha ao alterar senha'
       setPasswordError(msg.includes('oldPassword') ? 'Senha atual incorreta.' : msg)
     } finally {
-      setSavingPassword(false)
+      if (isMountedRef.current) {
+        setSavingPassword(false)
+      }
     }
   }
 
