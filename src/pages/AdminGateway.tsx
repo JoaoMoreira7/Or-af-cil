@@ -357,7 +357,7 @@ export default function AdminGateway() {
             <p className="text-xs text-slate-300 mt-1 leading-relaxed">
               A chave de API completa <strong>nunca trafega nem fica exposta no navegador</strong>{' '}
               ou em arquivos públicos. Toda validação, assinatura e cobrança ocorre 100% no servidor
-              Skip Cloud através de hooks isolados.
+              em nuvem do OrçaFácil através de hooks isolados.
             </p>
           </div>
         </div>

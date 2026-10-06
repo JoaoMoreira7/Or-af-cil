@@ -1,6 +1,6 @@
-# Projeto Criado com o Skip
+# OrçaFácil — Orçamentos Profissionais e Gestão com IA
 
-Este projeto foi criado de ponta a ponta com o [Skip](https://goskip.dev).
+Plataforma completa de orçamentos rápidos e gestão para prestadores de serviços de todos os segmentos.
 
 ## 🚀 Stack Tecnológica
 

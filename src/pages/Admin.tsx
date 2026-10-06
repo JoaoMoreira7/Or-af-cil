@@ -254,7 +254,7 @@ export default function Admin() {
                     className="border-blue-300 bg-blue-100/60 text-blue-700 text-[10px] font-semibold"
                   >
                     <Sparkles className="w-3 h-3 mr-1 text-blue-600" />
-                    Skip AI
+                    IA OrçaFácil
                   </Badge>
                 </CardTitle>
                 <CardDescription className="text-xs text-slate-600">

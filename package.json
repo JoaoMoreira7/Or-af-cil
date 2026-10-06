@@ -1,6 +1,6 @@
 {
-  "name": "skip-react-template",
-  "description": "A frontend React Vite TypeScript Shadcn UI template for Skip projects",
+  "name": "orcafacil-web",
+  "description": "OrçaFácil — Orçamentos Profissionais e Gestão com IA",
   "private": true,
   "version": "0.0.40",
   "type": "module",
