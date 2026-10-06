@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import pb from '@/lib/pocketbase/client'
 import { RecordModel } from 'pocketbase'
+import { planosService } from '@/services/planos'
 
 export interface UserProfile {
   id: string
@@ -91,61 +92,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await pb.collection('users').authWithPassword(email.trim(), pass)
     syncAuth()
 
-    // 3. Upsert inicial com Teste Grátis de 7 dias (plano 'essencial' válido, sem duplicar)
+    // 3. Upsert inicial centralizado com Teste Grátis de 7 dias ou plano do Dono
     try {
       const emailNormalizado = (email || '').toLowerCase().trim()
       const isDono = emailNormalizado === 'jaocarloss@gmail.com'
 
-      // Consulta se já existe registro de plano para este usuário
-      const existentes = await pb.collection('planos').getList(1, 1, {
-        filter: `user_id = "${createdUser.id}"`,
-      })
-
-      if (existentes.items.length > 0) {
-        const p = existentes.items[0]
-        if (isDono) {
-          await pb.collection('planos').update(p.id, {
-            plano: 'premium',
-            status: 'ativo',
-            renovacao_em: '2099-12-31T23:59:59.000Z',
-            trial_ate: '2099-12-31T23:59:59.000Z',
-            aviso_teste_enviado: true,
-          })
-        } else if (p.status !== 'ativo') {
-          const trialDate = new Date()
-          trialDate.setDate(trialDate.getDate() + 7)
-          await pb.collection('planos').update(p.id, {
-            plano: p.plano || 'essencial',
-            status: p.status || 'trial',
-            trial_ate: p.trial_ate || trialDate.toISOString(),
-          })
-        }
+      if (isDono) {
+        await planosService.garantirPlanoUsuario(createdUser.id, {
+          plano: 'premium',
+          status: 'ativo',
+          renovacao_em: '2099-12-31T23:59:59.000Z',
+          trial_ate: '2099-12-31T23:59:59.000Z',
+          aviso_teste_enviado: true,
+        })
       } else {
         const trialDate = new Date()
         trialDate.setDate(trialDate.getDate() + 7)
-
-        const payloadCriacao = isDono
-          ? {
-              user_id: createdUser.id,
-              plano: 'premium',
-              status: 'ativo',
-              renovacao_em: '2099-12-31T23:59:59.000Z',
-              trial_ate: '2099-12-31T23:59:59.000Z',
-              aviso_teste_enviado: true,
-            }
-          : {
-              user_id: createdUser.id,
-              plano: 'essencial',
-              status: 'trial',
-              trial_ate: trialDate.toISOString(),
-              aviso_teste_enviado: false,
-            }
-
-        try {
-          await pb.collection('planos').create(payloadCriacao)
-        } catch {
-          // Se já foi criado concorrentemente, ignora sem estourar 400
-        }
+        await planosService.garantirPlanoUsuario(createdUser.id, {
+          plano: 'essencial',
+          status: 'trial',
+          trial_ate: trialDate.toISOString(),
+          aviso_teste_enviado: false,
+        })
       }
     } catch (err) {
       console.warn('[Signup] Aviso ao configurar plano inicial:', err)

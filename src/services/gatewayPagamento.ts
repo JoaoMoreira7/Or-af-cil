@@ -16,6 +16,7 @@
 
 import pb from '@/lib/pocketbase/client'
 import { PlanoId, obterConfigPlano, normalizarPlanoId } from '@/config/plans'
+import { planosService } from './planos'
 import {
   FormaPagamentoAssinatura,
   PagamentoRegistro,
@@ -258,39 +259,13 @@ export const gatewayPagamentoService = {
       )
     }
 
-    // 2. Atualiza ou cria a assinatura do usuário na coleção 'planos' com o novo plano (upsert seguro)
+    // 2. Atualiza ou cria a assinatura do usuário na coleção 'planos' com o novo plano (upsert seguro via planosService)
     try {
-      const planosExistentes = await pb.collection('planos').getList(1, 1, {
-        filter: `user_id = "${userId}"`,
+      await planosService.garantirPlanoUsuario(userId, {
+        plano: planoId,
+        status: 'ativo',
+        renovacao_em: dataVencimento.toISOString(),
       })
-
-      if (planosExistentes.items.length > 0) {
-        await pb.collection('planos').update(planosExistentes.items[0].id, {
-          plano: planoId,
-          status: 'ativo',
-          renovacao_em: dataVencimento.toISOString(),
-        })
-      } else {
-        try {
-          await pb.collection('planos').create({
-            user_id: userId,
-            plano: planoId,
-            status: 'ativo',
-            renovacao_em: dataVencimento.toISOString(),
-          })
-        } catch {
-          const rec = await pb.collection('planos').getList(1, 1, {
-            filter: `user_id = "${userId}"`,
-          })
-          if (rec.items.length > 0) {
-            await pb.collection('planos').update(rec.items[0].id, {
-              plano: planoId,
-              status: 'ativo',
-              renovacao_em: dataVencimento.toISOString(),
-            })
-          }
-        }
-      }
     } catch (err: unknown) {
       console.error('Erro ao ativar plano do usuário após pagamento:', err)
     }
@@ -466,44 +441,13 @@ export const gatewayPagamentoService = {
       filter: `user_id = "${userId}"`,
     })
 
-    if (planos.items.length > 0) {
-      const pId = planos.items[0].id
-      if (novoStatus === 'ativo') {
-        const renovacao = new Date()
-        renovacao.setDate(renovacao.getDate() + 30)
-        await pb.collection('planos').update(pId, {
-          plano: planoId,
-          status: 'ativo',
-          renovacao_em: renovacao.toISOString(),
-        })
-      } else {
-        await pb.collection('planos').update(pId, {
-          status: 'expirado',
-        })
-      }
-    } else {
-      const renovacao = new Date()
-      renovacao.setDate(renovacao.getDate() + 30)
-      try {
-        await pb.collection('planos').create({
-          user_id: userId,
-          plano: planoId,
-          status: novoStatus,
-          renovacao_em: novoStatus === 'ativo' ? renovacao.toISOString() : undefined,
-        })
-      } catch {
-        const rec = await pb.collection('planos').getList(1, 1, {
-          filter: `user_id = "${userId}"`,
-        })
-        if (rec.items.length > 0) {
-          await pb.collection('planos').update(rec.items[0].id, {
-            plano: planoId,
-            status: novoStatus,
-            renovacao_em: novoStatus === 'ativo' ? renovacao.toISOString() : undefined,
-          })
-        }
-      }
-    }
+    const renovacao = new Date()
+    renovacao.setDate(renovacao.getDate() + 30)
+    await planosService.garantirPlanoUsuario(userId, {
+      plano: planoId,
+      status: novoStatus,
+      renovacao_em: novoStatus === 'ativo' ? renovacao.toISOString() : undefined,
+    })
   },
 
   /**

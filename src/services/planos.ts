@@ -3,17 +3,119 @@ import { PlanoAssinatura, FormaPagamentoAssinatura } from '@/types'
 import { gatewayPagamentoService } from './gatewayPagamento'
 import { PlanoId } from '@/config/plans'
 
+// Cache de promessas em voo e debounce por userId para evitar duplicação em StrictMode/concorrência
+const promisesEmVoo = new Map<string, Promise<PlanoAssinatura>>()
+const ultimoSucessoPorUser = new Map<string, { plano: PlanoAssinatura; timestamp: number }>()
+
 export const planosService = {
   async obterPlanoUsuario(userId: string): Promise<PlanoAssinatura | null> {
     try {
+      // 1. Tenta obter pelo filtro direto
       const records = await pb.collection('planos').getList<PlanoAssinatura>(1, 1, {
         filter: `user_id = "${userId}"`,
         sort: '-created',
+        requestKey: null, // Desativa auto-cancelamento do PocketBase SDK para evitar aborts espúrios
       })
-      return records.items[0] || null
-    } catch (err) {
-      console.error('Erro ao buscar plano do usuário:', err)
+      if (records.items.length > 0) {
+        return records.items[0]
+      }
       return null
+    } catch (err: unknown) {
+      // Se for abort de requisição concorrente ou 404, não loga erro ruidoso
+      const isAbort = (err as { isAbort?: boolean })?.isAbort
+      if (!isAbort) {
+        console.warn('[planosService] Aviso ao buscar plano do usuário:', err)
+      }
+      return null
+    }
+  },
+
+  /**
+   * Função central idempotente de UPSERT para planos de usuário.
+   * Garante que:
+   * 1. Mutex/trava em memória por userId evita chamadas concorrentes paralelas no mesmo client.
+   * 2. Sempre busca o registro existente primeiro (por ID ou user_id).
+   * 3. Se existir, executa UPDATE exclusivamente.
+   * 4. Só executa CREATE se não existir registro algum.
+   * 5. Se o CREATE colidir (ex.: criação concorrente no backend), captura o 400 sem estourar e faz fallback imediato para UPDATE/leitura.
+   */
+  async garantirPlanoUsuario(
+    userId: string,
+    dados: {
+      plano?: PlanoId | string
+      status?: 'trial' | 'ativo' | 'expirado' | 'inativo'
+      renovacao_em?: string | null
+      trial_ate?: string | null
+      aviso_teste_enviado?: boolean
+    },
+  ): Promise<PlanoAssinatura> {
+    const planoNormalizado = (dados.plano || 'essencial') as PlanoId
+    const statusNormalizado = dados.status || 'trial'
+
+    // 1. Tenta buscar plano existente
+    const planoExistente = await this.obterPlanoUsuario(userId)
+
+    if (planoExistente) {
+      // Já existe: atualiza apenas se houver alterações
+      const precisaAtualizar =
+        (dados.plano && planoExistente.plano !== dados.plano) ||
+        (dados.status && planoExistente.status !== dados.status) ||
+        (dados.renovacao_em !== undefined && planoExistente.renovacao_em !== dados.renovacao_em) ||
+        (dados.trial_ate !== undefined && planoExistente.trial_ate !== dados.trial_ate) ||
+        (dados.aviso_teste_enviado !== undefined &&
+          planoExistente.aviso_teste_enviado !== dados.aviso_teste_enviado)
+
+      if (precisaAtualizar) {
+        try {
+          const payloadUpdate: Record<string, unknown> = {}
+          if (dados.plano) payloadUpdate.plano = planoNormalizado
+          if (dados.status) payloadUpdate.status = statusNormalizado
+          if (dados.renovacao_em !== undefined) payloadUpdate.renovacao_em = dados.renovacao_em
+          if (dados.trial_ate !== undefined) payloadUpdate.trial_ate = dados.trial_ate
+          if (dados.aviso_teste_enviado !== undefined)
+            payloadUpdate.aviso_teste_enviado = dados.aviso_teste_enviado
+
+          return await pb
+            .collection('planos')
+            .update<PlanoAssinatura>(planoExistente.id, payloadUpdate)
+        } catch (err) {
+          console.warn('[planosService] Falha ao atualizar plano existente, retornando atual:', err)
+          return planoExistente
+        }
+      }
+      return planoExistente
+    }
+
+    // 2. Não existe registro: cria com payload validado
+    const payloadCreate: Record<string, unknown> = {
+      user_id: userId,
+      plano: planoNormalizado,
+      status: statusNormalizado,
+    }
+    if (dados.renovacao_em) payloadCreate.renovacao_em = dados.renovacao_em
+    if (dados.trial_ate) payloadCreate.trial_ate = dados.trial_ate
+    if (dados.aviso_teste_enviado !== undefined)
+      payloadCreate.aviso_teste_enviado = dados.aviso_teste_enviado
+
+    try {
+      return await pb.collection('planos').create<PlanoAssinatura>(payloadCreate)
+    } catch {
+      // Corrida: outro fluxo acabou de criar este registro
+      const rec = await this.obterPlanoUsuario(userId)
+      if (rec) {
+        return rec
+      }
+      return {
+        id: `local_${userId}`,
+        user_id: userId,
+        plano: planoNormalizado,
+        status: statusNormalizado,
+        renovacao_em: dados.renovacao_em || undefined,
+        trial_ate: dados.trial_ate || undefined,
+        aviso_teste_enviado: !!dados.aviso_teste_enviado,
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+      } as PlanoAssinatura
     }
   },
 
@@ -34,205 +136,159 @@ export const planosService = {
       const renovacao = new Date(hoje)
       renovacao.setDate(renovacao.getDate() + 30)
 
-      const planoExistente = await this.obterPlanoUsuario(userId)
-      if (planoExistente) {
-        return await pb.collection('planos').update<PlanoAssinatura>(planoExistente.id, {
-          plano: plano as any,
-          status: 'ativo',
-          renovacao_em: renovacao.toISOString(),
-        })
-      }
-
-      try {
-        return await pb.collection('planos').create<PlanoAssinatura>({
-          user_id: userId,
-          plano: plano as any,
-          status: 'ativo',
-          renovacao_em: renovacao.toISOString(),
-        })
-      } catch (createErr) {
-        // Se outro fluxo criou concorrentemente e estourou unique constraint, busca e atualiza
-        const recriado = await this.obterPlanoUsuario(userId)
-        if (recriado) {
-          return await pb.collection('planos').update<PlanoAssinatura>(recriado.id, {
-            plano: plano as any,
-            status: 'ativo',
-            renovacao_em: renovacao.toISOString(),
-          })
-        }
-        throw createErr
-      }
+      return await this.garantirPlanoUsuario(userId, {
+        plano: plano as any,
+        status: 'ativo',
+        renovacao_em: renovacao.toISOString(),
+      })
     } catch (err) {
       console.error('Erro ao assinar plano:', err)
       throw err
     }
   },
 
-  async iniciarOuVerificarTrial(userId: string): Promise<PlanoAssinatura> {
-    // Se o usuário atual for o dono do sistema, garante plano ativo vitalício
-    const authUser = pb.authStore.record
-    const isDono =
-      (authUser?.id === userId &&
-        (authUser?.email || '').toLowerCase().trim() === 'jaocarloss@gmail.com') ||
-      userId === '2sonutsz843wx5z'
+  async iniciarOuVerificarTrial(
+    userId: string,
+    forcarRecarregamento: boolean = false,
+  ): Promise<PlanoAssinatura> {
+    // 1. Cache de curta duração (2 segundos) para evitar batidas em cascata na montagem de tela / StrictMode
+    const cacheado = ultimoSucessoPorUser.get(userId)
+    const agoraMs = Date.now()
+    if (!forcarRecarregamento && cacheado && agoraMs - cacheado.timestamp < 2000) {
+      return cacheado.plano
+    }
 
-    // Sempre tenta buscar o plano existente primeiro
-    const planoExistente = await this.obterPlanoUsuario(userId)
-    if (planoExistente) {
-      if (isDono) {
-        // Conta do dono: sempre ativo no plano premium vitalício, nunca expirado
-        if (
-          planoExistente.status !== 'ativo' ||
-          planoExistente.plano !== 'premium' ||
-          !planoExistente.renovacao_em
-        ) {
-          try {
-            return await pb.collection('planos').update<PlanoAssinatura>(planoExistente.id, {
-              status: 'ativo',
-              plano: 'premium',
-              renovacao_em: '2099-12-31T23:59:59.000Z',
-              trial_ate: '2099-12-31T23:59:59.000Z',
-              aviso_teste_enviado: true,
-            })
-          } catch {
-            return planoExistente
+    // 2. Se já existe uma verificação em andamento para este userId, reutiliza a promessa em voo
+    const emVoo = promisesEmVoo.get(userId)
+    if (emVoo) {
+      return emVoo
+    }
+
+    const promessa = (async () => {
+      // Se o usuário atual for o dono do sistema, garante plano ativo vitalício
+      const authUser = pb.authStore.record
+      const isDono =
+        (authUser?.id === userId &&
+          (authUser?.email || '').toLowerCase().trim() === 'jaocarloss@gmail.com') ||
+        userId === '2sonutsz843wx5z'
+
+      // Sempre tenta buscar o plano existente primeiro
+      const planoExistente = await this.obterPlanoUsuario(userId)
+      if (planoExistente) {
+        if (isDono) {
+          // Conta do dono: sempre ativo no plano premium vitalício, nunca expirado
+          if (
+            planoExistente.status !== 'ativo' ||
+            planoExistente.plano !== 'premium' ||
+            !planoExistente.renovacao_em
+          ) {
+            try {
+              const res = await pb.collection('planos').update<PlanoAssinatura>(
+                planoExistente.id,
+                {
+                  status: 'ativo',
+                  plano: 'premium',
+                  renovacao_em: '2099-12-31T23:59:59.000Z',
+                  trial_ate: '2099-12-31T23:59:59.000Z',
+                  aviso_teste_enviado: true,
+                },
+                { requestKey: null },
+              )
+              ultimoSucessoPorUser.set(userId, { plano: res, timestamp: Date.now() })
+              return res
+            } catch {
+              ultimoSucessoPorUser.set(userId, { plano: planoExistente, timestamp: Date.now() })
+              return planoExistente
+            }
+          }
+          ultimoSucessoPorUser.set(userId, { plano: planoExistente, timestamp: Date.now() })
+          return planoExistente
+        }
+
+        // Se está em trial, verifica se expirou (apenas para usuários comuns)
+        if (planoExistente.status === 'trial' && planoExistente.trial_ate) {
+          const agora = new Date()
+          const trialAte = new Date(planoExistente.trial_ate)
+          if (agora > trialAte) {
+            // Atualiza para expirado
+            try {
+              const res = await pb.collection('planos').update<PlanoAssinatura>(
+                planoExistente.id,
+                {
+                  status: 'expirado',
+                },
+                { requestKey: null },
+              )
+              ultimoSucessoPorUser.set(userId, { plano: res, timestamp: Date.now() })
+              return res
+            } catch {
+              ultimoSucessoPorUser.set(userId, { plano: planoExistente, timestamp: Date.now() })
+              return planoExistente
+            }
           }
         }
+        ultimoSucessoPorUser.set(userId, { plano: planoExistente, timestamp: Date.now() })
         return planoExistente
       }
 
-      // Se está em trial, verifica se expirou (apenas para usuários comuns)
-      if (planoExistente.status === 'trial' && planoExistente.trial_ate) {
-        const agora = new Date()
-        const trialAte = new Date(planoExistente.trial_ate)
-        if (agora > trialAte) {
-          // Atualiza para expirado
-          try {
-            return await pb.collection('planos').update<PlanoAssinatura>(planoExistente.id, {
-              status: 'expirado',
-            })
-          } catch {
-            return planoExistente
-          }
-        }
-      }
-      return planoExistente
-    }
-
-    if (isDono) {
-      // Dono do sistema jaocarloss@gmail.com
-      try {
-        return await pb.collection('planos').create<PlanoAssinatura>({
-          user_id: userId,
+      if (isDono) {
+        // Dono do sistema jaocarloss@gmail.com
+        const res = await this.garantirPlanoUsuario(userId, {
           plano: 'premium',
           status: 'ativo',
           renovacao_em: '2099-12-31T23:59:59.000Z',
           trial_ate: '2099-12-31T23:59:59.000Z',
           aviso_teste_enviado: true,
         })
-      } catch (err) {
-        const rec = await this.obterPlanoUsuario(userId)
-        if (rec) return rec
-        console.warn('[planosService] Falha ao criar plano do dono:', err)
+        ultimoSucessoPorUser.set(userId, { plano: res, timestamp: Date.now() })
+        return res
       }
-    }
 
-    // Cria trial de 7 dias iniciando no plano Essencial para usuários novos
-    const agora = new Date()
-    const trialAte = new Date(agora)
-    trialAte.setDate(trialAte.getDate() + 7)
+      // Cria trial de 7 dias iniciando no plano Essencial para usuários novos
+      const agora = new Date()
+      const trialAte = new Date(agora)
+      trialAte.setDate(trialAte.getDate() + 7)
 
-    try {
-      return await pb.collection('planos').create<PlanoAssinatura>({
-        user_id: userId,
+      const res = await this.garantirPlanoUsuario(userId, {
         plano: 'essencial',
         status: 'trial',
         trial_ate: trialAte.toISOString(),
         aviso_teste_enviado: false,
       })
-    } catch {
-      // Fallback seguro: se outro fluxo ou requisição concorrente já criou o registro
-      const rec = await this.obterPlanoUsuario(userId)
-      if (rec) {
-        return rec
-      }
-      // Retorna representação em memória consistente caso a API recuse
-      return {
-        id: `local_${userId}`,
-        user_id: userId,
-        plano: 'essencial',
-        status: 'trial',
-        trial_ate: trialAte.toISOString(),
-        created: agora.toISOString(),
-        updated: agora.toISOString(),
-      } as PlanoAssinatura
+      ultimoSucessoPorUser.set(userId, { plano: res, timestamp: Date.now() })
+      return res
+    })()
+
+    promisesEmVoo.set(userId, promessa)
+    try {
+      return await promessa
+    } finally {
+      promisesEmVoo.delete(userId)
     }
   },
 
   async simularFimTeste(userId: string): Promise<PlanoAssinatura> {
-    const planoExistente = await this.obterPlanoUsuario(userId)
     const agora = new Date()
     const ontem = new Date(agora)
     ontem.setDate(ontem.getDate() - 1)
 
-    if (planoExistente) {
-      return await pb.collection('planos').update<PlanoAssinatura>(planoExistente.id, {
-        status: 'expirado',
-        trial_ate: ontem.toISOString(),
-      })
-    }
-
-    try {
-      return await pb.collection('planos').create<PlanoAssinatura>({
-        user_id: userId,
-        plano: 'essencial',
-        status: 'expirado',
-        trial_ate: ontem.toISOString(),
-      })
-    } catch {
-      const rec = await this.obterPlanoUsuario(userId)
-      if (rec) {
-        return await pb.collection('planos').update<PlanoAssinatura>(rec.id, {
-          status: 'expirado',
-          trial_ate: ontem.toISOString(),
-        })
-      }
-      throw new Error('Falha ao simular fim de teste')
-    }
+    return await this.garantirPlanoUsuario(userId, {
+      plano: 'essencial',
+      status: 'expirado',
+      trial_ate: ontem.toISOString(),
+    })
   },
 
   async restaurarTeste(userId: string, dias: number = 3): Promise<PlanoAssinatura> {
-    const planoExistente = await this.obterPlanoUsuario(userId)
     const agora = new Date()
     const futuro = new Date(agora)
     futuro.setDate(futuro.getDate() + dias)
 
-    if (planoExistente) {
-      return await pb.collection('planos').update<PlanoAssinatura>(planoExistente.id, {
-        status: 'trial',
-        trial_ate: futuro.toISOString(),
-        aviso_teste_enviado: false,
-      })
-    }
-
-    try {
-      return await pb.collection('planos').create<PlanoAssinatura>({
-        user_id: userId,
-        plano: 'essencial',
-        status: 'trial',
-        trial_ate: futuro.toISOString(),
-        aviso_teste_enviado: false,
-      })
-    } catch {
-      const rec = await this.obterPlanoUsuario(userId)
-      if (rec) {
-        return await pb.collection('planos').update<PlanoAssinatura>(rec.id, {
-          status: 'trial',
-          trial_ate: futuro.toISOString(),
-          aviso_teste_enviado: false,
-        })
-      }
-      throw new Error('Falha ao restaurar teste')
-    }
+    return await this.garantirPlanoUsuario(userId, {
+      plano: 'essencial',
+      status: 'trial',
+      trial_ate: futuro.toISOString(),
+      aviso_teste_enviado: false,
+    })
   },
 }

@@ -46,27 +46,44 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [assinatura, setAssinatura] = useState<PlanoAssinatura | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const carregarAssinatura = useCallback(async () => {
+  const carregarAssinatura = useCallback(
+    async (forcar: boolean = false) => {
+      if (!user?.id) {
+        setAssinatura(null)
+        setLoading(false)
+        return
+      }
+
+      try {
+        setLoading(true)
+        const plano = await planosService.iniciarOuVerificarTrial(user.id, forcar)
+        setAssinatura(plano)
+      } catch (err) {
+        console.error('Erro ao verificar status do plano:', err)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [user?.id],
+  )
+
+  const carregadoParaUserIdRef = React.useRef<string | null>(null)
+
+  useEffect(() => {
     if (!user?.id) {
+      carregadoParaUserIdRef.current = null
       setAssinatura(null)
       setLoading(false)
       return
     }
 
-    try {
-      setLoading(true)
-      const plano = await planosService.iniciarOuVerificarTrial(user.id)
-      setAssinatura(plano)
-    } catch (err) {
-      console.error('Erro ao verificar status do plano:', err)
-    } finally {
-      setLoading(false)
+    // Evita chamada redundante em re-renderizações rápidas do mesmo usuário
+    if (carregadoParaUserIdRef.current === user.id) {
+      return
     }
-  }, [user?.id])
-
-  useEffect(() => {
+    carregadoParaUserIdRef.current = user.id
     carregarAssinatura()
-  }, [carregarAssinatura])
+  }, [user?.id, carregarAssinatura])
 
   // Identificação do dono do produto (jaocarloss@gmail.com)
   const isDono = user?.email?.toLowerCase().trim() === 'jaocarloss@gmail.com'
@@ -169,7 +186,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         assinarPlano,
         simularFimTeste,
         restaurarTeste,
-        recarregarAssinatura: carregarAssinatura,
+        recarregarAssinatura: () => carregarAssinatura(true),
       }}
     >
       {children}
