@@ -266,14 +266,14 @@ export default function OrcamentoForm() {
       // Cria cliente automaticamente caso o usuário tenha ditado dados de um novo cliente
       try {
         const nomeCli = String(interpretacao.cliente_novo.nome || '').trim()
-        const emailCli =
+        const emailDitado =
           interpretacao.cliente_novo.email && String(interpretacao.cliente_novo.email).trim()
             ? String(interpretacao.cliente_novo.email).trim()
-            : `${nomeCli.toLowerCase().replace(/\s+/g, '.')}@cliente.com`
+            : ''
 
         const novoCli = await clientesService.criar({
           nome: nomeCli,
-          email: emailCli,
+          email: emailDitado,
           telefone: interpretacao.cliente_novo.telefone
             ? String(interpretacao.cliente_novo.telefone).trim()
             : '',
@@ -547,7 +547,7 @@ export default function OrcamentoForm() {
                     <p>
                       <span className="text-slate-400">E-mail:</span>{' '}
                       {interpretacao.cliente_novo.email || (
-                        <span className="text-slate-400 italic">não informado (será gerado)</span>
+                        <span className="text-slate-400 italic">não informado</span>
                       )}
                     </p>
                     {interpretacao.cliente_novo.empresa && (

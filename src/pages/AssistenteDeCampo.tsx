@@ -458,7 +458,7 @@ export default function AssistenteDeCampo() {
       if (!cliId && clienteNovoNome.trim()) {
         const novoCli = await clientesService.criar({
           nome: clienteNovoNome.trim(),
-          email: `${clienteNovoNome.toLowerCase().replace(/\s+/g, '.')}@cliente.com`,
+          email: '',
           user_id: user.id,
         })
         cliId = novoCli.id
@@ -472,7 +472,7 @@ export default function AssistenteDeCampo() {
         const nomePadrao = fornecedor || 'Cliente de Campo'
         const defaultCli = await clientesService.criar({
           nome: nomePadrao,
-          email: `${nomePadrao.toLowerCase().replace(/\s+/g, '.')}@cliente.com`,
+          email: '',
           user_id: user.id,
         })
         cliId = defaultCli.id

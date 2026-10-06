@@ -1430,7 +1430,8 @@ routerAdd(
         '.\n' +
         '3. Se for criação de orçamento:\n' +
         '   - Extraia descricao_servico, itens (descricao, quantidade, valor_unitario), cliente_sugerido ou cliente_novo.\n' +
-        '4. Se for cliente novo, extraia os dados em cliente_novo.\n' +
+        '4. Se for cliente novo, extraia os dados em cliente_novo (nome, telefone, email, empresa, endereco):\n' +
+        '   - REGRA CRÍTICA PARA E-MAIL: NUNCA invente, deduza ou gere e-mail placeholder (ex: derivado do nome ou @cliente.com). Se o usuário NÃO ditou explicitamente um endereço de e-mail na fala, o campo "email" DEVE ser estritamente null ou omitido.\n' +
         'RETORNE ESTRITAMENTE JSON VÁLIDO sem formatação markdown:\n' +
         '{\n' +
         '  "intencao_detectada": "orcamento" | "cliente" | "comando_status",\n' +
@@ -1618,6 +1619,17 @@ routerAdd(
       if (!parsed.cliente_sugerido_id && melhorClienteMatch && scoreMatch >= 3) {
         parsed.cliente_sugerido_id = melhorClienteMatch.id
         parsed.cliente_sugerido_nome = melhorClienteMatch.nome
+      }
+
+      // Higienização de e-mail do cliente_novo: nunca inventar e-mail se não foi ditado
+      if (parsed.cliente_novo) {
+        if (typeof parsed.cliente_novo === 'object') {
+          const rawEmail = parsed.cliente_novo.email ? String(parsed.cliente_novo.email).trim() : ''
+          // Se for placeholder inventado com @cliente.com ou não parecer e-mail real válido, remove
+          if (!rawEmail || rawEmail.endsWith('@cliente.com') || rawEmail.indexOf('@') === -1) {
+            parsed.cliente_novo.email = null
+          }
+        }
       }
 
       const rawItens = Array.isArray(parsed.itens) ? parsed.itens : []

@@ -111,13 +111,7 @@ export default function Clientes() {
         if (locState.interpretacaoSalva?.cliente_novo) {
           const c = locState.interpretacaoSalva.cliente_novo
           setNome(c?.nome ? String(c.nome) : '')
-          setEmail(
-            c?.email
-              ? String(c.email)
-              : c?.nome
-                ? `${String(c.nome).toLowerCase().replace(/\s+/g, '.')}@cliente.com`
-                : '',
-          )
+          setEmail(c?.email ? String(c.email).trim() : '')
           setTelefone(c?.telefone ? String(c.telefone) : '')
           setEmpresa(c?.empresa ? String(c.empresa) : '')
           setEndereco(c?.endereco ? String(c.endereco) : '')
@@ -180,11 +174,7 @@ export default function Clientes() {
 
       if (extraido) {
         const nomeExtraido = extraido.nome ? String(extraido.nome).trim() : ''
-        const emailExtraido = extraido.email
-          ? String(extraido.email).trim()
-          : nomeExtraido
-            ? `${nomeExtraido.toLowerCase().replace(/\s+/g, '.')}@cliente.com`
-            : ''
+        const emailExtraido = extraido.email ? String(extraido.email).trim() : ''
         const telefoneExtraido = extraido.telefone ? String(extraido.telefone).trim() : ''
         const empresaExtraido = extraido.empresa ? String(extraido.empresa).trim() : ''
         const enderecoExtraido = extraido.endereco ? String(extraido.endereco).trim() : ''
@@ -238,8 +228,7 @@ export default function Clientes() {
 
     setSubmitting(true)
     try {
-      const emailFinal =
-        email.trim() || `${nome.trim().toLowerCase().replace(/\s+/g, '.')}@cliente.com`
+      const emailFinal = email.trim()
 
       if (editingClient) {
         await clientesService.atualizar(editingClient.id, {
@@ -372,10 +361,14 @@ export default function Clientes() {
                     <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3.5 px-6 font-semibold text-slate-900">{c.nome}</td>
                       <td className="py-3.5 px-6 text-slate-600">
-                        <div className="flex items-center gap-1.5">
-                          <Mail className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{c.email}</span>
-                        </div>
+                        {c.email ? (
+                          <div className="flex items-center gap-1.5">
+                            <Mail className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{c.email}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">não informado</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-6 text-slate-600">
                         {c.telefone ? (
@@ -449,10 +442,17 @@ export default function Clientes() {
                   </div>
 
                   <div className="text-xs text-slate-600 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>{c.email}</span>
-                    </div>
+                    {c.email ? (
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{c.email}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                        <span className="text-slate-400 italic">E-mail não informado</span>
+                      </div>
+                    )}
                     {c.telefone && (
                       <div className="flex items-center gap-2">
                         <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -545,7 +545,7 @@ export default function Clientes() {
                   setEmail(e.target.value)
                   if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }))
                 }}
-                placeholder="cliente@exemplo.com (ou deixe vazio para auto-gerar)"
+                placeholder="cliente@exemplo.com (opcional)"
                 className={`h-10 text-sm ${errors.email ? 'border-red-500' : ''}`}
               />
               {errors.email && <p className="text-[11px] text-red-600">{errors.email}</p>}

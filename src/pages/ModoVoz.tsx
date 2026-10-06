@@ -593,14 +593,11 @@ export default function ModoVoz() {
       if (resultado.intencao_detectada === 'cliente' && resultado.cliente_novo?.nome) {
         const c = resultado.cliente_novo
         const nomeCli = String(c.nome || '').trim()
-        const emailCli =
-          c.email && String(c.email).trim()
-            ? String(c.email).trim()
-            : `${nomeCli.toLowerCase().replace(/\s+/g, '.')}@cliente.com`
+        const emailDitado = c.email && String(c.email).trim() ? String(c.email).trim() : ''
 
         const novoCliente = await clientesService.criar({
           nome: nomeCli,
-          email: emailCli,
+          email: emailDitado,
           telefone: c.telefone ? String(c.telefone).trim() : '',
           empresa: c.empresa ? String(c.empresa).trim() : '',
           endereco: c.endereco ? String(c.endereco).trim() : '',
@@ -618,7 +615,7 @@ export default function ModoVoz() {
           dados_aplicados: {
             cliente_id: novoCliente.id,
             nome: nomeCli,
-            email: emailCli,
+            email: novoCliente.email || '',
             telefone: novoCliente.telefone || '',
             empresa: novoCliente.empresa || '',
             endereco: novoCliente.endereco || '',
@@ -644,14 +641,11 @@ export default function ModoVoz() {
       if (!cliId && resultado.cliente_novo?.nome) {
         const c = resultado.cliente_novo
         const nomeCli = String(c.nome || '').trim()
-        const emailCli =
-          c.email && String(c.email).trim()
-            ? String(c.email).trim()
-            : `${nomeCli.toLowerCase().replace(/\s+/g, '.')}@cliente.com`
+        const emailDitado = c.email && String(c.email).trim() ? String(c.email).trim() : ''
 
         const criado = await clientesService.criar({
           nome: nomeCli,
-          email: emailCli,
+          email: emailDitado,
           telefone: c.telefone ? String(c.telefone).trim() : '',
           empresa: c.empresa ? String(c.empresa).trim() : '',
           endereco: c.endereco ? String(c.endereco).trim() : '',
@@ -1053,7 +1047,7 @@ export default function ModoVoz() {
                     <p>
                       <span className="text-slate-500">E-mail:</span>{' '}
                       {resultado.cliente_novo.email || (
-                        <span className="text-slate-400 italic">não informado (será gerado)</span>
+                        <span className="text-slate-400 italic">não informado</span>
                       )}
                     </p>
                     {resultado.cliente_novo.empresa && (
