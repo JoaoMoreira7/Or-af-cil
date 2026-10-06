@@ -411,8 +411,10 @@ export const gatewayPagamentoService = {
           filter: `user_id = "${atualizado.user_id}"`,
         })
 
-        const metaPag = atualizado.metadados || {}
-        const planoParaSetar = normalizarPlanoId(metaPag.plano_id || atualizado.plano_nome)
+        const metaPag = (atualizado.metadados as Record<string, unknown> | null) || {}
+        const planoParaSetar = normalizarPlanoId(
+          String(metaPag.plano_id || atualizado.plano_nome || ''),
+        )
 
         if (planos.items.length > 0) {
           const planoId = planos.items[0].id
@@ -476,5 +478,100 @@ export const gatewayPagamentoService = {
         renovacao_em: novoStatus === 'ativo' ? renovacao.toISOString() : undefined,
       })
     }
+  },
+
+  /**
+   * Consulta o status seguro do gateway Asaas (somente admin jaocarloss@gmail.com).
+   */
+  async obterStatusGateway(): Promise<{
+    sucesso: boolean
+    gateway: string
+    chave_configurada: boolean
+    chave_mascarada: string
+    chave_origem: string
+    ambiente: 'producao' | 'sandbox'
+    ultima_verificacao?: string
+    status_verificacao?: string
+    detalhes_conta?: {
+      nome_empresa?: string
+      email?: string
+      cpf_cnpj?: string
+      ultima_checagem?: string
+    } | null
+    webhook: {
+      url: string
+      token_configurado: boolean
+      token_mascarado: string
+      token_origem: string
+      eventos_obrigatorios: string[]
+    }
+  }> {
+    return await pb.send('/backend/v1/admin/gateway/status', {
+      method: 'GET',
+    })
+  },
+
+  /**
+   * Testa a validade da chave Asaas em tempo real contra a API da Asaas.
+   */
+  async testarConexaoGateway(apiKeyCustom?: string): Promise<{
+    sucesso: boolean
+    conectado: boolean
+    status_code?: number
+    chave_mascarada?: string
+    mensagem: string
+    conta?: {
+      nome: string
+      email: string
+      cpf_cnpj: string
+      verificado_em: string
+    }
+    detalhes?: unknown
+  }> {
+    return await pb.send('/backend/v1/admin/gateway/testar', {
+      method: 'POST',
+      body: apiKeyCustom ? { api_key: apiKeyCustom } : {},
+    })
+  },
+
+  /**
+   * Salva com segurança uma nova chave Asaas no cofre do sistema (nunca exposta no front).
+   */
+  async salvarChaveGateway(
+    apiKey: string,
+    testarAntes: boolean = true,
+  ): Promise<{
+    sucesso: boolean
+    mensagem: string
+    chave_mascarada: string
+    atualizado_em: string
+    conta?: {
+      nome: string
+      email: string
+    } | null
+  }> {
+    return await pb.send('/backend/v1/admin/gateway/salvar-chave', {
+      method: 'POST',
+      body: {
+        api_key: apiKey,
+        testar: testarAntes,
+      },
+    })
+  },
+
+  /**
+   * Regenera o token do Webhook Asaas e retorna uma única vez para cópia.
+   */
+  async regenerarTokenWebhook(): Promise<{
+    sucesso: boolean
+    novo_token: string
+    token_mascarado: string
+    webhook_url: string
+    gerado_em: string
+    mensagem: string
+  }> {
+    return await pb.send('/backend/v1/admin/gateway/regenerar-webhook-token', {
+      method: 'POST',
+    })
   },
 }

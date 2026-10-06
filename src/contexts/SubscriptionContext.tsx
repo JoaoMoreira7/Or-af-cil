@@ -27,6 +27,7 @@ interface SubscriptionContextType {
   isTrial: boolean
   isAtivo: boolean
   isExpirado: boolean
+  isBloqueado: boolean
   diasRestantesTrial: number
   planoId: PlanoId
   planoConfig: PlanoConfig
@@ -70,6 +71,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const isTrial = assinatura?.status === 'trial'
   const isAtivo = assinatura?.status === 'ativo'
   const isExpirado = assinatura?.status === 'expirado'
+  const isBloqueado = isExpirado
 
   const diasRestantesTrial = React.useMemo(() => {
     if (!assinatura?.trial_ate) return 0
@@ -150,6 +152,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         isTrial,
         isAtivo,
         isExpirado,
+        isBloqueado,
         diasRestantesTrial,
         planoId,
         planoConfig,

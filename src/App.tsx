@@ -26,6 +26,7 @@ import Planos from '@/pages/Planos'
 import Configuracoes from '@/pages/Configuracoes'
 import Admin from '@/pages/Admin'
 import AdminVendas from '@/pages/AdminVendas'
+import AdminGateway from '@/pages/AdminGateway'
 import TermosDeUso from '@/pages/TermosDeUso'
 import PoliticaDePrivacidade from '@/pages/PoliticaDePrivacidade'
 import AudiosHistorico from '@/pages/AudiosHistorico'
@@ -119,6 +120,14 @@ const AppRoutes = () => {
             element={
               <OwnerOnlyRoute>
                 <AdminVendas />
+              </OwnerOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/gateway"
+            element={
+              <OwnerOnlyRoute>
+                <AdminGateway />
               </OwnerOnlyRoute>
             }
           />

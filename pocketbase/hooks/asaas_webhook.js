@@ -9,7 +9,23 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
       headers['ASAAS-ACCESS-TOKEN'] ||
       ''
 
-    const expectedToken = $os.getenv('ASAAS_WEBHOOK_TOKEN')
+    let expectedToken = ''
+    try {
+      const configRecs = $app.findRecordsByFilter(
+        'configuracoes_sistema',
+        "chave = 'asaas_webhook_token'",
+        '-created',
+        1,
+        0,
+      )
+      if (configRecs.length > 0 && configRecs[0].getString('valor')) {
+        expectedToken = configRecs[0].getString('valor').trim()
+      }
+    } catch (_) {}
+
+    if (!expectedToken) {
+      expectedToken = ($os.getenv('ASAAS_WEBHOOK_TOKEN') || '').trim()
+    }
 
     if (expectedToken && receivedToken && receivedToken !== expectedToken) {
       console.warn(`[asaas_webhook] Token do webhook inválido recebido: "${receivedToken}"`)

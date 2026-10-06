@@ -42,7 +42,7 @@ import {
   formatarDataHora,
 } from '@/types'
 import { useToast } from '@/hooks/use-toast'
-import { PLANO_CONFIG } from '@/config/plans'
+import { PLANO_CONFIG, PlanoId, normalizarPlanoId, obterConfigPlano } from '@/config/plans'
 
 export default function AdminVendas() {
   const { user } = useAuth()
@@ -314,15 +314,26 @@ export default function AdminVendas() {
           </p>
         </div>
 
-        <Button
-          onClick={carregarVendas}
-          disabled={loading}
-          variant="outline"
-          className="border-slate-300 hover:bg-slate-100 self-start sm:self-auto gap-2"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar Vendas
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            onClick={() => window.location.assign('/admin/gateway')}
+            variant="outline"
+            className="border-slate-300 hover:bg-slate-100 text-xs h-9 font-semibold gap-1.5"
+          >
+            <CreditCard className="w-4 h-4 text-emerald-600" />
+            Configurar Gateway
+          </Button>
+
+          <Button
+            onClick={carregarVendas}
+            disabled={loading}
+            variant="outline"
+            className="border-slate-300 hover:bg-slate-100 self-start sm:self-auto gap-2 text-xs h-9"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar Vendas
+          </Button>
+        </div>
       </div>
 
       {/* CARD DE STATUS DA INTEGRAÇÃO ASAAS */}

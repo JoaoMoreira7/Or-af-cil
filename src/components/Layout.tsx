@@ -49,6 +49,7 @@ export default function Layout() {
     if (path === '/dashboard') return 'Dashboard'
     if (path === '/admin') return 'Painel do Administrador'
     if (path === '/admin/vendas') return 'Controle de Vendas (Dono)'
+    if (path === '/admin/gateway') return 'Gateway de Pagamento (Asaas)'
     if (path === '/orcamentos') return 'Orçamentos'
     if (path === '/orcamentos/novo') return 'Novo Orçamento com IA'
     if (path.startsWith('/orcamentos/') && path.endsWith('/editar')) return 'Editar Orçamento'
@@ -97,6 +98,12 @@ export default function Layout() {
       label: 'Vendas (Dono)',
       path: '/admin/vendas',
       icon: DollarSign,
+      isAdmin: true,
+    })
+    navItems.push({
+      label: 'Gateway Asaas',
+      path: '/admin/gateway',
+      icon: CreditCard,
       isAdmin: true,
     })
   }
@@ -585,24 +592,44 @@ export default function Layout() {
                 )}
 
                 {isDono && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMoreOpen(false)
-                      navigate('/admin/vendas')
-                    }}
-                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
-                      location.pathname === '/admin/vendas'
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1">
-                      <DollarSign className="w-4 h-4" />
-                    </div>
-                    <span className="text-xs font-semibold">Vendas</span>
-                    <span className="text-[10px] text-slate-500">Dono</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMoreOpen(false)
+                        navigate('/admin/vendas')
+                      }}
+                      className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                        location.pathname === '/admin/vendas'
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1">
+                        <DollarSign className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs font-semibold">Vendas</span>
+                      <span className="text-[10px] text-slate-500">Dono</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMoreOpen(false)
+                        navigate('/admin/gateway')
+                      }}
+                      className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                        location.pathname === '/admin/gateway'
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1">
+                        <CreditCard className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs font-semibold">Gateway</span>
+                      <span className="text-[10px] text-slate-500">Asaas</span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>

@@ -71,7 +71,7 @@ export const Planos: React.FC = () => {
   const [pixCopiado, setPixCopiado] = useState(false)
   const [pixStatusPago, setPixStatusPago] = useState(false)
   const [pollingAtivo, setPollingAtivo] = useState(false)
-  const pollingTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Formulário do Cartão de Crédito
   const [cardNome, setCardNome] = useState('')
@@ -418,7 +418,7 @@ export const Planos: React.FC = () => {
             type="button"
             disabled={loadingSub}
             onClick={async () => {
-              await restaurarTesteDemo(3)
+              await restaurarTesteDemo()
               toast({
                 title: 'Teste grátis restaurado',
                 description: 'Conta configurada com 3 dias restantes de teste grátis.',
@@ -1159,3 +1159,5 @@ export const Planos: React.FC = () => {
     </div>
   )
 }
+
+export default Planos

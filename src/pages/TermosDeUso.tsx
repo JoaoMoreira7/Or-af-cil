@@ -107,8 +107,11 @@ export default function TermosDeUso() {
             </h2>
             <p className="mb-3">
               A plataforma {COMPANY_LEGAL.nomeFantasia} opera no modelo de assinatura mensal com uma
-              escada de três planos estruturados de acordo com as necessidades operacionais do
-              prestador de serviços:
+              escada de três planos oficiais, estruturados com valores fixos de{' '}
+              <strong>R$ 49,90/mês</strong> (Plano Essencial), <strong>R$ 64,90/mês</strong> (Plano
+              Profissional) e <strong>R$ 79,90/mês</strong> (Plano Premium), atendendo desde o
+              prestador autônomo individual até operações consolidadas com múltiplos membros de
+              equipe:
             </p>
 
             <div className="overflow-x-auto my-3 border border-slate-200 rounded-xl bg-slate-50">
@@ -116,7 +119,7 @@ export default function TermosDeUso() {
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-100 text-slate-700 font-bold uppercase text-[10px]">
                     <th className="py-2.5 px-3">Plano</th>
-                    <th className="py-2.5 px-3">Preço Mensal</th>
+                    <th className="py-2.5 px-3">Valor Mensal</th>
                     <th className="py-2.5 px-3">Posicionamento</th>
                     <th className="py-2.5 px-3">Escopo Principal</th>
                   </tr>
@@ -125,7 +128,7 @@ export default function TermosDeUso() {
                   {PLANOS_LISTA.map((p) => (
                     <tr key={p.id}>
                       <td className="py-2.5 px-3 font-bold text-slate-900">{p.nome}</td>
-                      <td className="py-2.5 px-3 font-semibold text-emerald-700">
+                      <td className="py-2.5 px-3 font-extrabold text-emerald-700">
                         {p.precoFormatado}/mês
                       </td>
                       <td className="py-2.5 px-3">
@@ -140,12 +143,18 @@ export default function TermosDeUso() {
               </table>
             </div>
 
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-slate-600 leading-relaxed mb-2">
               Novos usuários contam com um período de degustação de{' '}
-              <strong>7 dias de teste grátis</strong> a contar da criação da conta. Após esse prazo,
-              o acesso aos módulos requer a assinatura de um dos três planos via PIX Dinâmico
-              através do gateway oficial homologado Asaas. O pagamento confere liberação de 30 dias
-              contínuos de acesso, renovável a cada ciclo.
+              <strong>7 dias de teste grátis</strong> a contar da criação da conta, sem necessidade
+              de cadastro prévio de cartão de crédito. Após o término do período de teste, a
+              continuidade do acesso aos módulos do sistema requer a assinatura ativa de um dos três
+              planos (Essencial a R$ 49,90, Profissional a R$ 64,90 ou Premium a R$ 79,90).
+            </p>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              O processamento financeiro é realizado de forma segura via cobrança instantânea{' '}
+              <strong>PIX Dinâmico</strong> através do gateway oficial homologado Asaas. Cada
+              pagamento aprovado concede 30 (trinta) dias corridos de acesso completo aos recursos
+              do plano contratado, com emissão automática de comprovante e recibo por e-mail.
             </p>
           </section>
 

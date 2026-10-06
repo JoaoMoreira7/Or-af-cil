@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T14:26:35.720Z",
+  "generatedAt": "2026-10-06T15:04:18.634Z",
   "collections": [
     {
       "name": "users",
@@ -1022,6 +1022,78 @@
         "CREATE INDEX idx_gastos_orcamento ON gastos (orcamento_vinculado)",
         "CREATE INDEX idx_gastos_created ON gastos (created DESC)",
         "CREATE INDEX `idx_gastos_contexto` ON `gastos` (contexto)"
+      ]
+    },
+    {
+      "name": "configuracoes_sistema",
+      "type": "base",
+      "apiRules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "chave",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ultima_verificacao",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_verificacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "metadados",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_configuracoes_sistema_chave ON configuracoes_sistema (chave)"
       ]
     }
   ]

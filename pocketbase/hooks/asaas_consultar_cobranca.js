@@ -38,7 +38,24 @@ routerAdd(
         return e.json(403, { error: 'Acesso negado a este pagamento' })
       }
 
-      const apiKey = $os.getenv('ASAAS_API_KEY')
+      let apiKey = ''
+      try {
+        const configRecs = $app.findRecordsByFilter(
+          'configuracoes_sistema',
+          "chave = 'asaas_api_key'",
+          '-created',
+          1,
+          0,
+        )
+        if (configRecs.length > 0 && configRecs[0].getString('valor')) {
+          apiKey = configRecs[0].getString('valor').trim()
+        }
+      } catch (_) {}
+
+      if (!apiKey) {
+        apiKey = ($os.getenv('ASAAS_API_KEY') || '').trim()
+      }
+
       if (!apiKey) {
         return e.json(500, { error: 'Chave Asaas não configurada' })
       }
