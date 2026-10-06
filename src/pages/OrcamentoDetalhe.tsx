@@ -406,6 +406,7 @@ export default function OrcamentoDetalhe() {
               <p>{COMPANY_LEGAL.endereco}</p>
               <p>
                 E-mail: {COMPANY_LEGAL.emailContato} | Suporte: {COMPANY_LEGAL.emailSuporte}
+                {COMPANY_LEGAL.telefone && ` | Tel: ${COMPANY_LEGAL.telefone}`}
               </p>
             </div>
           </div>

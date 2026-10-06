@@ -64,6 +64,11 @@ export default function PoliticaDePrivacidade() {
               <span className="font-semibold">Responsável Legal:</span>{' '}
               {COMPANY_LEGAL.responsavelLegal}
             </div>
+            {COMPANY_LEGAL.telefone && (
+              <div>
+                <span className="font-semibold">Telefone:</span> {COMPANY_LEGAL.telefone}
+              </div>
+            )}
           </div>
         </div>
 

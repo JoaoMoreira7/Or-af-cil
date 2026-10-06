@@ -62,6 +62,11 @@ export default function TermosDeUso() {
             <div>
               <span className="font-semibold">E-mail Jurídico:</span> {COMPANY_LEGAL.emailJuridico}
             </div>
+            {COMPANY_LEGAL.telefone && (
+              <div>
+                <span className="font-semibold">Telefone:</span> {COMPANY_LEGAL.telefone}
+              </div>
+            )}
           </div>
         </div>
 
