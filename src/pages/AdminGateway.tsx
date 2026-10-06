@@ -93,11 +93,18 @@ export default function AdminGateway() {
   const [novoTokenGerado, setNovoTokenGerado] = useState<string | null>(null)
   const [regenerandoToken, setRegenerandoToken] = useState<boolean>(false)
 
+  // Revelação / Ocultação do Token do Webhook
+  const [tokenRevelado, setTokenRevelado] = useState<string | null>(null)
+  const [revelandoToken, setRevelandoToken] = useState<boolean>(false)
+  const [mostrarToken, setMostrarToken] = useState<boolean>(false)
+
   // Cópia
   const [copiadoUrl, setCopiadoUrl] = useState<boolean>(false)
   const [copiadoNovoToken, setCopiadoNovoToken] = useState<boolean>(false)
+  const [copiadoTokenCard, setCopiadoTokenCard] = useState<boolean>(false)
   const timerCopiadoUrlRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const timerCopiadoTokenRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timerCopiadoTokenCardRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     isMountedRef.current = true
@@ -108,6 +115,9 @@ export default function AdminGateway() {
       }
       if (timerCopiadoTokenRef.current) {
         clearTimeout(timerCopiadoTokenRef.current)
+      }
+      if (timerCopiadoTokenCardRef.current) {
+        clearTimeout(timerCopiadoTokenCardRef.current)
       }
     }
   }, [])
@@ -255,6 +265,7 @@ export default function AdminGateway() {
       const res = await gatewayPagamentoService.regenerarTokenWebhook()
       if (isMountedRef.current) {
         setNovoTokenGerado(res.novo_token)
+        setTokenRevelado(res.novo_token)
         toast({
           title: 'Novo Token de Webhook Gerado',
           description: 'Copie o novo token e cole na aba Webhooks do seu painel Asaas.',
@@ -274,6 +285,96 @@ export default function AdminGateway() {
       if (isMountedRef.current) {
         setRegenerandoToken(false)
       }
+    }
+  }
+
+  // Ação: Alternar Revelar / Ocultar Token do Webhook no Card
+  const handleToggleRevelarToken = async () => {
+    if (mostrarToken) {
+      setMostrarToken(false)
+      return
+    }
+
+    if (tokenRevelado) {
+      setMostrarToken(true)
+      return
+    }
+
+    setRevelandoToken(true)
+    try {
+      const res = await gatewayPagamentoService.revelarTokenWebhook()
+      if (isMountedRef.current) {
+        setTokenRevelado(res.token)
+        setMostrarToken(true)
+      }
+    } catch (err: unknown) {
+      if (isMountedRef.current) {
+        const msg = err instanceof Error ? err.message : 'Falha ao obter token do webhook'
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao revelar token',
+          description: msg,
+        })
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setRevelandoToken(false)
+      }
+    }
+  }
+
+  // Ação: Copiar Token direto pelo Card de Webhook (revela silenciosamente se necessário)
+  const handleCopiarTokenCard = async () => {
+    let tokenParaCopiar = tokenRevelado || novoTokenGerado
+
+    if (!tokenParaCopiar) {
+      setRevelandoToken(true)
+      try {
+        const res = await gatewayPagamentoService.revelarTokenWebhook()
+        tokenParaCopiar = res.token
+        if (isMountedRef.current) {
+          setTokenRevelado(res.token)
+        }
+      } catch (err: unknown) {
+        if (isMountedRef.current) {
+          const msg = err instanceof Error ? err.message : 'Falha ao obter token para cópia'
+          toast({
+            variant: 'destructive',
+            title: 'Erro ao copiar token',
+            description: msg,
+          })
+          return
+        }
+      } finally {
+        if (isMountedRef.current) {
+          setRevelandoToken(false)
+        }
+      }
+    }
+
+    if (!tokenParaCopiar) return
+
+    const sucesso = await copiarTextoRobusto(tokenParaCopiar)
+    if (!isMountedRef.current) return
+
+    if (sucesso) {
+      setCopiadoTokenCard(true)
+      toast({
+        title: 'Token de Webhook copiado!',
+        description: 'Cole no campo "Token de autenticação" na configuração de Webhooks da Asaas.',
+      })
+      if (timerCopiadoTokenCardRef.current) clearTimeout(timerCopiadoTokenCardRef.current)
+      timerCopiadoTokenCardRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          setCopiadoTokenCard(false)
+        }
+      }, 3000)
+    } else {
+      toast({
+        title: 'Não foi possível copiar automaticamente',
+        description: 'Clique em Revelar Token para selecionar o valor manualmente.',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -792,45 +893,123 @@ export default function AdminGateway() {
             </p>
           </div>
 
-          {/* STATUS DO TOKEN ATUAL */}
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-            <div>
-              <span className="font-bold text-slate-900 block">
-                Token de Autenticação do Webhook
-              </span>
-              <p className="text-slate-500 text-[11px] mt-0.5">
-                Valor enviado no cabeçalho HTTP{' '}
-                <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">
-                  asaas-access-token
-                </code>{' '}
-                para certificar que a requisição partiu legitimamente da Asaas.
-              </p>
+          {/* STATUS E CONTROLES DO TOKEN DE WEBHOOK */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-900 block">
+                    Token de Autenticação do Webhook
+                  </span>
+                  {status?.webhook?.token_configurado ? (
+                    <Badge
+                      translate="no"
+                      className="notranslate bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]"
+                    >
+                      Ativo
+                    </Badge>
+                  ) : (
+                    <Badge
+                      translate="no"
+                      variant="outline"
+                      className="notranslate text-amber-700 border-amber-300 bg-amber-50 text-[10px]"
+                    >
+                      Sem token
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-slate-500 text-[11px] mt-0.5">
+                  Valor enviado no cabeçalho HTTP{' '}
+                  <code
+                    translate="no"
+                    className="notranslate bg-slate-200 px-1 py-0.5 rounded font-mono text-[10px]"
+                  >
+                    asaas-access-token
+                  </code>{' '}
+                  para certificar que a requisição partiu legitimamente da Asaas.
+                </p>
+              </div>
+
+              {/* BOTÕES DE AÇÃO: COPIAR, REVELAR/OCULTAR E REGENERAR */}
+              <div className="flex items-center gap-2 flex-wrap self-stretch sm:self-auto">
+                <Button
+                  type="button"
+                  onClick={handleCopiarTokenCard}
+                  disabled={revelandoToken || loading}
+                  variant={copiadoTokenCard ? 'default' : 'outline'}
+                  className={`h-8 text-xs font-semibold gap-1.5 transition-all ${
+                    copiadoTokenCard
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600'
+                      : 'border-slate-300 hover:bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {copiadoTokenCard ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5 text-slate-600" />
+                  )}
+                  {copiadoTokenCard ? 'Copiado!' : 'Copiar Token'}
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={handleToggleRevelarToken}
+                  disabled={revelandoToken || loading}
+                  variant="outline"
+                  className="h-8 text-xs font-semibold gap-1.5 border-slate-300 hover:bg-slate-100 text-slate-700"
+                >
+                  {revelandoToken ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : mostrarToken ? (
+                    <EyeOff className="w-3.5 h-3.5 text-slate-600" />
+                  ) : (
+                    <Eye className="w-3.5 h-3.5 text-slate-600" />
+                  )}
+                  {revelandoToken ? 'Carregando...' : mostrarToken ? 'Ocultar' : 'Revelar Token'}
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setNovoTokenGerado(null)
+                    setModalRegenerarTokenOpen(true)
+                  }}
+                  variant="outline"
+                  className="h-8 text-xs font-semibold gap-1.5 border-slate-300 hover:bg-slate-100 text-indigo-700 hover:text-indigo-800"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+                  Regenerar Token
+                </Button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {status?.webhook?.token_configurado ? (
-                <>
-                  <span
-                    translate="no"
-                    className="notranslate font-mono font-bold text-slate-800 bg-white px-2.5 py-1 rounded-md border border-slate-200"
-                  >
-                    {status.webhook.token_mascarado}
-                  </span>
-                  <Badge
-                    translate="no"
-                    className="notranslate bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]"
-                  >
-                    Ativa
-                  </Badge>
-                </>
-              ) : (
-                <Badge
+            {/* CAMPO DE EXIBIÇÃO DO TOKEN COM MÁSCARA OU VALOR REVELADO */}
+            <div className="pt-2 border-t border-slate-200/70 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="relative flex-1">
+                <Input
+                  readOnly
                   translate="no"
-                  variant="outline"
-                  className="notranslate text-amber-700 border-amber-300 bg-amber-50 text-[10px]"
-                >
-                  Sem token
-                </Badge>
+                  value={
+                    mostrarToken && tokenRevelado
+                      ? tokenRevelado
+                      : status?.webhook?.token_mascarado || '••••••••••••••••••••••••'
+                  }
+                  onClick={(e) => {
+                    if (mostrarToken) (e.target as HTMLInputElement).select()
+                  }}
+                  className={`notranslate font-mono text-xs select-all cursor-text transition-colors ${
+                    mostrarToken
+                      ? 'bg-white text-slate-900 border-indigo-300 ring-1 ring-indigo-200 font-bold'
+                      : 'bg-slate-100/80 text-slate-600 border-slate-200'
+                  }`}
+                />
+              </div>
+
+              {mostrarToken && (
+                <div className="flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200 shrink-0">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Token revelado apenas para jaocarloss@gmail.com</span>
+                </div>
               )}
             </div>
           </div>

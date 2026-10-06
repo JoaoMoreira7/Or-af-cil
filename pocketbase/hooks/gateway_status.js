@@ -45,9 +45,11 @@ routerAdd(
         }
       }
 
-      // 2. Resolver Token do Webhook
+      // 2. Resolver Token do Webhook (com lazy bootstrap automático caso não exista)
       let webhookToken = ''
       let webhookTokenOrigem = 'nenhuma'
+      let tokenRec = null
+
       try {
         const tokenRecs = $app.findRecordsByFilter(
           'configuracoes_sistema',
@@ -59,14 +61,49 @@ routerAdd(
         if (tokenRecs.length > 0 && tokenRecs[0].getString('valor')) {
           webhookToken = tokenRecs[0].getString('valor').trim()
           webhookTokenOrigem = 'banco'
+          tokenRec = tokenRecs[0]
         }
       } catch (_) {}
 
+      // Fallback em variável de ambiente (se já configurado via env)
       if (!webhookToken) {
         const envToken = ($os.getenv('ASAAS_WEBHOOK_TOKEN') || '').trim()
         if (envToken) {
           webhookToken = envToken
           webhookTokenOrigem = 'ambiente'
+        }
+      }
+
+      // Lazy bootstrap: se ainda não houver token, gera e persiste imediatamente na coleção configuracoes_sistema
+      if (!webhookToken) {
+        try {
+          const novoTokenGerado = 'whsec_' + $security.randomString(48)
+          const agora = new Date().toISOString()
+          const colConfig = $app.findCollectionByNameOrId('configuracoes_sistema')
+          const novoRec = new Record(colConfig)
+          novoRec.set('chave', 'asaas_webhook_token')
+          novoRec.set('valor', novoTokenGerado)
+          novoRec.set(
+            'descricao',
+            'Token de autenticação do Webhook Asaas para validação do cabeçalho asaas-access-token',
+          )
+          novoRec.set('tipo', 'secret')
+          novoRec.set('ultima_verificacao', agora)
+          novoRec.set('status_verificacao', 'ativo')
+          novoRec.set('metadados', {
+            gerado_por: 'lazy_bootstrap_gateway_status',
+            gerado_em: agora,
+            admin: email,
+          })
+          $app.save(novoRec)
+
+          webhookToken = novoTokenGerado
+          webhookTokenOrigem = 'banco'
+          console.log(
+            `[gateway_status] Token de webhook gerado automaticamente via lazy bootstrap.`,
+          )
+        } catch (bootstrapErr) {
+          console.warn('[gateway_status] Erro no lazy bootstrap do token de webhook:', bootstrapErr)
         }
       }
 

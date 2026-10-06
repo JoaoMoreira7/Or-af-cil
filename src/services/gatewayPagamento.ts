@@ -560,6 +560,20 @@ export const gatewayPagamentoService = {
   },
 
   /**
+   * Revela o token do Webhook Asaas para o dono logado (jaocarloss@gmail.com).
+   */
+  async revelarTokenWebhook(): Promise<{
+    sucesso: boolean
+    token: string
+    token_mascarado: string
+    origem: string
+  }> {
+    return await pb.send('/backend/v1/admin/gateway/revelar-webhook-token', {
+      method: 'POST',
+    })
+  },
+
+  /**
    * Regenera o token do Webhook Asaas e retorna uma única vez para cópia.
    */
   async regenerarTokenWebhook(): Promise<{

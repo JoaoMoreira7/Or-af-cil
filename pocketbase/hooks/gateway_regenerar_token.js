@@ -17,8 +17,8 @@ routerAdd(
         })
       }
 
-      // Gera um novo token seguro alfanumérico com prefixo 'whsec_'
-      const randomPart = $security.randomString(32)
+      // Gera um novo token seguro alfanumérico com prefixo 'whsec_' + 48 caracteres aleatórios
+      const randomPart = $security.randomString(48)
       const novoToken = 'whsec_' + randomPart
       const agora = new Date().toISOString()
 
@@ -43,7 +43,10 @@ routerAdd(
       }
 
       tokenRec.set('valor', novoToken)
-      tokenRec.set('descricao', 'Token de autenticação do Webhook Asaas')
+      tokenRec.set(
+        'descricao',
+        'Token de autenticação do Webhook Asaas para validação do cabeçalho asaas-access-token',
+      )
       tokenRec.set('tipo', 'secret')
       tokenRec.set('ultima_verificacao', agora)
       tokenRec.set('status_verificacao', 'ativo')
