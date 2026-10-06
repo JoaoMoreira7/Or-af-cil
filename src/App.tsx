@@ -23,6 +23,7 @@ import Clientes from '@/pages/Clientes'
 import Orcamentos from '@/pages/Orcamentos'
 import OrcamentoDetalhe from '@/pages/OrcamentoDetalhe'
 import OrcamentoForm from '@/pages/OrcamentoForm'
+import Concluidos from '@/pages/Concluidos'
 import Planos from '@/pages/Planos'
 import Configuracoes from '@/pages/Configuracoes'
 import Admin from '@/pages/Admin'
@@ -111,6 +112,7 @@ const AppRoutes = () => {
           <Route path="/orcamentos/novo" element={<OrcamentoForm />} />
           <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
           <Route path="/orcamentos/:id/editar" element={<OrcamentoForm />} />
+          <Route path="/concluidos" element={<Concluidos />} />
           <Route path="/contas-a-receber" element={<ContasReceber />} />
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/audios" element={<AudiosHistorico />} />

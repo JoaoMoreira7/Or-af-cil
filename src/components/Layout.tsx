@@ -20,6 +20,7 @@ import {
   Radio,
   DollarSign,
   Camera,
+  CheckCircle,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSubscription } from '@/contexts/SubscriptionContext'
@@ -55,6 +56,7 @@ export default function Layout() {
     if (path === '/orcamentos/novo') return 'Novo Orçamento com IA'
     if (path.startsWith('/orcamentos/') && path.endsWith('/editar')) return 'Editar Orçamento'
     if (path.startsWith('/orcamentos/')) return 'Detalhe do Orçamento'
+    if (path === '/concluidos') return 'Serviços Concluídos'
     if (path === '/contas-a-receber') return 'Contas a Receber'
     if (path === '/clientes') return 'Clientes'
     if (path === '/audios') return 'Histórico de Ditados & Áudios'
@@ -77,6 +79,7 @@ export default function Layout() {
   const baseNavItems: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Orçamentos', path: '/orcamentos', icon: FileText },
+    { label: 'Concluídos', path: '/concluidos', icon: CheckCircle },
     { label: 'Contas a Receber', path: '/contas-a-receber', icon: DollarSign },
     { label: 'Gastos', path: '/gastos', icon: DollarSign },
     { label: 'Assistente de Campo', path: '/assistente-campo', icon: Camera },
@@ -449,6 +452,25 @@ export default function Layout() {
                   type="button"
                   onClick={() => {
                     setMobileMoreOpen(false)
+                    navigate('/concluidos')
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                    location.pathname === '/concluidos'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1">
+                    <CheckCircle className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-semibold">Concluídos</span>
+                  <span className="text-[10px] text-slate-500">Serviços/Vendas</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false)
                     navigate('/gastos')
                   }}
                   className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
@@ -721,6 +743,7 @@ export default function Layout() {
             onClick={() => setMobileMoreOpen((prev) => !prev)}
             className={`flex flex-col items-center justify-center py-1 px-2 transition-colors ${
               mobileMoreOpen ||
+              location.pathname === '/concluidos' ||
               location.pathname === '/gastos' ||
               location.pathname === '/assistente-campo' ||
               location.pathname === '/contas-a-receber' ||
