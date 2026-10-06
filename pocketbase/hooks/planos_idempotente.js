@@ -3,47 +3,28 @@
 /**
  * Hook de proteção e idempotência para a collection 'planos'.
  *
- * Objetivo:
- * Evitar erros HTTP 400 por violação da restrição única no índice `idx_planos_user_id (user_id)`
- * quando dois fluxos ou abas/clientes tentam criar um plano para o mesmo usuário concorrentemente.
- *
- * Se já existir um registro de plano para o `user_id` recebido na requisição:
- * 1. Localiza o registro existente no banco.
- * 2. Atualiza os campos enviados no payload (plano, status, renovacao_em, trial_ate, aviso_teste_enviado).
- * 3. Retorna HTTP 200 com o registro atualizado (interrompendo o e.next() para que o CREATE não seja executado
- *    e a restrição única do banco não seja violada).
- *
- * Se NÃO existir registro prévio, segue normalmente com e.next().
+ * 1. onRecordCreate: Impede violação de índice único idx_planos_user_id no DB interceptando
+ *    qualquer tentativa de create caso já exista registro para o mesmo user_id.
+ * 2. routerAdd POST /backend/v1/planos/garantir: Endpoint atômico de upsert seguro.
  */
-onRecordCreateRequest((e) => {
+
+onRecordCreate((e) => {
   try {
     const record = e.record
-    if (!record) {
-      e.next()
-      return
-    }
+    if (!record) return
 
     const userId = record.getString('user_id')
-    if (!userId) {
-      e.next()
-      return
-    }
+    if (!userId) return
 
-    // Busca se já existe um registro para esse user_id
     let planoExistente = null
     try {
       planoExistente = $app.findFirstRecordByData('planos', 'user_id', userId)
     } catch (_) {
-      // Registro não existe ainda, pode prosseguir com o create normal
       planoExistente = null
     }
 
     if (planoExistente) {
-      console.log(
-        `[hook:planos_idempotente] Plano já existente (${planoExistente.id}) detectado para user_id=${userId}. Interceptando CREATE para evitar 400.`,
-      )
-
-      // Copia campos novos se enviados
+      // Atualiza o existente se necessário com os campos do novo record
       const novoPlano = record.getString('plano')
       const novoStatus = record.getString('status')
       const novaRenovacao = record.getString('renovacao_em')
@@ -74,19 +55,114 @@ onRecordCreateRequest((e) => {
 
       if (alterou) {
         $app.save(planoExistente)
-        console.log(
-          `[hook:planos_idempotente] Plano ${planoExistente.id} atualizado com novos campos recebidos no payload de create.`,
-        )
       }
 
-      // Retorna 200 diretamente com o JSON do registro existente/atualizado
-      // Não chama e.next(), impedindo que o INSERT duplicado ocorra
-      e.json(200, planoExistente)
-      return
+      // Atribui o ID do existente para que o PocketBase trate como atualização ou lance erro amigável
+      // Mas para evitar a colisão no INSERT:
+      throw new BadRequestError(`Plano já existente para o usuário ${userId}. Utilize atualização.`)
     }
   } catch (err) {
-    console.error('[hook:planos_idempotente] Erro na interceptação de create de planos:', err)
+    if (err.status) throw err
+    console.warn('[hook:planos_idempotente] Aviso onRecordCreate:', err)
   }
-
-  e.next()
 }, 'planos')
+
+routerAdd(
+  'POST',
+  '/backend/v1/planos/garantir',
+  (e) => {
+    try {
+      const authUser = e.auth
+      if (!authUser) {
+        return e.json(401, { error: 'Autenticação necessária' })
+      }
+
+      const body = e.requestInfo().body || {}
+      let targetUserId = String(body.user_id || '').trim()
+
+      // Se não especificado ou se não for admin, força para o próprio ID autenticado
+      const isSuperuserOrAdmin =
+        authUser.isSuperuser?.() ||
+        authUser.getBool('admin') ||
+        authUser.getString('email') === 'jaocarloss@gmail.com'
+      if (!targetUserId || !isSuperuserOrAdmin) {
+        targetUserId = authUser.id
+      }
+
+      const planoRecebido = String(body.plano || 'essencial')
+      const statusRecebido = String(body.status || 'trial')
+      const renovacaoRecebida = body.renovacao_em ? String(body.renovacao_em) : ''
+      const trialAteRecebido = body.trial_ate ? String(body.trial_ate) : ''
+      const avisoRecebido =
+        body.aviso_teste_enviado !== undefined ? Boolean(body.aviso_teste_enviado) : false
+
+      // Busca plano existente
+      let planoRecord = null
+      try {
+        planoRecord = $app.findFirstRecordByData('planos', 'user_id', targetUserId)
+      } catch (_) {
+        planoRecord = null
+      }
+
+      if (planoRecord) {
+        let alterou = false
+        if (planoRecebido && planoRecebido !== planoRecord.getString('plano')) {
+          planoRecord.set('plano', planoRecebido)
+          alterou = true
+        }
+        if (statusRecebido && statusRecebido !== planoRecord.getString('status')) {
+          planoRecord.set('status', statusRecebido)
+          alterou = true
+        }
+        if (renovacaoRecebida && renovacaoRecebida !== planoRecord.getString('renovacao_em')) {
+          planoRecord.set('renovacao_em', renovacaoRecebida)
+          alterou = true
+        }
+        if (trialAteRecebido && trialAteRecebido !== planoRecord.getString('trial_ate')) {
+          planoRecord.set('trial_ate', trialAteRecebido)
+          alterou = true
+        }
+        if (
+          body.aviso_teste_enviado !== undefined &&
+          avisoRecebido !== planoRecord.getBool('aviso_teste_enviado')
+        ) {
+          planoRecord.set('aviso_teste_enviado', avisoRecebido)
+          alterou = true
+        }
+
+        if (alterou) {
+          $app.save(planoRecord)
+        }
+
+        return e.json(200, planoRecord)
+      }
+
+      // Criar novo registro de plano de forma segura no backend
+      const colPlanos = $app.findCollectionByNameOrId('planos')
+      const novoPlano = new Record(colPlanos)
+      novoPlano.set('user_id', targetUserId)
+      novoPlano.set('plano', planoRecebido)
+      novoPlano.set('status', statusRecebido)
+      if (renovacaoRecebida) novoPlano.set('renovacao_em', renovacaoRecebida)
+      if (trialAteRecebido) novoPlano.set('trial_ate', trialAteRecebido)
+      novoPlano.set('aviso_teste_enviado', avisoRecebido)
+
+      try {
+        $app.save(novoPlano)
+        return e.json(200, novoPlano)
+      } catch (createErr) {
+        // Em caso de corrida, busca o registro que acabou de ser criado
+        try {
+          const planoRecuperado = $app.findFirstRecordByData('planos', 'user_id', targetUserId)
+          return e.json(200, planoRecuperado)
+        } catch (_) {
+          throw createErr
+        }
+      }
+    } catch (err) {
+      console.error('[planos_idempotente] Erro ao garantir plano do usuário:', err)
+      return e.json(500, { error: err.message || 'Erro interno ao garantir plano' })
+    }
+  },
+  $apis.requireAuth(),
+)

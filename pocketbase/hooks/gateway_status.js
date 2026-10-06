@@ -202,20 +202,24 @@ routerAdd(
                   : 'Webhook ativo e recebendo notificações da Asaas normalmente.',
               }
 
-              // SE ESTIVER INTERROMPIDO, AUTO-REATIVA IMEDIATAMENTE NA PRÓPRIA REQUISIÇÃO!
-              if (isInterrupted) {
+              // SE ESTIVER INTERROMPIDO OU DESATIVADO, AUTO-REATIVA IMEDIATAMENTE NA PRÓPRIA REQUISIÇÃO!
+              if (isInterrupted || !isEnabled) {
                 try {
                   console.log(
-                    `[gateway_status] Webhook ${targetWebhook.id} detectado como Interrompido. Executando auto-reativação imediata via PUT /v3/webhooks/${targetWebhook.id}...`,
+                    `[gateway_status] Webhook ${targetWebhook.id} detectado como Interrompido=${isInterrupted} ou Desativado. Executando auto-reativação imediata via PUT /v3/webhooks/${targetWebhook.id}...`,
                   )
+                  const putBody = {
+                    enabled: true,
+                    interrupted: false,
+                  }
+                  if (webhookToken) {
+                    putBody.authToken = webhookToken
+                  }
                   const resPut = $http.send({
                     url: `${asaasBaseUrl}/webhooks/${targetWebhook.id}`,
                     method: 'PUT',
                     headers: headersAsaas,
-                    body: JSON.stringify({
-                      enabled: true,
-                      interrupted: false,
-                    }),
+                    body: JSON.stringify(putBody),
                     timeout: 15,
                   })
 

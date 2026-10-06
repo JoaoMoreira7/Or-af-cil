@@ -145,14 +145,19 @@ routerAdd(
       // - enabled: true (garante webhook ativo)
       let resPut = null
       try {
+        const putPayload = {
+          enabled: true,
+          interrupted: false,
+        }
+        if (webhookToken) {
+          putPayload.authToken = webhookToken
+        }
+
         resPut = $http.send({
           url: `${asaasBaseUrl}/webhooks/${webhookId}`,
           method: 'PUT',
           headers: headers,
-          body: JSON.stringify({
-            enabled: true,
-            interrupted: false,
-          }),
+          body: JSON.stringify(putPayload),
           timeout: 15,
         })
       } catch (putErr) {

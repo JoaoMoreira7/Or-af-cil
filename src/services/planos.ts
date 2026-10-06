@@ -96,7 +96,38 @@ export const planosService = {
       return planoExistente
     }
 
-    // 2. Não existe registro: cria com payload validado
+    // 2. Não existe registro no client: chama endpoint seguro de upsert atômico do backend
+    try {
+      const payloadGarantir = {
+        user_id: userId,
+        plano: planoNormalizado,
+        status: statusNormalizado,
+        renovacao_em: dados.renovacao_em || null,
+        trial_ate: dados.trial_ate || null,
+        aviso_teste_enviado:
+          dados.aviso_teste_enviado !== undefined ? dados.aviso_teste_enviado : false,
+      }
+      const resultadoBackend = await pb.send<PlanoAssinatura>('/backend/v1/planos/garantir', {
+        method: 'POST',
+        body: payloadGarantir,
+        requestKey: null,
+      })
+      if (resultadoBackend?.id) {
+        return resultadoBackend
+      }
+    } catch (endpointErr) {
+      console.warn(
+        '[planosService] Falha no endpoint /backend/v1/planos/garantir, tentando fallback:',
+        endpointErr,
+      )
+    }
+
+    // 3. Fallback: antes de criar, re-verifica mais uma vez
+    const rechecagem = await this.obterPlanoUsuario(userId)
+    if (rechecagem) {
+      return rechecagem
+    }
+
     const payloadCreate: Record<string, unknown> = {
       user_id: userId,
       plano: planoNormalizado,
