@@ -477,7 +477,6 @@ export default function AssistenteDeCampo() {
         })
         cliId = defaultCli.id
       }
-
       // 2. Cria orçamento
       const itensOrc = itens.map((it) => ({
         descricao: it.descricao,
