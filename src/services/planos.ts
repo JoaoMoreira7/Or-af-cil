@@ -21,12 +21,22 @@ export const planosService = {
       }
       return null
     } catch (err: unknown) {
-      // Se for abort de requisição concorrente ou 404, não loga erro ruidoso
+      // Se for abort de requisição concorrente ou 404, tenta fallback imediato
       const isAbort = (err as { isAbort?: boolean })?.isAbort
       if (!isAbort) {
-        console.warn('[planosService] Aviso ao buscar plano do usuário:', err)
+        console.warn('[planosService] Aviso ao buscar plano do usuário, tentando fallback:', err)
       }
-      return null
+      // Tenta fallback com getFullList ou getFirstListItem
+      try {
+        const item = await pb
+          .collection('planos')
+          .getFirstListItem<PlanoAssinatura>(`user_id = "${userId}"`, {
+            requestKey: null,
+          })
+        return item
+      } catch {
+        return null
+      }
     }
   },
 
@@ -98,9 +108,11 @@ export const planosService = {
       payloadCreate.aviso_teste_enviado = dados.aviso_teste_enviado
 
     try {
-      return await pb.collection('planos').create<PlanoAssinatura>(payloadCreate)
+      return await pb.collection('planos').create<PlanoAssinatura>(payloadCreate, {
+        requestKey: null,
+      })
     } catch {
-      // Corrida: outro fluxo acabou de criar este registro
+      // Corrida: outro fluxo acabou de criar este registro ou índice único
       const rec = await this.obterPlanoUsuario(userId)
       if (rec) {
         return rec
