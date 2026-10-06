@@ -1,4 +1,14 @@
 // @ts-nocheck
+routerAdd('GET', '/backend/v1/asaas/webhook', (e) => {
+  return e.json(200, {
+    status: 'ok',
+    servico: 'OrçaFácil Webhook Asaas',
+    endpoint: '/backend/v1/asaas/webhook',
+    metodos_aceitos: ['GET', 'POST'],
+    timestamp: new Date().toISOString(),
+  })
+})
+
 routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
   try {
     const headers = e.requestInfo().headers || {}

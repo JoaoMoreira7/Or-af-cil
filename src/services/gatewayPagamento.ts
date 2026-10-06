@@ -524,12 +524,25 @@ export const gatewayPagamentoService = {
       cpf_cnpj?: string
       ultima_checagem?: string
     } | null
+    auto_reativado?: boolean
+    reativacao_resultado?: unknown
     webhook: {
       url: string
       token_configurado: boolean
       token_mascarado: string
       token_origem: string
       eventos_obrigatorios: string[]
+      status_real?: {
+        consultado: boolean
+        status: string
+        interrupted: boolean
+        enabled: boolean
+        webhook_id?: string
+        nome?: string
+        url?: string
+        email?: string
+        mensagem?: string
+      }
     }
   }> {
     return await pb.send('/backend/v1/admin/gateway/status', {

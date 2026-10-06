@@ -51,12 +51,25 @@ interface GatewayStatusData {
     cpf_cnpj?: string
     ultima_checagem?: string
   } | null
+  auto_reativado?: boolean
+  reativacao_resultado?: unknown
   webhook: {
     url: string
     token_configurado: boolean
     token_mascarado: string
     token_origem: string
     eventos_obrigatorios: string[]
+    status_real?: {
+      consultado: boolean
+      status: string
+      interrupted: boolean
+      enabled: boolean
+      webhook_id?: string
+      nome?: string
+      url?: string
+      email?: string
+      mensagem?: string
+    }
   }
 }
 
@@ -680,39 +693,55 @@ export default function AdminGateway() {
           </CardContent>
         </Card>
 
-        {/* CARD 3: STATUS DO WEBHOOK */}
+        {/* CARD 3: STATUS REAL DO WEBHOOK NA ASAAS */}
         <Card className="border-slate-200 shadow-sm bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Segurança do Webhook
+              Status na Asaas
             </CardTitle>
             <Globe className="w-4 h-4 text-indigo-600" />
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
               {loading ? (
-                <div className="text-sm text-slate-400">Verificando...</div>
-              ) : status?.webhook.token_configurado ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span className="text-base font-bold text-slate-900">
-                    {status.webhook.token_mascarado}
-                  </span>
-                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-300 text-[10px] ml-auto">
-                    Protegido
-                  </Badge>
-                </>
+                <div className="text-sm text-slate-400">Consultando Asaas...</div>
+              ) : status?.webhook?.status_real?.consultado ? (
+                status.webhook.status_real.interrupted ? (
+                  <>
+                    <div className="w-3 h-3 rounded-full bg-rose-500 animate-pulse" />
+                    <span className="text-base font-bold text-rose-700">Interrompido</span>
+                    <Badge className="bg-rose-100 text-rose-800 border-rose-300 text-[10px] font-bold ml-auto">
+                      Requer Reativação
+                    </Badge>
+                  </>
+                ) : status.webhook.status_real.enabled ? (
+                  <>
+                    <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                    <span className="text-base font-bold text-emerald-700">Ativado</span>
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] font-bold ml-auto">
+                      Fila Normal
+                    </Badge>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-3 h-3 rounded-full bg-slate-400" />
+                    <span className="text-base font-bold text-slate-700">Desativado</span>
+                  </>
+                )
               ) : (
                 <>
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  <span className="text-sm font-semibold text-amber-700">Sem Token Gravado</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm font-bold text-slate-900">
+                    {status?.webhook?.token_mascarado || 'Configurado'}
+                  </span>
                 </>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-2">
-              {status?.webhook.token_configurado
-                ? 'Requisições sem token válido são rejeitadas'
-                : 'Recomendado gerar um token para evitar fraudes'}
+            <p className="text-xs text-slate-500 mt-2 truncate">
+              {status?.webhook?.status_real?.mensagem ||
+                (status?.webhook.token_configurado
+                  ? 'Token de segurança ativo e validando requisições'
+                  : 'Recomendado gerar um token')}
             </p>
           </CardContent>
         </Card>
@@ -916,6 +945,60 @@ export default function AdminGateway() {
         </CardHeader>
 
         <CardContent className="p-6 space-y-5">
+          {/* BANNER DE STATUS REAL DO WEBHOOK NA ASAAS */}
+          {status?.webhook?.status_real && (
+            <div
+              className={`p-4 rounded-2xl border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                status.webhook.status_real.interrupted
+                  ? 'bg-rose-50 border-rose-200 text-rose-950'
+                  : status.webhook.status_real.status === 'Ativado'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                    : 'bg-slate-50 border-slate-200 text-slate-800'
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                {status.webhook.status_real.interrupted ? (
+                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                ) : status.webhook.status_real.status === 'Ativado' ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <Info className="w-5 h-5 text-slate-500 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold">
+                      Status Real no Painel Asaas: {status.webhook.status_real.status}
+                    </span>
+                    {status.webhook.status_real.webhook_id && (
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white/70 border border-current">
+                        ID: {status.webhook.status_real.webhook_id}
+                      </span>
+                    )}
+                    {status.webhook.status_real.nome && (
+                      <span className="text-[11px] opacity-80">
+                        • {status.webhook.status_real.nome}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs opacity-90">{status.webhook.status_real.mensagem}</p>
+                </div>
+              </div>
+
+              {status.webhook.status_real.interrupted && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleReativarFilaWebhook}
+                  disabled={reativandoFila}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shrink-0 self-stretch sm:self-auto gap-1 shadow-sm"
+                >
+                  <PlayCircle className="w-3.5 h-3.5" />
+                  Reativar Imediatamente
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* URL DO WEBHOOK PARA COPIAR */}
           <div className="space-y-1.5">
             <Label className="text-xs font-bold text-slate-700">
