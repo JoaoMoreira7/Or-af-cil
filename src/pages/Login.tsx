@@ -123,6 +123,7 @@ export default function Login() {
               <Input
                 id="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="seu.email@exemplo.com"
@@ -148,6 +149,7 @@ export default function Login() {
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
@@ -180,13 +182,6 @@ export default function Login() {
               )}
             </Button>
           </form>
-
-          {/* Dica de acesso padrão */}
-          <div className="mt-4 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-600 text-center">
-            <span className="font-semibold text-slate-800">Acesso de demonstração:</span>
-            <br />
-            jaocarloss@gmail.com / Skip@Pass
-          </div>
 
           <div className="mt-6 text-center text-xs text-slate-600">
             Não possui uma conta?{' '}
