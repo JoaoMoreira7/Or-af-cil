@@ -9,7 +9,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
       headers['ASAAS-ACCESS-TOKEN'] ||
       ''
 
-    const expectedToken = $os.getenv('ASAAS_WEBHOOK_TOKEN') || 'orcafacil_asaas_wh_sec_2025_prod'
+    const expectedToken = $os.getenv('ASAAS_WEBHOOK_TOKEN')
 
     if (expectedToken && receivedToken && receivedToken !== expectedToken) {
       console.warn(`[asaas_webhook] Token do webhook inválido recebido: "${receivedToken}"`)
