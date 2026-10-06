@@ -56,9 +56,28 @@ export const planosService = {
   },
 
   async iniciarOuVerificarTrial(userId: string): Promise<PlanoAssinatura> {
+    // Se o usuário atual for o dono do sistema, garante plano ativo vitalício
+    const authUser = pb.authStore.record
+    const isDono =
+      authUser?.id === userId &&
+      (authUser?.email || '').toLowerCase().trim() === 'jaocarloss@gmail.com'
+
     const planoExistente = await this.obterPlanoUsuario(userId)
     if (planoExistente) {
-      // Se está em trial, verifica se expirou
+      if (isDono) {
+        // Conta do dono: sempre ativo no plano premium vitalício, nunca expirado
+        if (planoExistente.status !== 'ativo' || planoExistente.plano !== 'premium') {
+          return await pb.collection('planos').update<PlanoAssinatura>(planoExistente.id, {
+            status: 'ativo',
+            plano: 'premium',
+            renovacao_em: '2099-12-31T23:59:59.000Z',
+            trial_ate: '2099-12-31T23:59:59.000Z',
+          })
+        }
+        return planoExistente
+      }
+
+      // Se está em trial, verifica se expirou (apenas para usuários comuns)
       if (planoExistente.status === 'trial' && planoExistente.trial_ate) {
         const agora = new Date()
         const trialAte = new Date(planoExistente.trial_ate)
@@ -70,6 +89,22 @@ export const planosService = {
         }
       }
       return planoExistente
+    }
+
+    if (isDono) {
+      // Se por algum motivo o dono não tiver registro, cria já como ativo premium vitalício
+      try {
+        return await pb.collection('planos').create<PlanoAssinatura>({
+          user_id: userId,
+          plano: 'premium',
+          status: 'ativo',
+          renovacao_em: '2099-12-31T23:59:59.000Z',
+          trial_ate: '2099-12-31T23:59:59.000Z',
+          aviso_teste_enviado: true,
+        })
+      } catch (err) {
+        console.error('Erro ao criar plano do dono:', err)
+      }
     }
 
     // Cria trial de 7 dias iniciando no plano Essencial

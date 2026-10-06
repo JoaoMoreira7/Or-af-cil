@@ -45,6 +45,7 @@ export const Planos: React.FC = () => {
     isTrial,
     isAtivo,
     isExpirado: isBloqueado,
+    isDono,
     diasRestantesTrial,
     planoId: planoIdAtual,
     assinarPlano: assinarPlanoSimulado,
@@ -439,39 +440,63 @@ export const Planos: React.FC = () => {
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold uppercase tracking-wider text-blue-300">
-                Status da sua assinatura
+                Status da sua conta
               </span>
 
-              {isAtivo && (
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Plano Ativo ({planoUsuarioAtualConfig.nome})
+              {isDono ? (
+                <span className="px-3 py-1 rounded-full text-xs font-bold uppercase bg-gradient-to-r from-amber-500/30 to-amber-400/20 text-amber-300 border border-amber-400/50 flex items-center gap-1.5 shadow-sm">
+                  👑 Conta do Proprietário — Acesso Livre Vitalício
                 </span>
-              )}
+              ) : (
+                <>
+                  {isAtivo && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Plano Ativo ({planoUsuarioAtualConfig.nome})
+                    </span>
+                  )}
 
-              {isTrial && !isBloqueado && (
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Teste Grátis: {diasRestantesTrial}{' '}
-                  {diasRestantesTrial === 1 ? 'dia restante' : 'dias restantes'}
-                </span>
-              )}
+                  {isTrial && !isBloqueado && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Teste Grátis: {diasRestantesTrial}{' '}
+                      {diasRestantesTrial === 1 ? 'dia restante' : 'dias restantes'}
+                    </span>
+                  )}
 
-              {isBloqueado && (
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-400/30 flex items-center gap-1">
-                  <Lock className="w-3 h-3" /> Teste Expirado / Bloqueado
-                </span>
+                  {isBloqueado && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-400/30 flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> Teste Expirado / Bloqueado
+                    </span>
+                  )}
+                </>
               )}
             </div>
 
             <h3 className="text-2xl font-extrabold text-white flex items-center gap-2">
-              Plano {planoUsuarioAtualConfig.nome}
-              <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-white/10 text-slate-200">
-                {planoUsuarioAtualConfig.posicionamento}
-              </span>
+              {isDono ? (
+                <>
+                  Plano Premium (Acesso Total)
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/40">
+                    Proprietário
+                  </span>
+                </>
+              ) : (
+                <>
+                  Plano {planoUsuarioAtualConfig.nome}
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-white/10 text-slate-200">
+                    {planoUsuarioAtualConfig.posicionamento}
+                  </span>
+                </>
+              )}
             </h3>
 
             <p className="text-xs text-slate-300 flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-              {isAtivo ? (
+              {isDono ? (
+                <span className="text-emerald-300 font-medium">
+                  Sua conta de proprietário (<strong>{user?.email}</strong>) tem isenção permanente
+                  de mensalidade e acesso irrestrito a todos os módulos do OrçaFácil.
+                </span>
+              ) : isAtivo ? (
                 <span>
                   Renovação prevista em:{' '}
                   <strong>
@@ -493,11 +518,24 @@ export const Planos: React.FC = () => {
           </div>
 
           <div className="sm:text-right pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
-            <span className="text-3xl font-extrabold tabular-nums text-white">
-              {planoUsuarioAtualConfig.precoFormatado}
-            </span>
-            <span className="text-xs text-slate-400 ml-1">/mês</span>
-            <p className="text-[11px] text-blue-200 mt-1">Cobrança mensal Asaas</p>
+            {isDono ? (
+              <div>
+                <span className="text-2xl sm:text-3xl font-extrabold text-amber-300">
+                  Gratuito / Isento
+                </span>
+                <p className="text-[11px] text-amber-200/80 mt-1">
+                  Sem mensalidade · Acesso vitalício
+                </p>
+              </div>
+            ) : (
+              <div>
+                <span className="text-3xl font-extrabold tabular-nums text-white">
+                  {planoUsuarioAtualConfig.precoFormatado}
+                </span>
+                <span className="text-xs text-slate-400 ml-1">/mês</span>
+                <p className="text-[11px] text-blue-200 mt-1">Cobrança mensal Asaas</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -617,36 +655,48 @@ export const Planos: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Botão de Escolha do Plano */}
+                {/* Botão de Escolha do Plano ou Selo de Acesso Livre para o Dono */}
                 <div className="pt-2">
-                  <Button
-                    size="lg"
-                    onClick={() => handleOpenCheckout(planoItem.id)}
-                    className={`w-full h-12 rounded-xl font-bold text-sm shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2 ${
-                      isDestaque
-                        ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:brightness-110 text-white shadow-blue-500/25 ring-2 ring-blue-600/30'
-                        : planoItem.id === 'premium'
-                          ? 'bg-gradient-to-r from-slate-900 to-purple-950 hover:bg-slate-800 text-white shadow-purple-950/20'
-                          : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/10'
-                    }`}
-                  >
-                    {isPlanoAtual ? (
-                      <>
-                        <Check className="w-4 h-4 text-emerald-400" />
-                        Renovar {planoItem.nome} ({planoItem.precoFormatado})
-                      </>
-                    ) : (
-                      <>
-                        <span>
-                          Contratar {planoItem.nome} ({planoItem.precoFormatado})
-                        </span>
-                        <ArrowRight className="w-4 h-4" />
-                      </>
-                    )}
-                  </Button>
+                  {isDono ? (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3 text-center">
+                      <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-900">
+                        <Check className="w-4 h-4 text-amber-600" />
+                        <span>Acesso Livre Vitalício</span>
+                      </div>
+                      <p className="text-[11px] text-amber-700 mt-0.5">
+                        Conta do proprietário liberada de cobrança
+                      </p>
+                    </div>
+                  ) : (
+                    <Button
+                      size="lg"
+                      onClick={() => handleOpenCheckout(planoItem.id)}
+                      className={`w-full h-12 rounded-xl font-bold text-sm shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2 ${
+                        isDestaque
+                          ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:brightness-110 text-white shadow-blue-500/25 ring-2 ring-blue-600/30'
+                          : planoItem.id === 'premium'
+                            ? 'bg-gradient-to-r from-slate-900 to-purple-950 hover:bg-slate-800 text-white shadow-purple-950/20'
+                            : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/10'
+                      }`}
+                    >
+                      {isPlanoAtual ? (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-400" />
+                          Renovar {planoItem.nome} ({planoItem.precoFormatado})
+                        </>
+                      ) : (
+                        <>
+                          <span>
+                            Contratar {planoItem.nome} ({planoItem.precoFormatado})
+                          </span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </Button>
+                  )}
                   <p className="text-[10px] text-center text-slate-400 mt-2 flex items-center justify-center gap-1">
                     <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                    PIX Instantâneo Oficial Asaas
+                    {isDono ? 'Conta de Administrador Master' : 'PIX Instantâneo Oficial Asaas'}
                   </p>
                 </div>
               </div>

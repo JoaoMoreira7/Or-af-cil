@@ -337,10 +337,17 @@ export default function Layout() {
             {isAtivo && (
               <div
                 onClick={() => navigate('/planos')}
-                className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800 cursor-pointer hover:bg-emerald-100 transition-colors"
+                className={`hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer transition-colors ${
+                  isDono
+                    ? 'bg-gradient-to-r from-amber-50 to-amber-100 border border-amber-300 text-amber-900 hover:from-amber-100 hover:to-amber-200'
+                    : 'bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100'
+                }`}
+                title={isDono ? 'Conta de Proprietário — Acesso Livre Vitalício' : 'Plano Ativo'}
               >
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Plano Ativo</span>
+                <span
+                  className={`w-2 h-2 rounded-full ${isDono ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`}
+                />
+                <span>{isDono ? '👑 Acesso Livre (Dono)' : 'Plano Ativo'}</span>
               </div>
             )}
 

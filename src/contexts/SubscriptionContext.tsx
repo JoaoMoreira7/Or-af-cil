@@ -28,6 +28,7 @@ interface SubscriptionContextType {
   isAtivo: boolean
   isExpirado: boolean
   isBloqueado: boolean
+  isDono: boolean
   diasRestantesTrial: number
   planoId: PlanoId
   planoConfig: PlanoConfig
@@ -67,33 +68,40 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     carregarAssinatura()
   }, [carregarAssinatura])
 
-  // Cálculos de status
-  const isTrial = assinatura?.status === 'trial'
-  const isAtivo = assinatura?.status === 'ativo'
-  const isExpirado = assinatura?.status === 'expirado'
-  const isBloqueado = isExpirado
+  // Identificação do dono do produto (jaocarloss@gmail.com)
+  const isDono = user?.email?.toLowerCase().trim() === 'jaocarloss@gmail.com'
+
+  // Cálculos de status (para o dono: SEMPRE ativo, NUNCA trial, NUNCA expirado, NUNCA bloqueado)
+  const isTrial = isDono ? false : assinatura?.status === 'trial'
+  const isAtivo = isDono ? true : assinatura?.status === 'ativo'
+  const isExpirado = isDono ? false : assinatura?.status === 'expirado'
+  const isBloqueado = isDono ? false : isExpirado
 
   const diasRestantesTrial = React.useMemo(() => {
+    if (isDono) return 0
     if (!assinatura?.trial_ate) return 0
     const agora = new Date()
     const trialAte = new Date(assinatura.trial_ate)
     const diffMs = trialAte.getTime() - agora.getTime()
     const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
     return diffDias > 0 ? diffDias : 0
-  }, [assinatura?.trial_ate])
+  }, [isDono, assinatura?.trial_ate])
 
-  const planoId: PlanoId = normalizarPlanoId(assinatura?.plano)
+  // Dono tem acesso total no plano 'premium'
+  const planoId: PlanoId = isDono ? 'premium' : normalizarPlanoId(assinatura?.plano)
   const planoConfig: PlanoConfig = obterConfigPlano(planoId)
 
   // Verificação de gate de recurso por nível de plano
   const temAcessoRecurso = useCallback(
     (planoMinimo: PlanoId): boolean => {
+      // Dono do sistema tem acesso irrestrito a todos os recursos da aplicação
+      if (isDono) return true
       if (isExpirado) return false
       // No período de testes liberamos todos os recursos para experimentação completa da ferramenta
       if (isTrial && diasRestantesTrial > 0) return true
       return planoTemAcesso(planoId, planoMinimo)
     },
-    [isExpirado, isTrial, diasRestantesTrial, planoId],
+    [isDono, isExpirado, isTrial, diasRestantesTrial, planoId],
   )
 
   const assinarPlano = async (params?: AssinarPlanoParams) => {
@@ -153,6 +161,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         isAtivo,
         isExpirado,
         isBloqueado,
+        isDono,
         diasRestantesTrial,
         planoId,
         planoConfig,

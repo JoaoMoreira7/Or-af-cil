@@ -62,6 +62,11 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
           continue
         }
 
+        // Ignora conta do dono do produto (acesso vitalício sem cobrança/aviso de teste)
+        if (emailDestinatario.toLowerCase().trim() === 'jaocarloss@gmail.com') {
+          continue
+        }
+
         console.log(
           `[cron:aviso_fim_teste] Enviando aviso para ${emailDestinatario} (expira em ${Math.round(diffHoras / 24)} dias)...`,
         )
