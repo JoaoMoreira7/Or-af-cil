@@ -88,10 +88,10 @@ export const ResultadoDoMesCard: React.FC<ResultadoDoMesCardProps> = ({ userId }
       const rotulo = `${nomesMes[d.getMonth()].slice(0, 3)}/${String(ano).slice(2)}`
       const rotuloCompleto = `${nomesMes[d.getMonth()]} de ${ano}`
 
-      // Cobranças pagas neste mês
+      // Cobranças pagas neste mês (status 'pago' conforme CobrancaStatus)
       const cobMes = cobrancas.filter((c) => {
-        if (c.status !== 'paga') return false
-        const dataRef = c.data_pagamento || c.updated || c.created
+        if (c.status !== 'pago') return false
+        const dataRef = c.pago_em || c.updated || c.created
         return dataRef && dataRef.startsWith(chave)
       })
       const receita = cobMes.reduce((acc, c) => acc + (Number(c.valor) || 0), 0)

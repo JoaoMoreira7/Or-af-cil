@@ -69,6 +69,7 @@ export const aiInterpretarService = {
       nome_preferido?: string
       tom_resposta?: string
       usar_emojis?: boolean
+      contexto_gasto_padrao?: 'empresa' | 'pessoal'
     }
   }): Promise<RespostaInterpretacao> {
     const res = await fetch(`${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/interpretar`, {

@@ -270,6 +270,7 @@ export function Gastos() {
               nome_preferido: preferenciasIa.nome_preferido,
               tom_resposta: preferenciasIa.tom_resposta,
               usar_emojis: preferenciasIa.usar_emojis,
+              contexto_gasto_padrao: preferenciasIa.contexto_gasto_padrao,
             }
           : undefined,
       })
