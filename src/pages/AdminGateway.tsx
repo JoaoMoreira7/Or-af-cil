@@ -96,11 +96,19 @@ export default function AdminGateway() {
   // Cópia
   const [copiadoUrl, setCopiadoUrl] = useState<boolean>(false)
   const [copiadoNovoToken, setCopiadoNovoToken] = useState<boolean>(false)
+  const timerCopiadoUrlRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timerCopiadoTokenRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     isMountedRef.current = true
     return () => {
       isMountedRef.current = false
+      if (timerCopiadoUrlRef.current) {
+        clearTimeout(timerCopiadoUrlRef.current)
+      }
+      if (timerCopiadoTokenRef.current) {
+        clearTimeout(timerCopiadoTokenRef.current)
+      }
     }
   }, [])
 
@@ -269,27 +277,113 @@ export default function AdminGateway() {
     }
   }
 
-  const handleCopiarUrlWebhook = () => {
-    const url = status?.webhook.url || ''
-    if (!url) return
-    navigator.clipboard.writeText(url)
-    setCopiadoUrl(true)
-    toast({
-      title: 'URL do Webhook copiada!',
-      description: 'Cole esta URL nas configurações de Webhooks do painel Asaas.',
-    })
-    setTimeout(() => setCopiadoUrl(false), 3000)
+  /**
+   * Copia texto para a área de transferência com suporte robusto:
+   * 1. navigator.clipboard.writeText (se disponível em ambiente seguro HTTPS/localhost)
+   * 2. Fallback via document.execCommand('copy') com textarea invisível
+   */
+  const copiarTextoRobusto = async (texto: string): Promise<boolean> => {
+    if (!texto) return false
+
+    // Tentativa 1: Clipboard API nativa
+    if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(texto)
+        return true
+      } catch (err) {
+        console.warn('[AdminGateway] Clipboard API falhou, tentando fallback:', err)
+      }
+    }
+
+    // Tentativa 2: Fallback via textarea e execCommand('copy')
+    try {
+      const textarea = document.createElement('textarea')
+      textarea.value = texto
+      textarea.setAttribute('readonly', '')
+      textarea.style.position = 'fixed'
+      textarea.style.top = '0'
+      textarea.style.left = '0'
+      textarea.style.width = '2em'
+      textarea.style.height = '2em'
+      textarea.style.padding = '0'
+      textarea.style.border = 'none'
+      textarea.style.outline = 'none'
+      textarea.style.boxShadow = 'none'
+      textarea.style.background = 'transparent'
+      textarea.style.opacity = '0'
+      textarea.style.zIndex = '-9999'
+
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      textarea.setSelectionRange(0, textarea.value.length)
+
+      const copiadoSucesso = document.execCommand('copy')
+      document.body.removeChild(textarea)
+
+      if (copiadoSucesso) {
+        return true
+      }
+    } catch (err) {
+      console.error('[AdminGateway] Fallback execCommand falhou:', err)
+    }
+
+    return false
   }
 
-  const handleCopiarNovoToken = () => {
+  const handleCopiarUrlWebhook = async () => {
+    const url = status?.webhook.url || ''
+    if (!url) return
+
+    const sucesso = await copiarTextoRobusto(url)
+    if (!isMountedRef.current) return
+
+    if (sucesso) {
+      setCopiadoUrl(true)
+      toast({
+        title: 'URL do Webhook copiada!',
+        description: 'Cole esta URL nas configurações de Webhooks do painel Asaas.',
+      })
+      if (timerCopiadoUrlRef.current) clearTimeout(timerCopiadoUrlRef.current)
+      timerCopiadoUrlRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          setCopiadoUrl(false)
+        }
+      }, 3000)
+    } else {
+      toast({
+        title: 'Não foi possível copiar automaticamente',
+        description: 'Selecione o texto do campo abaixo e copie com Ctrl+C / Cmd+C.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleCopiarNovoToken = async () => {
     if (!novoTokenGerado) return
-    navigator.clipboard.writeText(novoTokenGerado)
-    setCopiadoNovoToken(true)
-    toast({
-      title: 'Token copiado!',
-      description: 'Token de autenticação do Webhook copiado para a área de transferência.',
-    })
-    setTimeout(() => setCopiadoNovoToken(false), 3000)
+
+    const sucesso = await copiarTextoRobusto(novoTokenGerado)
+    if (!isMountedRef.current) return
+
+    if (sucesso) {
+      setCopiadoNovoToken(true)
+      toast({
+        title: 'Token copiado!',
+        description: 'Token de autenticação do Webhook copiado para a área de transferência.',
+      })
+      if (timerCopiadoTokenRef.current) clearTimeout(timerCopiadoTokenRef.current)
+      timerCopiadoTokenRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          setCopiadoNovoToken(false)
+        }
+      }, 3000)
+    } else {
+      toast({
+        title: 'Não foi possível copiar automaticamente',
+        description: 'Selecione o token no campo abaixo e copie com Ctrl+C / Cmd+C.',
+        variant: 'destructive',
+      })
+    }
   }
 
   const formatarDataIso = (iso?: string) => {
@@ -661,16 +755,22 @@ export default function AdminGateway() {
               <Input
                 readOnly
                 value={status?.webhook.url || ''}
-                className="font-mono text-xs bg-slate-50 text-slate-800 select-all"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                onFocus={(e) => (e.target as HTMLInputElement).select()}
+                className="font-mono text-xs bg-slate-50 text-slate-800 select-all cursor-text focus:ring-2 focus:ring-indigo-500 focus:bg-white"
               />
               <Button
                 type="button"
                 onClick={handleCopiarUrlWebhook}
-                variant="outline"
-                className="shrink-0 gap-1.5 text-xs font-semibold border-slate-300"
+                variant={copiadoUrl ? 'default' : 'outline'}
+                className={`shrink-0 gap-1.5 text-xs font-semibold transition-all ${
+                  copiadoUrl
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-sm'
+                    : 'border-slate-300 hover:bg-slate-100 text-slate-700'
+                }`}
               >
                 {copiadoUrl ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <CheckCircle2 className="w-4 h-4 text-white" />
                 ) : (
                   <Copy className="w-4 h-4 text-slate-600" />
                 )}
@@ -680,7 +780,7 @@ export default function AdminGateway() {
             <p className="text-[11px] text-slate-400">
               No painel Asaas, acesse:{' '}
               <strong>Minha Conta → Integrações → Webhooks para Cobranças</strong> e informe a URL
-              acima.
+              acima. (O texto do campo é selecionável com duplo clique ou clique simples).
             </p>
           </div>
 
@@ -925,19 +1025,25 @@ export default function AdminGateway() {
                   <Input
                     readOnly
                     value={novoTokenGerado}
-                    className="font-mono text-xs bg-slate-100 text-slate-900 select-all font-bold"
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                    onFocus={(e) => (e.target as HTMLInputElement).select()}
+                    className="font-mono text-xs bg-slate-100 text-slate-900 select-all font-bold cursor-text focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                   />
                   <Button
                     type="button"
                     onClick={handleCopiarNovoToken}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shrink-0 text-xs"
+                    className={`font-bold shrink-0 text-xs transition-all ${
+                      copiadoNovoToken
+                        ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    }`}
                   >
                     {copiadoNovoToken ? (
-                      <CheckCircle2 className="w-4 h-4 mr-1" />
+                      <CheckCircle2 className="w-4 h-4 mr-1 text-white" />
                     ) : (
                       <Copy className="w-4 h-4 mr-1" />
                     )}
-                    {copiadoNovoToken ? 'Copiado!' : 'Copiar'}
+                    {copiadoNovoToken ? 'Copiado!' : 'Copiar Token'}
                   </Button>
                 </div>
               </div>
