@@ -168,12 +168,14 @@ export function Gastos() {
   const mesAtualPadrao = new Date().toISOString().slice(0, 7) // 'YYYY-MM'
   const [mesFiltro, setMesFiltro] = useState<string>(mesAtualPadrao)
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('todas')
+  const [contextoFiltro, setContextoFiltro] = useState<'todos' | 'empresa' | 'pessoal'>('todos')
 
   // Card "O que a IA entendeu" (Pós-gravação de voz)
   const [reviewCardOpen, setReviewCardOpen] = useState<boolean>(false)
   const [reviewDescricao, setReviewDescricao] = useState<string>('')
   const [reviewValor, setReviewValor] = useState<number>(0)
   const [reviewCategoria, setReviewCategoria] = useState<CategoriaGasto>('Outros')
+  const [reviewContexto, setReviewContexto] = useState<'empresa' | 'pessoal'>('empresa')
   const [reviewData, setReviewData] = useState<string>(new Date().toISOString().slice(0, 10))
   const [reviewOrcamentoId, setReviewOrcamentoId] = useState<string>('')
   const [reviewMensagemIa, setReviewMensagemIa] = useState<string>('')
@@ -189,6 +191,7 @@ export function Gastos() {
   const [manualDescricao, setManualDescricao] = useState<string>('')
   const [manualValor, setManualValor] = useState<string>('')
   const [manualCategoria, setManualCategoria] = useState<CategoriaGasto>('Outros')
+  const [manualContexto, setManualContexto] = useState<'empresa' | 'pessoal'>('empresa')
   const [manualData, setManualData] = useState<string>(new Date().toISOString().slice(0, 10))
   const [manualOrcamentoId, setManualOrcamentoId] = useState<string>('')
   const [isSavingManual, setIsSavingManual] = useState<boolean>(false)
@@ -219,6 +222,7 @@ export function Gastos() {
         gastosService.listar({
           mesAno: mesFiltro || undefined,
           categoria: categoriaFiltro !== 'todas' ? categoriaFiltro : undefined,
+          contexto: contextoFiltro,
         }),
         orcamentosService.listar(),
         acoesVozService.obterUltimaAcaoAtiva24h(user.id),
@@ -245,7 +249,7 @@ export function Gastos() {
         setLoading(false)
       }
     }
-  }, [user?.id, mesFiltro, categoriaFiltro, toast])
+  }, [user?.id, mesFiltro, categoriaFiltro, contextoFiltro, toast])
 
   useEffect(() => {
     carregarDados()
@@ -315,6 +319,11 @@ export function Gastos() {
         setReviewDescricao(gExt.descricao || transcricao.trim())
         setReviewValor(gExt.valor || 0)
         setReviewCategoria(gExt.categoria || 'Outros')
+        setReviewContexto(
+          gExt.contexto === 'pessoal'
+            ? 'pessoal'
+            : preferenciasIa?.contexto_gasto_padrao || 'empresa',
+        )
         setReviewData(gExt.data || new Date().toISOString().slice(0, 10))
         setReviewOrcamentoId(gExt.orcamento_vinculado_id || '')
         setReviewMensagemIa(gExt.mensagem_resposta || '')
@@ -330,6 +339,7 @@ export function Gastos() {
         setReviewDescricao(transcricao.trim())
         setReviewValor(0)
         setReviewCategoria('Outros')
+        setReviewContexto(preferenciasIa?.contexto_gasto_padrao || 'empresa')
         setReviewData(new Date().toISOString().slice(0, 10))
         setReviewOrcamentoId('')
         setReviewMensagemIa(
@@ -377,6 +387,7 @@ export function Gastos() {
         descricao: reviewDescricao.trim(),
         valor: reviewValor,
         categoria: reviewCategoria,
+        contexto: reviewContexto,
         data: reviewData || new Date().toISOString().slice(0, 10),
         origem: 'voz',
         orcamento_vinculado: reviewOrcamentoId || null,
@@ -385,14 +396,15 @@ export function Gastos() {
       // Gerar recibo em acoes_voz com validade 24h para Desfazer
       const recibo = await acoesVozService.registrar({
         tipo_acao: 'registro_gasto',
-        titulo: `Gasto registrado: ${formatarMoedaBRL(novoGasto.valor)}`,
-        descricao_resumo: `${novoGasto.descricao} · Categoria: ${novoGasto.categoria}`,
+        titulo: `Gasto registrado (${reviewContexto === 'pessoal' ? '🏠 Pessoal' : '🏢 Empresa'}): ${formatarMoedaBRL(novoGasto.valor)}`,
+        descricao_resumo: `${novoGasto.descricao} · Categoria: ${novoGasto.categoria} · Contexto: ${reviewContexto === 'pessoal' ? 'Pessoal' : 'Empresa'}`,
         registro_id: novoGasto.id,
         dados_aplicados: {
           gasto_id: novoGasto.id,
           descricao: novoGasto.descricao,
           valor: novoGasto.valor,
           categoria: novoGasto.categoria,
+          contexto: reviewContexto,
           data: novoGasto.data,
           origem: 'voz',
           orcamento_vinculado: reviewOrcamentoId || null,
@@ -465,6 +477,7 @@ export function Gastos() {
     setManualDescricao('')
     setManualValor('')
     setManualCategoria('Outros')
+    setManualContexto(preferenciasIa?.contexto_gasto_padrao || 'empresa')
     setManualData(new Date().toISOString().slice(0, 10))
     setManualOrcamentoId('')
     setModalManualOpen(true)
@@ -476,6 +489,7 @@ export function Gastos() {
     setManualDescricao(g.descricao)
     setManualValor(String(g.valor))
     setManualCategoria(g.categoria)
+    setManualContexto(g.contexto === 'pessoal' ? 'pessoal' : 'empresa')
     setManualData(g.data ? g.data.slice(0, 10) : new Date().toISOString().slice(0, 10))
     setManualOrcamentoId(g.orcamento_vinculado || '')
     setModalManualOpen(true)
@@ -512,6 +526,7 @@ export function Gastos() {
           descricao: manualDescricao.trim(),
           valor: valNum,
           categoria: manualCategoria,
+          contexto: manualContexto,
           data: manualData,
           orcamento_vinculado: manualOrcamentoId || null,
         })
@@ -524,6 +539,7 @@ export function Gastos() {
           descricao: manualDescricao.trim(),
           valor: valNum,
           categoria: manualCategoria,
+          contexto: manualContexto,
           data: manualData,
           origem: 'manual',
           orcamento_vinculado: manualOrcamentoId || null,
@@ -532,14 +548,15 @@ export function Gastos() {
         // Recibo acoes_voz para permitir desfazer
         const recibo = await acoesVozService.registrar({
           tipo_acao: 'registro_gasto',
-          titulo: `Gasto manual registrado: ${formatarMoedaBRL(novo.valor)}`,
-          descricao_resumo: `${novo.descricao} · Categoria: ${novo.categoria}`,
+          titulo: `Gasto manual (${manualContexto === 'pessoal' ? '🏠 Pessoal' : '🏢 Empresa'}): ${formatarMoedaBRL(novo.valor)}`,
+          descricao_resumo: `${novo.descricao} · Categoria: ${novo.categoria} · Contexto: ${manualContexto === 'pessoal' ? 'Pessoal' : 'Empresa'}`,
           registro_id: novo.id,
           dados_aplicados: {
             gasto_id: novo.id,
             descricao: novo.descricao,
             valor: novo.valor,
             categoria: novo.categoria,
+            contexto: manualContexto,
             data: novo.data,
             origem: 'manual',
           },
@@ -591,8 +608,17 @@ export function Gastos() {
     }
   }
 
-  // Cálculos de totais da listagem atual
+  // Cálculos de totais da listagem atual (separados por empresa e pessoal)
   const totalGasto = gastos.reduce((acc, g) => acc + (Number(g.valor) || 0), 0)
+  const totalGastoEmpresa = gastos
+    .filter((g) => (g.contexto || 'empresa') === 'empresa')
+    .reduce((acc, g) => acc + (Number(g.valor) || 0), 0)
+  const totalGastoPessoal = gastos
+    .filter((g) => g.contexto === 'pessoal')
+    .reduce((acc, g) => acc + (Number(g.valor) || 0), 0)
+
+  const qtdEmpresa = gastos.filter((g) => (g.contexto || 'empresa') === 'empresa').length
+  const qtdPessoal = gastos.filter((g) => g.contexto === 'pessoal').length
 
   const gastosPorCategoria = CATEGORIAS.map((cat) => {
     const totalCat = gastos
@@ -759,8 +785,8 @@ export function Gastos() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="lg:col-span-2">
                 <label className="text-xs font-bold text-slate-700">Descrição do Gasto *</label>
                 <Input
                   value={reviewDescricao}
@@ -784,6 +810,26 @@ export function Gastos() {
               </div>
 
               <div>
+                <label className="text-xs font-bold text-slate-700">Contexto / Destino *</label>
+                <Select
+                  value={reviewContexto}
+                  onValueChange={(v) => setReviewContexto(v as 'empresa' | 'pessoal')}
+                >
+                  <SelectTrigger className="mt-1 h-9 text-xs font-semibold">
+                    <SelectValue placeholder="Contexto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="empresa" className="text-xs font-medium">
+                      🏢 Empresa (PJ / Negócio)
+                    </SelectItem>
+                    <SelectItem value="pessoal" className="text-xs font-medium">
+                      🏠 Pessoal (PF / Casa)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
                 <label className="text-xs font-bold text-slate-700">Categoria</label>
                 <Select
                   value={reviewCategoria}
@@ -801,7 +847,9 @@ export function Gastos() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-bold text-slate-700">Data do Gasto</label>
                 <Input
@@ -890,61 +938,176 @@ export function Gastos() {
         </div>
       )}
 
-      {/* CARDS DE TOTAIS DO MÊS */}
+      {/* SEGMENTADOR NO TOPO: TODOS / EMPRESA / PESSOAL */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200/80 max-w-fit">
+        <button
+          type="button"
+          onClick={() => setContextoFiltro('todos')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            contextoFiltro === 'todos'
+              ? 'bg-white text-slate-900 shadow-sm border border-slate-200/60'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <span>Todos os Gastos</span>
+          <Badge
+            variant="secondary"
+            className="text-[10px] py-0 px-1.5 bg-slate-100 text-slate-700"
+          >
+            {gastos.length}
+          </Badge>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setContextoFiltro('empresa')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            contextoFiltro === 'empresa'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-white/60'
+          }`}
+        >
+          <span>🏢 Empresa</span>
+          <Badge
+            variant="secondary"
+            className={`text-[10px] py-0 px-1.5 ${
+              contextoFiltro === 'empresa'
+                ? 'bg-indigo-700 text-white'
+                : 'bg-slate-200 text-slate-700'
+            }`}
+          >
+            {qtdEmpresa}
+          </Badge>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setContextoFiltro('pessoal')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            contextoFiltro === 'pessoal'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-emerald-900 hover:bg-white/60'
+          }`}
+        >
+          <span>🏠 Pessoal</span>
+          <Badge
+            variant="secondary"
+            className={`text-[10px] py-0 px-1.5 ${
+              contextoFiltro === 'pessoal'
+                ? 'bg-emerald-700 text-white'
+                : 'bg-slate-200 text-slate-700'
+            }`}
+          >
+            {qtdPessoal}
+          </Badge>
+        </button>
+      </div>
+
+      {/* CARDS DE TOTAIS DO MÊS (SEPARADOS EMPRESA × PESSOAL) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Total Gasto no Mês */}
-        <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white border-none shadow-md">
+        {/* Total Empresa */}
+        <Card className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white border-none shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl pointer-events-none" />
           <CardHeader className="pb-2">
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-              Total Gasto no Período
+            <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-1.5">🏢 Gastos da Empresa</span>
+              <Badge className="bg-indigo-500/20 text-indigo-200 border-indigo-400/30 text-[10px]">
+                Dedutível
+              </Badge>
             </span>
           </CardHeader>
           <CardContent>
             <div className="text-2xl sm:text-3xl font-black text-white tabular-nums">
-              {formatarMoedaBRL(totalGasto)}
+              {formatarMoedaBRL(totalGastoEmpresa)}
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              {gastos.length} registro(s) em {mesFiltro || 'todos os períodos'}
+            <p className="text-xs text-indigo-200/80 mt-1">
+              {qtdEmpresa} registro(s) da operação comercial
             </p>
           </CardContent>
         </Card>
 
-        {/* Quantidade por Categoria ativa */}
-        <Card className="sm:col-span-2 border-slate-200 shadow-sm bg-white">
+        {/* Total Pessoal */}
+        <Card className="bg-gradient-to-br from-emerald-900 to-slate-900 text-white border-none shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
           <CardHeader className="pb-2">
-            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-violet-600" />
-              Divisão por Categoria
+            <span className="text-xs font-semibold text-emerald-300 uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-1.5">🏠 Gastos Pessoais</span>
+              <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30 text-[10px]">
+                PF / Casa
+              </Badge>
             </span>
           </CardHeader>
           <CardContent>
-            {gastosPorCategoria.length === 0 ? (
-              <p className="text-xs text-slate-400 py-2">
-                Nenhum gasto registrado neste filtro para calcular divisão.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {gastosPorCategoria.map((item) => {
-                  const cfg = CATEGORIA_CONFIG[item.categoria]
-                  const pct = totalGasto > 0 ? ((item.total / totalGasto) * 100).toFixed(0) : 0
-                  return (
-                    <div
-                      key={item.categoria}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium ${cfg.bg} ${cfg.color} ${cfg.border}`}
-                    >
-                      {cfg.icon}
-                      <span className="font-semibold">{cfg.label}:</span>
-                      <span className="tabular-nums font-bold">{formatarMoedaBRL(item.total)}</span>
-                      <span className="text-[10px] opacity-75">({pct}%)</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+            <div className="text-2xl sm:text-3xl font-black text-white tabular-nums">
+              {formatarMoedaBRL(totalGastoPessoal)}
+            </div>
+            <p className="text-xs text-emerald-200/80 mt-1">
+              {qtdPessoal} registro(s) sem misturar no lucro
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Total Geral / Resumo do Filtro */}
+        <Card className="bg-white border-slate-200 shadow-sm">
+          <CardHeader className="pb-2">
+            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <DollarSign className="w-4 h-4 text-slate-700" />
+              Total Geral (
+              {contextoFiltro === 'todos'
+                ? 'Empresa + Pessoal'
+                : contextoFiltro === 'empresa'
+                  ? 'Somente Empresa'
+                  : 'Somente Pessoal'}
+              )
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl sm:text-3xl font-black text-slate-900 tabular-nums">
+              {formatarMoedaBRL(totalGasto)}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              {gastos.length} registro(s) no período de {mesFiltro || 'todos os meses'}
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* DIVISÃO POR CATEGORIA */}
+      {gastosPorCategoria.length > 0 && (
+        <Card className="border-slate-200 shadow-sm bg-white">
+          <CardHeader className="pb-2">
+            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-violet-600" />
+              Divisão por Categoria (
+              {contextoFiltro === 'todos'
+                ? 'Geral'
+                : contextoFiltro === 'empresa'
+                  ? 'Empresa'
+                  : 'Pessoal'}
+              )
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {gastosPorCategoria.map((item) => {
+                const cfg = CATEGORIA_CONFIG[item.categoria]
+                const pct = totalGasto > 0 ? ((item.total / totalGasto) * 100).toFixed(0) : 0
+                return (
+                  <div
+                    key={item.categoria}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium ${cfg.bg} ${cfg.color} ${cfg.border}`}
+                  >
+                    {cfg.icon}
+                    <span className="font-semibold">{cfg.label}:</span>
+                    <span className="tabular-nums font-bold">{formatarMoedaBRL(item.total)}</span>
+                    <span className="text-[10px] opacity-75">({pct}%)</span>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* BARRA DE FILTROS E BUSCA */}
       <Card className="border-slate-200/80 shadow-xs bg-white">
@@ -998,7 +1161,9 @@ export function Gastos() {
                 </Select>
               </div>
 
-              {(mesFiltro !== mesAtualPadrao || categoriaFiltro !== 'todas') && (
+              {(mesFiltro !== mesAtualPadrao ||
+                categoriaFiltro !== 'todas' ||
+                contextoFiltro !== 'todos') && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -1006,6 +1171,7 @@ export function Gastos() {
                   onClick={() => {
                     setMesFiltro(mesAtualPadrao)
                     setCategoriaFiltro('todas')
+                    setContextoFiltro('todos')
                   }}
                   className="h-8 text-xs text-slate-500 hover:text-slate-800"
                 >
@@ -1075,6 +1241,18 @@ export function Gastos() {
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="text-sm font-bold text-slate-900">{gasto.descricao}</h4>
+
+                          {/* Badge de Contexto (Empresa × Pessoal) */}
+                          <Badge
+                            className={`text-[10px] font-bold py-0.5 px-2 ${
+                              gasto.contexto === 'pessoal'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : 'bg-indigo-100 text-indigo-800 border-indigo-300'
+                            }`}
+                            variant="outline"
+                          >
+                            {gasto.contexto === 'pessoal' ? '🏠 Pessoal' : '🏢 Empresa'}
+                          </Badge>
 
                           <Badge
                             variant="outline"
@@ -1209,23 +1387,45 @@ export function Gastos() {
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-700">Categoria *</label>
-                <Select
-                  value={manualCategoria}
-                  onValueChange={(v) => setManualCategoria(v as CategoriaGasto)}
-                >
-                  <SelectTrigger className="mt-1 h-9 text-xs">
-                    <SelectValue placeholder="Categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIAS.map((cat) => (
-                      <SelectItem key={cat} value={cat} className="text-xs">
-                        {CATEGORIA_CONFIG[cat].label}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700">Contexto *</label>
+                  <Select
+                    value={manualContexto}
+                    onValueChange={(v) => setManualContexto(v as 'empresa' | 'pessoal')}
+                  >
+                    <SelectTrigger className="mt-1 h-9 text-xs font-semibold">
+                      <SelectValue placeholder="Contexto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="empresa" className="text-xs font-medium">
+                        🏢 Empresa
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      <SelectItem value="pessoal" className="text-xs font-medium">
+                        🏠 Pessoal
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700">Categoria *</label>
+                  <Select
+                    value={manualCategoria}
+                    onValueChange={(v) => setManualCategoria(v as CategoriaGasto)}
+                  >
+                    <SelectTrigger className="mt-1 h-9 text-xs">
+                      <SelectValue placeholder="Categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIAS.map((cat) => (
+                        <SelectItem key={cat} value={cat} className="text-xs">
+                          {CATEGORIA_CONFIG[cat].label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div>

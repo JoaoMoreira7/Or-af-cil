@@ -34,9 +34,9 @@ export default function Configuracoes() {
   const [nomePreferidoIa, setNomePreferidoIa] = useState('')
   const [tomRespostaIa, setTomRespostaIa] = useState<TomRespostaIa>('amigavel')
   const [usarEmojisIa, setUsarEmojisIa] = useState(true)
-  const [loadingPrefIa, setLoadingPrefIa] = useState(true)
+  const [contextoGastoPadrao, setContextoGastoPadrao] = useState<'empresa' | 'pessoal'>('empresa')
+  const [loadingPrefIa, setLoadingPrefIa] = useState(false)
   const [savingPrefIa, setSavingPrefIa] = useState(false)
-
   useEffect(() => {
     const carregarPref = async () => {
       try {
@@ -44,6 +44,7 @@ export default function Configuracoes() {
         setNomePreferidoIa(pref.nome_preferido || (user?.name || '').split(' ')[0] || '')
         setTomRespostaIa(pref.tom_resposta || 'amigavel')
         setUsarEmojisIa(pref.usar_emojis !== false)
+        setContextoGastoPadrao(pref.contexto_gasto_padrao || 'empresa')
       } catch (err) {
         console.warn('Erro ao obter preferências IA:', err)
       } finally {
@@ -63,6 +64,7 @@ export default function Configuracoes() {
         nome_preferido: nomePreferidoIa.trim(),
         tom_resposta: tomRespostaIa,
         usar_emojis: usarEmojisIa,
+        contexto_gasto_padrao: contextoGastoPadrao,
       })
       toast({
         title: 'Preferências da IA salvas!',
@@ -351,6 +353,51 @@ export default function Configuracoes() {
                   </div>
                 </label>
               </RadioGroup>
+            </div>
+
+            {/* Contexto padrão do gasto para a IA (Empresa x Pessoal) */}
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-slate-700">
+                Contexto Padrão ao Lançar Gastos
+              </Label>
+              <p className="text-[11px] text-slate-500">
+                Quando você não especificar por voz (&ldquo;na empresa&rdquo; ou &ldquo;no
+                pessoal&rdquo;), a IA usará este destino:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-md">
+                <button
+                  type="button"
+                  onClick={() => setContextoGastoPadrao('empresa')}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    contextoGastoPadrao === 'empresa'
+                      ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-600/20 text-indigo-950'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <span className="text-xs font-bold flex items-center gap-1.5">
+                    🏢 Empresa (PJ / Comercial)
+                  </span>
+                  <span className="text-[11px] text-slate-500 block mt-0.5">
+                    Dedutível do lucro operacional dos serviços.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setContextoGastoPadrao('pessoal')}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    contextoGastoPadrao === 'pessoal'
+                      ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-600/20 text-indigo-950'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <span className="text-xs font-bold flex items-center gap-1.5">
+                    🏠 Pessoal (PF / Casa)
+                  </span>
+                  <span className="text-[11px] text-slate-500 block mt-0.5">
+                    Controlado à parte, sem abater do lucro da empresa.
+                  </span>
+                </button>
+              </div>
             </div>
 
             {/* Preferência de Emojis */}

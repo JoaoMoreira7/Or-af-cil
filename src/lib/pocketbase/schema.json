@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T09:45:22.370Z",
+  "generatedAt": "2026-10-06T09:57:02.845Z",
   "collections": [
     {
       "name": "users",
@@ -585,6 +585,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "contexto_gasto_padrao",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["empresa", "pessoal"]
         }
       ],
       "indexes": ["CREATE UNIQUE INDEX idx_pref_ia_user_id ON preferencias_ia (user_id)"]
@@ -962,6 +969,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "contexto",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["empresa", "pessoal"]
         }
       ],
       "indexes": [
@@ -969,7 +983,8 @@
         "CREATE INDEX idx_gastos_data ON gastos (data DESC)",
         "CREATE INDEX idx_gastos_categoria ON gastos (categoria)",
         "CREATE INDEX idx_gastos_orcamento ON gastos (orcamento_vinculado)",
-        "CREATE INDEX idx_gastos_created ON gastos (created DESC)"
+        "CREATE INDEX idx_gastos_created ON gastos (created DESC)",
+        "CREATE INDEX `idx_gastos_contexto` ON `gastos` (contexto)"
       ]
     }
   ]

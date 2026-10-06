@@ -175,9 +175,13 @@ routerAdd(
         }
       } catch (err) {}
 
-      // 4.1 Busca gastos registrados nos últimos 7 dias
+      // 4.1 Busca gastos registrados nos últimos 7 dias (separando empresa e pessoal)
       let totalGastosSemana = 0
+      let totalGastosEmpresaSemana = 0
+      let totalGastosPessoalSemana = 0
       let qtdGastosSemana = 0
+      let qtdGastosEmpresaSemana = 0
+      let qtdGastosPessoalSemana = 0
       try {
         const gastosRec = $app.findRecordsByFilter(
           'gastos',
@@ -190,11 +194,25 @@ routerAdd(
           const g = gastosRec[i]
           const gDataStr = g.getString('data') || g.getString('created')
           if (gDataStr && new Date(gDataStr) >= seteDiasAtras) {
-            totalGastosSemana += g.getFloat('valor') || 0
+            const v = g.getFloat('valor') || 0
+            const ctx = g.getString('contexto') || 'empresa'
+            totalGastosSemana += v
             qtdGastosSemana++
+            if (ctx === 'pessoal') {
+              totalGastosPessoalSemana += v
+              qtdGastosPessoalSemana++
+            } else {
+              totalGastosEmpresaSemana += v
+              qtdGastosEmpresaSemana++
+            }
           }
         }
       } catch (errGastos) {}
+
+      // Lucro líquido operacional da semana = receita recebida (ou valor aprovado) − gastos de empresa
+      const receitaBaseSemana =
+        valorCobradoPagoSemana > 0 ? valorCobradoPagoSemana : valorAprovadoSemana
+      const lucroSemana = receitaBaseSemana - totalGastosEmpresaSemana
 
       const metricas = {
         orcamentos_criados: orcamentosCriadosSemana,
@@ -208,7 +226,12 @@ routerAdd(
         novos_clientes: novosClientesSemana,
         orcamentos_sem_resposta_5_dias: orcamentosSemResposta5Dias,
         total_gastos: totalGastosSemana,
+        total_gastos_empresa: totalGastosEmpresaSemana,
+        total_gastos_pessoal: totalGastosPessoalSemana,
         qtd_gastos: qtdGastosSemana,
+        qtd_gastos_empresa: qtdGastosEmpresaSemana,
+        qtd_gastos_pessoal: qtdGastosPessoalSemana,
+        lucro_semana: lucroSemana,
       }
 
       // 5. Monta texto fallback inteligente caso o LLM esteja sem resposta
@@ -247,8 +270,17 @@ routerAdd(
           (novosClientesSemana > 0
             ? 'Houve ' + novosClientesSemana + ' novo(s) cliente(s) cadastrado(s). '
             : '') +
-          (totalGastosSemana > 0
-            ? 'Você registrou ' + formatarMoeda(totalGastosSemana) + ' em gastos esta semana. '
+          (totalGastosEmpresaSemana > 0
+            ? 'Gastos da empresa: ' + formatarMoeda(totalGastosEmpresaSemana) + '. '
+            : '') +
+          (totalGastosPessoalSemana > 0
+            ? 'Gastos pessoais: ' + formatarMoeda(totalGastosPessoalSemana) + '. '
+            : '') +
+          (receitaBaseSemana > 0
+            ? 'O resultado operacional da semana é ' +
+              (lucroSemana >= 0 ? 'positivo em ' : 'negativo em ') +
+              formatarMoeda(lucroSemana) +
+              '. '
             : '') +
           'Desejamos uma excelente semana de trabalho.'
       } else if (prefTom === 'direto') {
@@ -266,9 +298,10 @@ routerAdd(
           formatarMoeda(valorPendenteReceber) +
           '. ' +
           (novosClientesSemana > 0 ? novosClientesSemana + ' novos clientes. ' : '') +
-          (totalGastosSemana > 0
-            ? 'Gastos na semana: ' + formatarMoeda(totalGastosSemana) + '. '
+          (totalGastosEmpresaSemana > 0
+            ? 'Gastos empresa: ' + formatarMoeda(totalGastosEmpresaSemana) + '. '
             : '') +
+          (receitaBaseSemana > 0 ? 'Resultado (lucro): ' + formatarMoeda(lucroSemana) + '. ' : '') +
           'Boa semana.'
       } else {
         // amigável padrão de podcast de 1 minuto
@@ -298,8 +331,20 @@ routerAdd(
               novosClientesSemana +
               ' novo(s) cliente(s)! '
             : '') +
-          (totalGastosSemana > 0
-            ? 'Você registrou ' + formatarMoeda(totalGastosSemana) + ' em gastos esta semana. '
+          (totalGastosEmpresaSemana > 0
+            ? 'Em gastos da empresa foram ' +
+              formatarMoeda(totalGastosEmpresaSemana) +
+              (totalGastosPessoalSemana > 0
+                ? ' e ' + formatarMoeda(totalGastosPessoalSemana) + ' no pessoal'
+                : '') +
+              '. '
+            : '') +
+          (receitaBaseSemana > 0
+            ? lucroSemana >= 0
+              ? 'Seu resultado estimado ficou no verde: ' +
+                formatarMoeda(lucroSemana) +
+                ' de lucro! '
+              : 'Fique atento ao fluxo: resultado negativo de ' + formatarMoeda(lucroSemana) + '. '
             : '') +
           'Continue com esse ritmo e tenha uma excelente semana!'
       }
@@ -328,6 +373,7 @@ routerAdd(
           '   - Orçamentos fechados/aprovados e valor em reais\n' +
           '   - Orçamentos criados/enviados\n' +
           '   - Orçamentos pendentes sem resposta há mais de 5 dias (se houver, alerte com cuidado)\n' +
+          '   - Gastos da empresa e resultado/lucro da semana (receita da semana menos gastos de empresa). Se o usuário teve gastos pessoais, pode citar brevemente que o controle está separado.\n' +
           '   - Saldo pendente a receber (se houver)\n' +
           '   - Novos clientes adicionados (se houver)\n' +
           '5. Termine com uma mensagem de encorajamento positiva para a semana.\n' +
@@ -361,11 +407,21 @@ routerAdd(
           metricas.novos_clientes +
           '\n' +
           (metricas.total_gastos > 0
-            ? '- Gastos registrados na semana: ' +
-              formatarMoeda(metricas.total_gastos) +
+            ? '- Gastos da empresa na semana: ' +
+              formatarMoeda(metricas.total_gastos_empresa) +
               ' (' +
-              metricas.qtd_gastos +
-              ' lançamentos)\n'
+              metricas.qtd_gastos_empresa +
+              ' lançamentos)\n' +
+              (metricas.total_gastos_pessoal > 0
+                ? '- Gastos pessoais na semana: ' +
+                  formatarMoeda(metricas.total_gastos_pessoal) +
+                  ' (' +
+                  metricas.qtd_gastos_pessoal +
+                  ' lançamentos)\n'
+                : '') +
+              '- Lucro estimado da semana (Receita − Gastos empresa): ' +
+              formatarMoeda(metricas.lucro_semana) +
+              '\n'
             : '') +
           '\n\n' +
           'Gere o roteiro do resumo semanal de voz agora:'
@@ -478,8 +534,9 @@ routerAdd(
                     ${
                       metricas.total_gastos > 0
                         ? `
-                      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; color: #991b1b;">
-                        💸 <strong>Gastos da semana:</strong> Você registrou ${formatarMoeda(metricas.total_gastos)} em despesas (${metricas.qtd_gastos} lançamentos).
+                      <div style="background-color: ${metricas.lucro_semana >= 0 ? '#f0fdf4' : '#fef2f2'}; border-left: 4px solid ${metricas.lucro_semana >= 0 ? '#16a34a' : '#ef4444'}; padding: 12px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; color: ${metricas.lucro_semana >= 0 ? '#166534' : '#991b1b'};">
+                        <strong>Resultado da semana:</strong> Lucro de ${formatarMoeda(metricas.lucro_semana)} (Receita: ${formatarMoeda(receitaBaseSemana)} − Gastos Empresa: ${formatarMoeda(metricas.total_gastos_empresa)}).
+                        ${metricas.total_gastos_pessoal > 0 ? `<br/><span style="font-size: 11px; opacity: 0.85;">Gastos pessoais separados: ${formatarMoeda(metricas.total_gastos_pessoal)}.</span>` : ''}
                       </div>
                     `
                         : ''

@@ -1,10 +1,11 @@
 import pb from '@/lib/pocketbase/client'
-import { Gasto, CategoriaGasto, OrigemGasto } from '@/types'
+import { Gasto, CategoriaGasto, OrigemGasto, ContextoGasto } from '@/types'
 
 export interface CriarGastoParams {
   descricao: string
   valor: number
   categoria: CategoriaGasto
+  contexto?: ContextoGasto
   data: string
   origem: OrigemGasto
   orcamento_vinculado?: string | null
@@ -15,6 +16,7 @@ export interface AtualizarGastoParams {
   descricao?: string
   valor?: number
   categoria?: CategoriaGasto
+  contexto?: ContextoGasto
   data?: string
   origem?: OrigemGasto
   orcamento_vinculado?: string | null
@@ -25,6 +27,7 @@ export const gastosService = {
   async listar(filtros?: {
     mesAno?: string // ex: "2025-05"
     categoria?: string
+    contexto?: 'empresa' | 'pessoal' | 'todos'
     orcamentoId?: string
   }): Promise<Gasto[]> {
     const userId = pb.authStore.record?.id
@@ -39,6 +42,10 @@ export const gastosService = {
 
     if (filtros?.categoria && filtros.categoria !== 'todas') {
       conditions.push(`categoria = '${filtros.categoria}'`)
+    }
+
+    if (filtros?.contexto && filtros.contexto !== 'todos') {
+      conditions.push(`contexto = '${filtros.contexto}'`)
     }
 
     if (filtros?.orcamentoId) {
@@ -71,6 +78,7 @@ export const gastosService = {
       descricao: params.descricao.trim(),
       valor: Math.max(0, Number(params.valor) || 0),
       categoria: params.categoria,
+      contexto: params.contexto || 'empresa',
       data: params.data || new Date().toISOString().slice(0, 10),
       origem: params.origem || 'manual',
     }
@@ -95,6 +103,7 @@ export const gastosService = {
     if (params.descricao !== undefined) payload.descricao = params.descricao.trim()
     if (params.valor !== undefined) payload.valor = Math.max(0, Number(params.valor) || 0)
     if (params.categoria !== undefined) payload.categoria = params.categoria
+    if (params.contexto !== undefined) payload.contexto = params.contexto
     if (params.data !== undefined) payload.data = params.data
     if (params.origem !== undefined) payload.origem = params.origem
     if (params.orcamento_vinculado !== undefined) {
@@ -115,6 +124,11 @@ export const gastosService = {
 
   async calcularTotais(gastos: Gasto[]) {
     let total = 0
+    let totalEmpresa = 0
+    let totalPessoal = 0
+    let qtdEmpresa = 0
+    let qtdPessoal = 0
+
     const porCategoria: Record<CategoriaGasto, number> = {
       Material: 0,
       Transporte: 0,
@@ -129,6 +143,15 @@ export const gastosService = {
     for (const g of gastos) {
       const val = Number(g.valor) || 0
       total += val
+      const ctx = g.contexto === 'pessoal' ? 'pessoal' : 'empresa'
+      if (ctx === 'pessoal') {
+        totalPessoal += val
+        qtdPessoal++
+      } else {
+        totalEmpresa += val
+        qtdEmpresa++
+      }
+
       if (porCategoria[g.categoria] !== undefined) {
         porCategoria[g.categoria] += val
       } else {
@@ -138,6 +161,10 @@ export const gastosService = {
 
     return {
       total,
+      totalEmpresa,
+      totalPessoal,
+      qtdEmpresa,
+      qtdPessoal,
       porCategoria,
       quantidade: gastos.length,
     }

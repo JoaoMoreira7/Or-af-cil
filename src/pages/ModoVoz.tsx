@@ -360,10 +360,15 @@ export default function ModoVoz() {
           return
         }
 
+        const ctxGasto =
+          gExt.contexto === 'pessoal'
+            ? 'pessoal'
+            : preferenciasIa?.contexto_gasto_padrao || 'empresa'
         const novoGasto = await gastosService.criar({
           descricao: gExt.descricao || 'Despesa registrada por voz',
           valor: gExt.valor,
           categoria: gExt.categoria || 'Outros',
+          contexto: ctxGasto,
           data: gExt.data || new Date().toISOString().slice(0, 10),
           origem: 'voz',
           orcamento_vinculado: gExt.orcamento_vinculado_id || null,
@@ -372,14 +377,15 @@ export default function ModoVoz() {
         // Recibo acoes_voz com suporte a desfazer em 24h
         const recibo = await acoesVozService.registrar({
           tipo_acao: 'registro_gasto',
-          titulo: `Gasto registrado: ${formatarMoedaBRL(novoGasto.valor)}`,
-          descricao_resumo: `${novoGasto.descricao} · Categoria: ${novoGasto.categoria}`,
+          titulo: `Gasto registrado (${ctxGasto === 'pessoal' ? '🏠 Pessoal' : '🏢 Empresa'}): ${formatarMoedaBRL(novoGasto.valor)}`,
+          descricao_resumo: `${novoGasto.descricao} · Categoria: ${novoGasto.categoria} · Contexto: ${ctxGasto === 'pessoal' ? 'Pessoal' : 'Empresa'}`,
           registro_id: novoGasto.id,
           dados_aplicados: {
             gasto_id: novoGasto.id,
             descricao: novoGasto.descricao,
             valor: novoGasto.valor,
             categoria: novoGasto.categoria,
+            contexto: ctxGasto,
             data: novoGasto.data,
             origem: 'voz',
           },

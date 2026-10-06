@@ -35,12 +35,14 @@ routerAdd(
       let prefNome = ''
       let prefTom = 'amigavel' // 'formal', 'amigavel', 'direto'
       let prefEmojis = true
+      let prefContextoGastoPadrao = 'empresa' // 'empresa' ou 'pessoal'
       try {
         const prefRec = $app.findFirstRecordByData('preferencias_ia', 'user_id', userId)
         if (prefRec) {
           prefNome = prefRec.getString('nome_preferido') || ''
           prefTom = prefRec.getString('tom_resposta') || 'amigavel'
           prefEmojis = prefRec.getBool('usar_emojis')
+          prefContextoGastoPadrao = prefRec.getString('contexto_gasto_padrao') || 'empresa'
         }
       } catch (_) {
         // Tenta pegar nome do usuário como fallback
@@ -63,6 +65,9 @@ routerAdd(
         }
         if (body.preferencias.usar_emojis !== undefined) {
           prefEmojis = !!body.preferencias.usar_emojis
+        }
+        if (body.preferencias.contexto_gasto_padrao) {
+          prefContextoGastoPadrao = body.preferencias.contexto_gasto_padrao
         }
       }
 
@@ -339,6 +344,7 @@ routerAdd(
             descricao: gRec.getString('descricao') || '',
             valor: gRec.getFloat('valor') || 0,
             categoria: gRec.getString('categoria') || 'Outros',
+            contexto: gRec.getString('contexto') || 'empresa',
             data: gRec.getString('data') || '',
             origem: gRec.getString('origem') || 'manual',
             orcamento_vinculado: gRec.getString('orcamento_vinculado') || '',
@@ -346,7 +352,7 @@ routerAdd(
         }
       } catch (errGastosDb) {}
 
-      // 5.2 Verificação de comando: "quanto gastei esse mês?" / consulta de gastos
+      // 5.2 Verificação de comando: "quanto gastei esse mês?" / consulta de gastos (empresa / pessoal / ambos)
       const ehConsultaGastos =
         transNorm.indexOf('quanto gastei') !== -1 ||
         transNorm.indexOf('quanto eu gastei') !== -1 ||
@@ -357,86 +363,166 @@ routerAdd(
         (transNorm.indexOf('quanto') !== -1 && transNorm.indexOf('gastei') !== -1)
 
       if (ehConsultaGastos) {
+        // Detecta se perguntou especificamente de empresa ou pessoal
+        const querEmpresa =
+          transNorm.indexOf('na empresa') !== -1 ||
+          transNorm.indexOf('da empresa') !== -1 ||
+          transNorm.indexOf('pela empresa') !== -1 ||
+          transNorm.indexOf('do trabalho') !== -1 ||
+          transNorm.indexOf('no cnpj') !== -1 ||
+          transNorm.indexOf('empresarial') !== -1
+        const querPessoal =
+          transNorm.indexOf('no pessoal') !== -1 ||
+          transNorm.indexOf('do pessoal') !== -1 ||
+          transNorm.indexOf('pessoal mesmo') !== -1 ||
+          transNorm.indexOf('para mim') !== -1 ||
+          transNorm.indexOf('pra mim') !== -1 ||
+          transNorm.indexOf('para casa') !== -1 ||
+          transNorm.indexOf('pra casa') !== -1 ||
+          transNorm.indexOf('minha casa') !== -1 ||
+          transNorm.indexOf('cpf') !== -1
+
+        let contextoPedido = 'ambos' // 'empresa', 'pessoal' ou 'ambos'
+        if (querEmpresa && !querPessoal) {
+          contextoPedido = 'empresa'
+        } else if (querPessoal && !querEmpresa) {
+          contextoPedido = 'pessoal'
+        }
+
         const hojeObj = new Date()
         const mesAtualStr = hojeObj.toISOString().slice(0, 7) // 'YYYY-MM'
         const gastosMes = gastosUsuario.filter(function (g) {
           return g.data && g.data.startsWith(mesAtualStr)
         })
 
-        let totalGastoMes = 0
-        const porCategoria = {}
+        let totalEmpresa = 0
+        let qtdEmpresa = 0
+        let totalPessoal = 0
+        let qtdPessoal = 0
+
         for (let i = 0; i < gastosMes.length; i++) {
           const g = gastosMes[i]
-          totalGastoMes += g.valor
-          porCategoria[g.categoria] = (porCategoria[g.categoria] || 0) + g.valor
-        }
-
-        // Encontra a maior categoria
-        let maiorCategoria = null
-        let maiorValorCat = 0
-        for (const cat in porCategoria) {
-          if (porCategoria[cat] > maiorValorCat) {
-            maiorValorCat = porCategoria[cat]
-            maiorCategoria = cat
+          const ctxGasto = g.contexto === 'pessoal' ? 'pessoal' : 'empresa'
+          if (ctxGasto === 'empresa') {
+            totalEmpresa += g.valor
+            qtdEmpresa++
+          } else {
+            totalPessoal += g.valor
+            qtdPessoal++
           }
         }
+
+        const totalGeral = totalEmpresa + totalPessoal
 
         const trat = formatarTratamento()
         const emojiGasto = prefEmojis ? '📊 ' : ''
         let textoResposta = ''
 
-        if (gastosMes.length === 0) {
-          if (prefTom === 'formal') {
+        const fmtEmpresa = totalEmpresa.toFixed(2).replace('.', ',')
+        const fmtPessoal = totalPessoal.toFixed(2).replace('.', ',')
+        const fmtGeral = totalGeral.toFixed(2).replace('.', ',')
+
+        if (contextoPedido === 'empresa') {
+          if (qtdEmpresa === 0) {
             textoResposta =
-              (trat ? trat + ', ' : '') +
-              'nenhum gasto foi registrado no mês corrente até o momento.'
-          } else if (prefTom === 'direto') {
-            textoResposta = 'Nenhum gasto registrado este mês. Total: R$ 0,00.'
+              (prefEmojis ? '🏢 ' : '') +
+              (prefNome ? prefNome + ', ' : '') +
+              'você ainda não registrou nenhum gasto na empresa este mês.'
           } else {
+            if (prefTom === 'formal') {
+              textoResposta =
+                (trat ? trat + ', ' : '') +
+                'o montante de gastos empresariais registrados neste mês é de R$ ' +
+                fmtEmpresa +
+                ' em ' +
+                qtdEmpresa +
+                ' lançamento(s).'
+            } else if (prefTom === 'direto') {
+              textoResposta =
+                'Gastos da empresa no mês: R$ ' + fmtEmpresa + ' (' + qtdEmpresa + ' lançamentos).'
+            } else {
+              textoResposta =
+                (prefEmojis ? '🏢 ' : '') +
+                (prefNome ? prefNome + ', ' : '') +
+                'você gastou R$ ' +
+                fmtEmpresa +
+                ' na empresa este mês (' +
+                qtdEmpresa +
+                ' lançamentos).'
+            }
+          }
+        } else if (contextoPedido === 'pessoal') {
+          if (qtdPessoal === 0) {
+            textoResposta =
+              (prefEmojis ? '🏠 ' : '') +
+              (prefNome ? prefNome + ', ' : '') +
+              'você ainda não registrou nenhum gasto no pessoal este mês.'
+          } else {
+            if (prefTom === 'formal') {
+              textoResposta =
+                (trat ? trat + ', ' : '') +
+                'o montante de gastos pessoais registrados neste mês é de R$ ' +
+                fmtPessoal +
+                ' em ' +
+                qtdPessoal +
+                ' lançamento(s).'
+            } else if (prefTom === 'direto') {
+              textoResposta =
+                'Gastos pessoais no mês: R$ ' + fmtPessoal + ' (' + qtdPessoal + ' lançamentos).'
+            } else {
+              textoResposta =
+                (prefEmojis ? '🏠 ' : '') +
+                (prefNome ? prefNome + ', ' : '') +
+                'você gastou R$ ' +
+                fmtPessoal +
+                ' no pessoal este mês (' +
+                qtdPessoal +
+                ' lançamentos).'
+            }
+          }
+        } else {
+          // Não especificou: mostra os dois separados
+          if (gastosMes.length === 0) {
             textoResposta =
               (prefEmojis ? '💸 ' : '') +
               (prefNome ? prefNome + ', ' : '') +
-              'você ainda não registrou nenhum gasto este mês!'
-          }
-        } else {
-          const valorFormatado = totalGastoMes.toFixed(2).replace('.', ',')
-          const detalheMaior = maiorCategoria
-            ? ', sendo a maior categoria "' +
-              maiorCategoria +
-              '" com R$ ' +
-              maiorValorCat.toFixed(2).replace('.', ',')
-            : ''
-
-          if (prefTom === 'formal') {
-            textoResposta =
-              (trat ? trat + ', ' : '') +
-              'o montante total de gastos registrados neste mês é de R$ ' +
-              valorFormatado +
-              ' (' +
-              gastosMes.length +
-              ' registro(s)' +
-              detalheMaior +
-              ').'
-          } else if (prefTom === 'direto') {
-            textoResposta =
-              'Total de gastos no mês: R$ ' +
-              valorFormatado +
-              ' em ' +
-              gastosMes.length +
-              ' lançamentos' +
-              (maiorCategoria ? ' (maior: ' + maiorCategoria + ')' : '') +
-              '.'
+              'você ainda não registrou nenhum gasto este mês, nem na empresa nem no pessoal.'
           } else {
-            textoResposta =
-              emojiGasto +
-              (prefNome ? prefNome + ', ' : '') +
-              'você registrou R$ ' +
-              valorFormatado +
-              ' em gastos este mês (' +
-              gastosMes.length +
-              ' lançamentos' +
-              detalheMaior +
-              ').'
+            if (prefTom === 'formal') {
+              textoResposta =
+                (trat ? trat + ', ' : '') +
+                'neste mês constam R$ ' +
+                fmtEmpresa +
+                ' na empresa (' +
+                qtdEmpresa +
+                ' lançamentos) e R$ ' +
+                fmtPessoal +
+                ' no pessoal (' +
+                qtdPessoal +
+                ' lançamentos), totalizando R$ ' +
+                fmtGeral +
+                '.'
+            } else if (prefTom === 'direto') {
+              textoResposta =
+                'Gastos do mês: Empresa R$ ' +
+                fmtEmpresa +
+                ' | Pessoal R$ ' +
+                fmtPessoal +
+                ' | Total R$ ' +
+                fmtGeral +
+                '.'
+            } else {
+              textoResposta =
+                emojiGasto +
+                (prefNome ? prefNome + ', ' : '') +
+                'este mês você gastou R$ ' +
+                fmtEmpresa +
+                ' na empresa (🏢) e R$ ' +
+                fmtPessoal +
+                ' no pessoal (🏠), totalizando R$ ' +
+                fmtGeral +
+                '.'
+            }
           }
         }
 
@@ -447,14 +533,28 @@ routerAdd(
           interpretacao: {
             intencao_detectada: 'consulta_gastos',
             comando_consulta_gastos: {
-              total_mes: totalGastoMes,
-              qtd_gastos: gastosMes.length,
-              maior_categoria: maiorCategoria,
-              valor_maior_categoria: maiorValorCat,
+              contexto_pedido: contextoPedido,
+              total_mes:
+                contextoPedido === 'empresa'
+                  ? totalEmpresa
+                  : contextoPedido === 'pessoal'
+                    ? totalPessoal
+                    : totalGeral,
+              total_empresa: totalEmpresa,
+              total_pessoal: totalPessoal,
+              total_geral: totalGeral,
+              qtd_gastos:
+                contextoPedido === 'empresa'
+                  ? qtdEmpresa
+                  : contextoPedido === 'pessoal'
+                    ? qtdPessoal
+                    : gastosMes.length,
+              qtd_empresa: qtdEmpresa,
+              qtd_pessoal: qtdPessoal,
               mensagem_resposta: textoResposta,
             },
             transcricao_corrigida: transcricao.trim(),
-            descricao_servico: 'Consulta de gastos do mês',
+            descricao_servico: 'Consulta de gastos do mês (' + contextoPedido + ')',
             itens: [],
             confianca: 'alta',
             duvidas: [],
@@ -517,7 +617,41 @@ routerAdd(
           }
         }
 
-        // Pede para o LLM estruturar o gasto com precisão
+        // Extração heurística explícita de contexto (empresa vs pessoal)
+        // Expressões como "na empresa", "da empresa", "no pessoal", "pessoal mesmo", "para mim", "pra mim", "para a casa", "pra casa", "no cnpj", "no cpf"
+        let contextoDetectado = null
+        const falaEmpresa =
+          transNorm.indexOf('na empresa') !== -1 ||
+          transNorm.indexOf('da empresa') !== -1 ||
+          transNorm.indexOf('pela empresa') !== -1 ||
+          transNorm.indexOf('pra empresa') !== -1 ||
+          transNorm.indexOf('para empresa') !== -1 ||
+          transNorm.indexOf('no cnpj') !== -1 ||
+          transNorm.indexOf('do trabalho') !== -1 ||
+          transNorm.indexOf('da oficina') !== -1 ||
+          transNorm.indexOf('da firma') !== -1
+        const falaPessoal =
+          transNorm.indexOf('no pessoal') !== -1 ||
+          transNorm.indexOf('do pessoal') !== -1 ||
+          transNorm.indexOf('pessoal mesmo') !== -1 ||
+          transNorm.indexOf('gasto pessoal') !== -1 ||
+          transNorm.indexOf('para mim') !== -1 ||
+          transNorm.indexOf('pra mim') !== -1 ||
+          transNorm.indexOf('pro meu') !== -1 ||
+          transNorm.indexOf('para o meu') !== -1 ||
+          transNorm.indexOf('para a casa') !== -1 ||
+          transNorm.indexOf('pra casa') !== -1 ||
+          transNorm.indexOf('da minha casa') !== -1 ||
+          transNorm.indexOf('em casa') !== -1 ||
+          transNorm.indexOf('no cpf') !== -1
+
+        if (falaPessoal && !falaEmpresa) {
+          contextoDetectado = 'pessoal'
+        } else if (falaEmpresa && !falaPessoal) {
+          contextoDetectado = 'empresa'
+        }
+
+        // Pede para o LLM estruturar o gasto com precisão, incluindo contexto empresa ou pessoal
         const promptGasto =
           'Você é o assistente inteligente do OrçaFácil especializado em finanças e registro de gastos.\n' +
           'O usuário falou um gasto/despesa em português brasileiro informal:\n' +
@@ -527,6 +661,9 @@ routerAdd(
           'DATA ATUAL DE REFERÊNCIA: ' +
           new Date().toISOString().slice(0, 10) +
           '\n' +
+          'CONTEXTO PADRÃO DO USUÁRIO: "' +
+          (prefContextoGastoPadrao || 'empresa') +
+          '"\n\n' +
           'CATEGORIAS PERMITIDAS (escolha EXATAMENTE uma destas):\n' +
           '- "Material" (fios, canos, cimento, peças, tintas, parafusos, componentes)\n' +
           '- "Transporte" (gasolina, combustível, pedágio, uber, estacionamento, passagem)\n' +
@@ -538,22 +675,29 @@ routerAdd(
           '- "Outros" (qualquer outro gasto não listado)\n\n' +
           'REGRAS:\n' +
           '1. Extraia o valor numérico (ex: "150 reais" -> 150; "um mil e duzentos" -> 1200; "cinquenta e cinco com cinquenta" -> 55.5; "80 conto" -> 80). Se não houver valor claro, retorne null.\n' +
-          '2. Extraia uma descricao curta e limpa (ex: "Gasolina do carro", "Material elétrico", "Almoço da equipe", "Aluguel da oficina").\n' +
+          '2. Extraia uma descricao curta e limpa (ex: "Gasolina do carro", "Material elétrico", "Almoço", "Aluguel da oficina"). Remova marcadores como "na empresa" ou "no pessoal" da descrição limpa.\n' +
           '3. Calcule a data no formato YYYY-MM-DD. Se falou "hoje" ou omitiu -> data de hoje (' +
           new Date().toISOString().slice(0, 10) +
           '). Se falou "ontem" -> subtraia 1 dia. Se falou "anteontem" -> subtraia 2 dias. Se mencionou dia da semana passado, calcule a data correspondente.\n' +
           '4. Escolha a categoria mais apropriada da lista.\n' +
-          '5. Se faltar o valor ou a descrição for ininteligível, liste a dúvida em "duvidas" e defina "precisa_confirmacao": true.\n' +
-          '6. Crie uma mensagem_resposta curta para o usuário respeitando o tom ' +
+          '5. Classifique o "contexto" em EXATAMENTE "empresa" ou "pessoal":\n' +
+          '   - Use "empresa" se falou "na empresa", "da empresa", "da firma", "obra", "do trabalho", "no cnpj".\n' +
+          '   - Use "pessoal" se falou "no pessoal", "pessoal mesmo", "para mim", "pra mim", "para a casa", "pra casa", "no cpf".\n' +
+          '   - Se não vier explícito, use o contexto padrão: "' +
+          (prefContextoGastoPadrao || 'empresa') +
+          '".\n' +
+          '6. Se faltar o valor ou a descrição for ininteligível, liste a dúvida em "duvidas" e defina "precisa_confirmacao": true.\n' +
+          '7. Crie uma mensagem_resposta curta para o usuário respeitando o tom ' +
           prefTom +
           (prefNome ? ' e chamando-o de ' + prefNome : '') +
           (prefEmojis ? ' com emoji.' : ' sem emoji.') +
-          '\n\n' +
+          ', citando se o gasto é da empresa (🏢) ou pessoal (🏠).\n\n' +
           'Retorne APENAS JSON válido sem formatação markdown:\n' +
           '{\n' +
           '  "valor": number | null,\n' +
           '  "descricao": string,\n' +
           '  "categoria": "Material" | "Transporte" | "Alimentação" | "Moradia/Aluguel" | "Ferramentas" | "Serviços terceirizados" | "Impostos/Taxas" | "Outros",\n' +
+          '  "contexto": "empresa" | "pessoal",\n' +
           '  "data": "YYYY-MM-DD",\n' +
           '  "precisa_confirmacao": boolean,\n' +
           '  "mensagem_resposta": string,\n' +
@@ -643,10 +787,13 @@ routerAdd(
             catHeuristica = 'Impostos/Taxas'
           }
 
+          const fallbackCtx = contextoDetectado || prefContextoGastoPadrao || 'empresa'
+
           parsedGasto = {
             valor: valEncontrado,
             descricao: transcricao.trim(),
             categoria: catHeuristica,
+            contexto: fallbackCtx,
             data: new Date().toISOString().slice(0, 10),
             precisa_confirmacao: valEncontrado === null,
             mensagem_resposta: valEncontrado
@@ -654,7 +801,9 @@ routerAdd(
                 valEncontrado.toFixed(2).replace('.', ',') +
                 ' em ' +
                 catHeuristica +
-                '.'
+                ' (' +
+                (fallbackCtx === 'pessoal' ? '🏠 Pessoal' : '🏢 Empresa') +
+                ').'
               : 'Não consegui identificar o valor do gasto. Pode repetir informando o valor?',
             duvidas: valEncontrado === null ? ['Qual foi o valor exato gasto?'] : [],
           }
@@ -676,6 +825,18 @@ routerAdd(
           catFinal = 'Outros'
         }
 
+        // Contexto final: preferência para detecção explícita na transcrição, depois LLM, depois padrão do usuário
+        let ctxFinal = contextoDetectado
+        if (
+          !ctxFinal &&
+          (parsedGasto.contexto === 'pessoal' || parsedGasto.contexto === 'empresa')
+        ) {
+          ctxFinal = parsedGasto.contexto
+        }
+        if (!ctxFinal) {
+          ctxFinal = prefContextoGastoPadrao || 'empresa'
+        }
+
         // Data válida
         let dataFinal = parsedGasto.data
         if (!dataFinal || !dataFinal.match(/^\d{4}-\d{2}-\d{2}$/)) {
@@ -695,15 +856,20 @@ routerAdd(
 
         // Mensagem persona
         let msgRespGasto = parsedGasto.mensagem_resposta
-        if (!msgRespGasto) {
+        const ctxBadgeLabel = ctxFinal === 'pessoal' ? 'pessoal' : 'da empresa'
+        const ctxBadgeEmoji = ctxFinal === 'pessoal' ? '🏠' : '🏢'
+
+        if (!msgRespGasto || !msgRespGasto.includes(ctxFinal)) {
           const tratGasto = formatarTratamento()
-          const emojiOk = prefEmojis ? '📝 ' : ''
+          const emojiOk = prefEmojis ? ctxBadgeEmoji + ' ' : ''
           if (valorFinal !== null) {
             const vStr = valorFinal.toFixed(2).replace('.', ',')
             if (prefTom === 'formal') {
               msgRespGasto =
                 (tratGasto ? tratGasto + ', ' : '') +
-                'registrei a intenção de gasto no valor de R$ ' +
+                'registrei o gasto ' +
+                ctxBadgeLabel +
+                ' no valor de R$ ' +
                 vStr +
                 ' referente a ' +
                 (parsedGasto.descricao || 'despesa') +
@@ -712,18 +878,22 @@ routerAdd(
                 '.'
             } else if (prefTom === 'direto') {
               msgRespGasto =
-                'Gasto: R$ ' +
+                'Gasto ' +
+                ctxBadgeLabel +
+                ': R$ ' +
                 vStr +
                 ' - ' +
                 catFinal +
                 ' (' +
                 (parsedGasto.descricao || 'despesa') +
-                '). Confirmar lançamento?'
+                '). Confirmar?'
             } else {
               msgRespGasto =
                 emojiOk +
                 (prefNome ? prefNome + ', ' : '') +
-                'entendi o gasto de R$ ' +
+                'entendi o gasto ' +
+                ctxBadgeLabel +
+                ' de R$ ' +
                 vStr +
                 ' com ' +
                 (parsedGasto.descricao || 'despesa') +
@@ -753,6 +923,7 @@ routerAdd(
               descricao: parsedGasto.descricao || transcricao.trim(),
               valor: valorFinal,
               categoria: catFinal,
+              contexto: ctxFinal,
               data: dataFinal,
               orcamento_vinculado_id: orcVinculadoId,
               orcamento_vinculado_numero: orcVinculadoNum,
@@ -774,6 +945,7 @@ routerAdd(
               descricao: parsedGasto.descricao || transcricao.trim(),
               valor: valorFinal,
               categoria: catFinal,
+              contexto: ctxFinal,
               data: dataFinal,
               origem: 'voz',
               orcamento_vinculado_id: orcVinculadoId,
@@ -783,7 +955,10 @@ routerAdd(
             },
             transcricao_corrigida: transcricao.trim(),
             descricao_servico:
-              'Registro de gasto: ' + (parsedGasto.descricao || transcricao.trim()),
+              'Registro de gasto (' +
+              ctxFinal +
+              '): ' +
+              (parsedGasto.descricao || transcricao.trim()),
             itens: [],
             confianca: precisaConfirmacao ? 'media' : 'alta',
             duvidas: parsedGasto.duvidas || [],

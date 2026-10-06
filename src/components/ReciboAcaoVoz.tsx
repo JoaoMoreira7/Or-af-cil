@@ -170,6 +170,29 @@ export function ReciboAcaoVoz({
                 <p className="text-xs text-slate-600 leading-relaxed">{acao.descricao_resumo}</p>
               )}
 
+              {/* Informações detalhadas da ação */}
+              {(() => {
+                const dados = (acao.dados_aplicados || {}) as Record<string, unknown>
+                if (acao.tipo_acao === 'registro_gasto' && dados.contexto) {
+                  return (
+                    <div className="pt-0.5">
+                      <span
+                        className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border ${
+                          dados.contexto === 'pessoal'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-indigo-100 text-indigo-800 border-indigo-300'
+                        }`}
+                      >
+                        {dados.contexto === 'pessoal'
+                          ? '🏠 Contexto: Pessoal'
+                          : '🏢 Contexto: Empresa'}
+                      </span>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+
               <div className="flex items-center gap-2 text-[11px] text-slate-400 pt-0.5">
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />

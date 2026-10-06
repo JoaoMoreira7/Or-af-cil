@@ -19,6 +19,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { FollowUpProativo } from '@/components/FollowUpProativo'
 import { ResumoManhaCard } from '@/components/ResumoManhaCard'
 import { ResumoSemanalCard } from '@/components/ResumoSemanalCard'
+import { ResultadoDoMesCard } from '@/components/ResultadoDoMesCard'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -136,6 +137,9 @@ export default function Dashboard() {
 
       {/* MELHORIA 2 — FOLLOW-UP PROATIVO DE ORÇAMENTOS PENDENTES HÁ 5+ DIAS */}
       {!loading && <FollowUpProativo orcamentos={orcamentos} clientes={clientes} diasLimite={5} />}
+
+      {/* NOVO: RESULTADO DO MÊS (RECEITA × GASTOS / LUCRO) COM COMPARATIVO 3 MESES */}
+      {!loading && <ResultadoDoMesCard userId={user?.id} />}
 
       {/* 4 STATS CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">

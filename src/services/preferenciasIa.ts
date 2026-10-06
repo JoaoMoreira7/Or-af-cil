@@ -6,6 +6,7 @@ const PREF_PADRAO: PreferenciasIa = {
   nome_preferido: '',
   tom_resposta: 'amigavel',
   usar_emojis: true,
+  contexto_gasto_padrao: 'empresa',
 }
 
 export const preferenciasIaService = {
@@ -39,6 +40,7 @@ export const preferenciasIaService = {
     nome_preferido?: string
     tom_resposta?: TomRespostaIa
     usar_emojis?: boolean
+    contexto_gasto_padrao?: 'empresa' | 'pessoal'
     user_id?: string
   }): Promise<PreferenciasIa> {
     const uid = dados.user_id || pb.authStore.record?.id
@@ -53,6 +55,8 @@ export const preferenciasIaService = {
         nome_preferido: dados.nome_preferido ?? existente.nome_preferido,
         tom_resposta: dados.tom_resposta ?? existente.tom_resposta,
         usar_emojis: dados.usar_emojis ?? existente.usar_emojis,
+        contexto_gasto_padrao:
+          dados.contexto_gasto_padrao ?? existente.contexto_gasto_padrao ?? 'empresa',
       })
     } catch {
       // Se não existe, cria novo registro
@@ -61,6 +65,7 @@ export const preferenciasIaService = {
         nome_preferido: dados.nome_preferido || '',
         tom_resposta: dados.tom_resposta || 'amigavel',
         usar_emojis: dados.usar_emojis !== undefined ? dados.usar_emojis : true,
+        contexto_gasto_padrao: dados.contexto_gasto_padrao || 'empresa',
       })
     }
   },

@@ -238,12 +238,15 @@ export interface Cobranca {
 
 export type TomRespostaIa = 'formal' | 'amigavel' | 'direto'
 
+export type ContextoGasto = 'empresa' | 'pessoal'
+
 export interface PreferenciasIa {
   id?: string
   user_id: string
   nome_preferido?: string
   tom_resposta: TomRespostaIa
   usar_emojis: boolean
+  contexto_gasto_padrao?: ContextoGasto
   created?: string
   updated?: string
 }
@@ -297,6 +300,7 @@ export interface Gasto {
   descricao: string
   valor: number
   categoria: CategoriaGasto
+  contexto?: ContextoGasto
   data: string
   origem: OrigemGasto
   orcamento_vinculado?: string
@@ -312,6 +316,7 @@ export interface GastoExtraido {
   descricao: string
   valor: number | null
   categoria: CategoriaGasto
+  contexto?: ContextoGasto
   data: string
   origem?: OrigemGasto
   orcamento_vinculado_id?: string | null
@@ -321,8 +326,14 @@ export interface GastoExtraido {
 }
 
 export interface ComandoConsultaGastosExtraido {
+  contexto_pedido?: 'empresa' | 'pessoal' | 'ambos'
   total_mes: number
+  total_empresa?: number
+  total_pessoal?: number
+  total_geral?: number
   qtd_gastos: number
+  qtd_empresa?: number
+  qtd_pessoal?: number
   maior_categoria?: string | null
   valor_maior_categoria?: number
   mensagem_resposta: string
@@ -340,7 +351,12 @@ export interface ResumoSemanalMetricas {
   novos_clientes: number
   orcamentos_sem_resposta_5_dias: number
   total_gastos?: number
+  total_gastos_empresa?: number
+  total_gastos_pessoal?: number
   qtd_gastos?: number
+  qtd_gastos_empresa?: number
+  qtd_gastos_pessoal?: number
+  lucro_semana?: number
 }
 
 export interface ResumoSemanalData {

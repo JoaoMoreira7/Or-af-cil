@@ -233,6 +233,44 @@ routerAdd(
         }
       } catch (_) {}
 
+      // Gastos nos últimos 7 dias (separando empresa e pessoal)
+      let totalGastosSemana = 0
+      let totalGastosEmpresaSemana = 0
+      let totalGastosPessoalSemana = 0
+      let qtdGastosSemana = 0
+      let qtdGastosEmpresaSemana = 0
+      let qtdGastosPessoalSemana = 0
+      try {
+        const gastosRec = $app.findRecordsByFilter(
+          'gastos',
+          "user_id = '" + userId + "'",
+          '-data',
+          200,
+          0,
+        )
+        for (let i = 0; i < gastosRec.length; i++) {
+          const g = gastosRec[i]
+          const gDataStr = g.getString('data') || g.getString('created')
+          if (gDataStr && new Date(gDataStr) >= seteDiasAtras) {
+            const v = g.getFloat('valor') || 0
+            const ctx = g.getString('contexto') || 'empresa'
+            totalGastosSemana += v
+            qtdGastosSemana++
+            if (ctx === 'pessoal') {
+              totalGastosPessoalSemana += v
+              qtdGastosPessoalSemana++
+            } else {
+              totalGastosEmpresaSemana += v
+              qtdGastosEmpresaSemana++
+            }
+          }
+        }
+      } catch (_) {}
+
+      const receitaBaseSemana =
+        valorCobradoPagoSemana > 0 ? valorCobradoPagoSemana : valorAprovadoSemana
+      const lucroSemana = receitaBaseSemana - totalGastosEmpresaSemana
+
       const metricas = {
         orcamentos_criados: orcamentosCriadosSemana,
         orcamentos_enviados: orcamentosEnviadosSemana,
@@ -244,6 +282,13 @@ routerAdd(
         valor_pendente: valorPendenteReceber,
         novos_clientes: novosClientesSemana,
         orcamentos_sem_resposta_5_dias: orcamentosSemResposta5Dias,
+        total_gastos: totalGastosSemana,
+        total_gastos_empresa: totalGastosEmpresaSemana,
+        total_gastos_pessoal: totalGastosPessoalSemana,
+        qtd_gastos: qtdGastosSemana,
+        qtd_gastos_empresa: qtdGastosEmpresaSemana,
+        qtd_gastos_pessoal: qtdGastosPessoalSemana,
+        lucro_semana: lucroSemana,
       }
 
       const semMovimentacao =
@@ -289,8 +334,17 @@ routerAdd(
             metricas.orcamentos_criados +
             ' nova(s) proposta(s). ' +
             (valorPendenteReceber > 0
-              ? 'O saldo total pendente a receber é de ' + formatarMoeda(valorPendenteReceber) + '.'
-              : 'Todas as propostas aprovadas estão devidamente quitadas.')
+              ? 'O saldo total pendente a receber é de ' +
+                formatarMoeda(valorPendenteReceber) +
+                '. '
+              : 'Todas as propostas aprovadas estão devidamente quitadas. ') +
+            (totalGastosEmpresaSemana > 0
+              ? 'Os gastos da empresa somaram ' +
+                formatarMoeda(totalGastosEmpresaSemana) +
+                ', resultando em um lucro operacional estimado de ' +
+                formatarMoeda(lucroSemana) +
+                '.'
+              : '')
         } else if (prefTom === 'direto') {
           fallbackEditorial =
             'Desempenho da semana: ' +
@@ -371,6 +425,15 @@ routerAdd(
           '\n' +
           '- Novos clientes conquistados na semana: ' +
           metricas.novos_clientes +
+          '\n' +
+          '- Gastos da empresa: ' +
+          formatarMoeda(metricas.total_gastos_empresa) +
+          (metricas.total_gastos_pessoal > 0
+            ? ' (Gastos pessoais separados: ' + formatarMoeda(metricas.total_gastos_pessoal) + ')'
+            : '') +
+          '\n' +
+          '- Resultado / Lucro operacional estimado: ' +
+          formatarMoeda(metricas.lucro_semana) +
           '\n\n' +
           'Redija o resumo executivo de e-mail agora:'
 
@@ -441,6 +504,17 @@ routerAdd(
               <h3 style="font-size: 14px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 14px 0;">
                 Destaques da Operação
               </h3>
+
+              ${
+                metricas.total_gastos > 0
+                  ? `
+                <div style="background-color: ${metricas.lucro_semana >= 0 ? '#f0fdf4' : '#fef2f2'}; border-left: 4px solid ${metricas.lucro_semana >= 0 ? '#16a34a' : '#ef4444'}; padding: 12px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; color: ${metricas.lucro_semana >= 0 ? '#166534' : '#991b1b'};">
+                  <strong>Resultado da semana:</strong> Lucro de ${formatarMoeda(metricas.lucro_semana)} (Receita: ${formatarMoeda(receitaBaseSemana)} − Gastos Empresa: ${formatarMoeda(metricas.total_gastos_empresa)}).
+                  ${metricas.total_gastos_pessoal > 0 ? `<br/><span style="font-size: 11px; opacity: 0.85;">Gastos pessoais separados: ${formatarMoeda(metricas.total_gastos_pessoal)}.</span>` : ''}
+                </div>
+              `
+                  : ''
+              }
 
               <div style="margin-bottom: 24px;">
                 <table width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout: fixed;">
