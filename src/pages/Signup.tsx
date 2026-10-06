@@ -102,13 +102,13 @@ export default function Signup() {
       await signup(nome, email, password)
       toast({
         title: 'Conta criada com sucesso!',
-        description: 'Seja bem-vindo(a) ao OrçaFácil.',
+        description: 'Seja bem-vindo(a) ao OrçaFácil. Seu teste grátis de 7 dias já está ativo!',
       })
       navigate('/dashboard')
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Falha ao cadastrar usuário. Tente novamente.'
-      setErrorMessage(msg.includes('email') ? 'Este e-mail já está em uso.' : msg)
+      const { getErrorMessage } = await import('@/lib/pocketbase/errors')
+      const msgAmigavel = getErrorMessage(err)
+      setErrorMessage(msgAmigavel)
     } finally {
       setLoading(false)
     }

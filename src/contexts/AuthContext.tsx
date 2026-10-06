@@ -84,26 +84,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const signup = async (name: string, email: string, pass: string) => {
-    // 1. Criar usuário
-    const createdUser = await pb.collection('users').create({
-      name: name.trim(),
-      email: email.trim(),
-      password: pass,
-      passwordConfirm: pass,
-      verified: true,
-    })
+    const emailLimpo = email.trim().toLowerCase()
+    const nomeLimpo = name.trim()
 
-    // 2. Autenticar
-    await pb.collection('users').authWithPassword(email.trim(), pass)
-    syncAuth()
+    // 1. Criar usuário no PocketBase
+    // Nota: 'verified' não deve ser enviado na criação pública de usuários comuns,
+    // pois a regra do PocketBase restringe verified = false para contas não-admin.
+    let createdUserId = ''
+    try {
+      const createdUser = await pb.collection('users').create({
+        name: nomeLimpo,
+        email: emailLimpo,
+        password: pass,
+        passwordConfirm: pass,
+      })
+      createdUserId = createdUser.id
+    } catch (err: unknown) {
+      // Se a conta já existe parcialmente (ex: cadastro anterior interrompido),
+      // tenta autenticar diretamente com a senha informada para recuperar o fluxo
+      const msg = err instanceof Error ? err.message : String(err)
+      const dataObj = (err as { response?: { data?: Record<string, unknown> } })?.response?.data
+      const emailJaExiste =
+        msg.toLowerCase().includes('email') || (dataObj?.email && typeof dataObj.email === 'object')
+
+      if (emailJaExiste) {
+        try {
+          await pb.collection('users').authWithPassword(emailLimpo, pass)
+          syncAuth()
+          const authRec = pb.authStore.record as RecordModel
+          createdUserId = authRec?.id || ''
+        } catch {
+          // Se não autenticou, repassa erro informando que o e-mail já está cadastrado
+          throw err
+        }
+      } else {
+        throw err
+      }
+    }
+
+    // 2. Autenticar caso ainda não autenticado
+    if (!pb.authStore.isValid || pb.authStore.record?.id !== createdUserId) {
+      await pb.collection('users').authWithPassword(emailLimpo, pass)
+      syncAuth()
+    }
+
+    const currentUserId = createdUserId || pb.authStore.record?.id
+    if (!currentUserId) return
 
     // 3. Upsert inicial centralizado com Teste Grátis de 7 dias ou plano do Dono
     try {
-      const emailNormalizado = (email || '').toLowerCase().trim()
-      const isDono = emailNormalizado === 'jaocarloss@gmail.com'
+      const isDono = emailLimpo === 'jaocarloss@gmail.com'
 
       if (isDono) {
-        await planosService.garantirPlanoUsuario(createdUser.id, {
+        await planosService.garantirPlanoUsuario(currentUserId, {
           plano: 'premium',
           status: 'ativo',
           renovacao_em: '2099-12-31T23:59:59.000Z',
@@ -113,7 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         const trialDate = new Date()
         trialDate.setDate(trialDate.getDate() + 7)
-        await planosService.garantirPlanoUsuario(createdUser.id, {
+        await planosService.garantirPlanoUsuario(currentUserId, {
           plano: 'essencial',
           status: 'trial',
           trial_ate: trialDate.toISOString(),

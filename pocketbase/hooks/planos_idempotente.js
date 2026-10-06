@@ -11,10 +11,16 @@
 onRecordCreate((e) => {
   try {
     const record = e.record
-    if (!record) return
+    if (!record) {
+      e.next()
+      return
+    }
 
     const userId = record.getString('user_id')
-    if (!userId) return
+    if (!userId) {
+      e.next()
+      return
+    }
 
     let planoExistente = null
     try {
@@ -57,13 +63,16 @@ onRecordCreate((e) => {
         $app.save(planoExistente)
       }
 
-      // Atribui o ID do existente para que o PocketBase trate como atualização ou lance erro amigável
-      // Mas para evitar a colisão no INSERT:
+      // Lança erro amigável informando colisão de plano existente
       throw new BadRequestError(`Plano já existente para o usuário ${userId}. Utilize atualização.`)
     }
+
+    // Se não existia plano prévio, permite salvar normalmente chamando e.next()!
+    e.next()
   } catch (err) {
     if (err.status) throw err
     console.warn('[hook:planos_idempotente] Aviso onRecordCreate:', err)
+    e.next()
   }
 }, 'planos')
 
