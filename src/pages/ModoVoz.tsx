@@ -26,6 +26,7 @@ import { orcamentosService } from '@/services/orcamentos'
 import { clientesService } from '@/services/clientes'
 import { acoesVozService } from '@/services/acoesVoz'
 import { cobrancasService } from '@/services/cobrancas'
+import { gastosService } from '@/services/gastos'
 import { preferenciasIaService } from '@/services/preferenciasIa'
 import { ModalCobrancaSimulada } from '@/components/ModalCobrancaSimulada'
 import {
@@ -334,6 +335,70 @@ export default function ModoVoz() {
 
     setIsApplying(true)
     try {
+      // Caso A1: Consulta de gastos ("quanto gastei esse mês?")
+      if (resultado.intencao_detectada === 'consulta_gastos' || resultado.comando_consulta_gastos) {
+        const msgGastos =
+          resultado.comando_consulta_gastos?.mensagem_resposta ||
+          'Resumo dos gastos exibido na tela!'
+        setAppliedSuccess(msgGastos)
+        toast({
+          title: 'Gastos do Mês',
+          description: `Total: ${formatarMoedaBRL(resultado.comando_consulta_gastos?.total_mes || 0)}`,
+        })
+        return
+      }
+
+      // Caso A2: Registro de Gasto por Voz
+      if (resultado.intencao_detectada === 'registro_gasto' || resultado.gasto_extraido) {
+        const gExt = resultado.gasto_extraido
+        if (!gExt || !gExt.valor) {
+          toast({
+            variant: 'destructive',
+            title: 'Valor não identificado',
+            description: 'Por favor, informe o valor do gasto para registrar.',
+          })
+          return
+        }
+
+        const novoGasto = await gastosService.criar({
+          descricao: gExt.descricao || 'Despesa registrada por voz',
+          valor: gExt.valor,
+          categoria: gExt.categoria || 'Outros',
+          data: gExt.data || new Date().toISOString().slice(0, 10),
+          origem: 'voz',
+          orcamento_vinculado: gExt.orcamento_vinculado_id || null,
+        })
+
+        // Recibo acoes_voz com suporte a desfazer em 24h
+        const recibo = await acoesVozService.registrar({
+          tipo_acao: 'registro_gasto',
+          titulo: `Gasto registrado: ${formatarMoedaBRL(novoGasto.valor)}`,
+          descricao_resumo: `${novoGasto.descricao} · Categoria: ${novoGasto.categoria}`,
+          registro_id: novoGasto.id,
+          dados_aplicados: {
+            gasto_id: novoGasto.id,
+            descricao: novoGasto.descricao,
+            valor: novoGasto.valor,
+            categoria: novoGasto.categoria,
+            data: novoGasto.data,
+            origem: 'voz',
+          },
+          user_id: user.id,
+        })
+
+        setUltimoRecibo(recibo)
+        await carregarAcoesUltimas24h()
+        setAppliedSuccess(
+          gExt.mensagem_resposta ||
+            `Gasto de ${formatarMoedaBRL(novoGasto.valor)} (${novoGasto.categoria}) registrado com sucesso!`,
+        )
+        toast({
+          title: 'Gasto Registrado!',
+          description: `${novoGasto.descricao} · ${formatarMoedaBRL(novoGasto.valor)}`,
+        })
+        return
+      }
+
       // Caso A: Consulta de devedores ("quem está me devendo?") (Melhoria 6)
       if (
         resultado.intencao_detectada === 'consulta_devedores' ||

@@ -525,6 +525,16 @@ export const ResumoSemanalCard: React.FC<ResumoSemanalCardProps> = ({
               <p className="text-sm sm:text-base font-normal text-white/95 leading-relaxed italic select-text">
                 &ldquo;{data?.resumo_texto}&rdquo;
               </p>
+
+              {metricas && metricas.total_gastos !== undefined && metricas.total_gastos > 0 && (
+                <div className="pt-2 border-t border-white/10 flex items-center gap-2 text-xs text-rose-200 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-rose-400" />
+                  <span>
+                    Você registrou <strong>{formatarMoedaBRL(metricas.total_gastos)}</strong> em
+                    gastos esta semana ({metricas.qtd_gastos} lançamentos).
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

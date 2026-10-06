@@ -16,6 +16,8 @@ import {
   ComandoBaixaExtraido,
   ComandoPersonalizarIaExtraido,
   ComandoConsultaDevedoresExtraido,
+  GastoExtraido,
+  ComandoConsultaGastosExtraido,
 } from '@/types'
 
 export interface InterpretacaoResultado {
@@ -28,12 +30,16 @@ export interface InterpretacaoResultado {
     | 'baixa_pagamento'
     | 'personalizar_ia'
     | 'consulta_devedores'
+    | 'registro_gasto'
+    | 'consulta_gastos'
   comando_desfazer?: boolean
   transcricao_corrigida: string
   descricao_servico?: string
   cliente_sugerido_id?: string | null
   cliente_sugerido_nome?: string | null
   cliente_novo?: ClienteNovoExtraido | null
+  gasto_extraido?: GastoExtraido | null
+  comando_consulta_gastos?: ComandoConsultaGastosExtraido | null
   itens: OrçamentoItem[]
   prazo?: string | null
   observacoes?: string | null

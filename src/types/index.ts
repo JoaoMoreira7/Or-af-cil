@@ -105,7 +105,13 @@ export interface VendasMetricas {
   receitaTotalAcumulada: number // soma dos pagamentos com status 'pago'
 }
 
-export type AudioContexto = 'orcamento' | 'cliente' | 'comando_status' | 'desfazer' | 'geral'
+export type AudioContexto =
+  | 'orcamento'
+  | 'cliente'
+  | 'comando_status'
+  | 'desfazer'
+  | 'gasto'
+  | 'geral'
 
 export interface ComandoStatusExtraido {
   orcamento_id?: string | null
@@ -138,6 +144,7 @@ export type AcaoVozTipo =
   | 'atualizar_preferencias_ia'
   | 'documento_orcamento'
   | 'documento_despesa'
+  | 'registro_gasto'
 export type AcaoVozStatus = 'ativo' | 'desfeito'
 
 export type DocumentoTipo =
@@ -272,6 +279,55 @@ export interface ComandoConsultaDevedoresExtraido {
   mensagem_resposta: string
 }
 
+export type CategoriaGasto =
+  | 'Material'
+  | 'Transporte'
+  | 'Alimentação'
+  | 'Moradia/Aluguel'
+  | 'Ferramentas'
+  | 'Serviços terceirizados'
+  | 'Impostos/Taxas'
+  | 'Outros'
+
+export type OrigemGasto = 'voz' | 'manual' | 'documento'
+
+export interface Gasto {
+  id: string
+  user_id: string
+  descricao: string
+  valor: number
+  categoria: CategoriaGasto
+  data: string
+  origem: OrigemGasto
+  orcamento_vinculado?: string
+  observacoes?: string
+  created: string
+  updated: string
+  expand?: {
+    orcamento_vinculado?: Orçamento
+  }
+}
+
+export interface GastoExtraido {
+  descricao: string
+  valor: number | null
+  categoria: CategoriaGasto
+  data: string
+  origem?: OrigemGasto
+  orcamento_vinculado_id?: string | null
+  orcamento_vinculado_numero?: string | null
+  precisa_confirmacao?: boolean
+  mensagem_resposta?: string
+}
+
+export interface ComandoConsultaGastosExtraido {
+  total_mes: number
+  qtd_gastos: number
+  maior_categoria?: string | null
+  valor_maior_categoria?: number
+  mensagem_resposta: string
+}
+
 export interface ResumoSemanalMetricas {
   orcamentos_criados: number
   orcamentos_enviados: number
@@ -283,6 +339,8 @@ export interface ResumoSemanalMetricas {
   valor_pendente: number
   novos_clientes: number
   orcamentos_sem_resposta_5_dias: number
+  total_gastos?: number
+  qtd_gastos?: number
 }
 
 export interface ResumoSemanalData {

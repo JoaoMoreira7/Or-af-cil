@@ -36,6 +36,8 @@ import { orcamentosService } from '@/services/orcamentos'
 import { clientesService } from '@/services/clientes'
 import { acoesVozService } from '@/services/acoesVoz'
 import { preferenciasIaService } from '@/services/preferenciasIa'
+import { gastosService } from '@/services/gastos'
+import { CategoriaGasto } from '@/types'
 import { ReciboAcaoVoz } from '@/components/ReciboAcaoVoz'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -575,7 +577,7 @@ export default function AssistenteDeCampo() {
     try {
       const orcAlvo = orcamentos.find((o) => o.id === selectedOrcamentoId)
 
-      // Salva documento na coleção documentos_lidos
+      // 1. Salva documento na coleção documentos_lidos
       const docSalvo = await documentosLidosService.salvar({
         user_id: user.id,
         foto: selectedFile || undefined,
@@ -600,7 +602,47 @@ export default function AssistenteDeCampo() {
           `Custo/Despesa vinculada ao orçamento ${orcAlvo?.numero || ''}. ${observacoes}`.trim(),
       })
 
-      // Gera RECIBO na coleção acoes_voz com suporte a Desfazer
+      // 2. Também grava na coleção gastos para alimentar o controle financeiro
+      let catSugerida: CategoriaGasto = 'Material'
+      if (tipoDoc === 'recibo') catSugerida = 'Serviços terceirizados'
+      else if (tipoDoc === 'nota_fiscal') catSugerida = 'Material'
+
+      let gastoCriadoId: string | null = null
+      try {
+        const descGasto = (
+          fornecedor
+            ? `${fornecedor} (Doc: ${getTipoLabel(tipoDoc)})`
+            : `Despesa da foto - Orçamento ${orcAlvo?.numero || ''}`
+        ).slice(0, 100)
+
+        // Tenta formatar data ISO
+        let dataIso = new Date().toISOString().slice(0, 10)
+        if (dataDocumento) {
+          const partes = dataDocumento.split(/[/.-]/)
+          if (partes.length === 3) {
+            if (partes[2].length === 4) {
+              dataIso = `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`
+            } else if (partes[0].length === 4) {
+              dataIso = `${partes[0]}-${partes[1].padStart(2, '0')}-${partes[2].padStart(2, '0')}`
+            }
+          }
+        }
+
+        const gastoSalvo = await gastosService.criar({
+          descricao: descGasto,
+          valor: valorTotal,
+          categoria: catSugerida,
+          data: dataIso,
+          origem: 'documento',
+          orcamento_vinculado: selectedOrcamentoId,
+          observacoes: `Criado a partir da leitura de comprovante pelo Assistente de Campo. Documento ID: ${docSalvo.id}`,
+        })
+        gastoCriadoId = gastoSalvo.id
+      } catch (errGastoSave) {
+        console.warn('Aviso: Não foi possível espelhar na coleção gastos:', errGastoSave)
+      }
+
+      // 3. Gera RECIBO na coleção acoes_voz com suporte a Desfazer
       const recibo = await acoesVozService.registrar({
         tipo_acao: 'documento_despesa',
         titulo: `Despesa de campo vinculada ao Orçamento ${orcAlvo?.numero || ''}`,
@@ -612,6 +654,7 @@ export default function AssistenteDeCampo() {
           orcamento_numero: orcAlvo?.numero,
           valor_total: valorTotal,
           fornecedor,
+          gasto_id: gastoCriadoId,
         },
         user_id: user.id,
       })

@@ -181,6 +181,24 @@ export const acoesVozService = {
             /* intentionally ignored */
           }
         }
+        const gastoId = (dados.gasto_id || acao.registro_id) as string | undefined
+        if (gastoId) {
+          try {
+            await pb.collection('gastos').delete(gastoId)
+          } catch {
+            /* intentionally ignored */
+          }
+        }
+      } else if (acao.tipo_acao === 'registro_gasto') {
+        const gastoId = acao.registro_id || (dados.gasto_id as string | undefined)
+        if (gastoId) {
+          try {
+            await pb.collection('gastos').delete(gastoId)
+          } catch (err) {
+            console.warn('Erro ao excluir gasto no desfazer:', err)
+            throw new Error('Não foi possível excluir o gasto registrado.')
+          }
+        }
       }
 
       // Atualiza o registro na coleção acoes_voz para status = 'desfeito'

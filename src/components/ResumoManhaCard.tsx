@@ -8,9 +8,11 @@ import {
   TrendingUp,
   FileText,
   CheckCircle,
+  TrendingDown,
 } from 'lucide-react'
 import { Orçamento, formatarMoedaBRL } from '@/types'
 import { Badge } from '@/components/ui/badge'
+import { gastosService } from '@/services/gastos'
 
 export interface ResumoManhaCardProps {
   orcamentos: Orçamento[]
@@ -67,6 +69,38 @@ export function ResumoManhaCard({
   onVerAguardando,
   onVerReceber,
 }: ResumoManhaCardProps) {
+  // Gastos da semana corrente para exibição integrada de 1 linha
+  const [totalGastosSemana, setTotalGastosSemana] = React.useState<number>(0)
+  const [qtdGastosSemana, setQtdGastosSemana] = React.useState<number>(0)
+
+  React.useEffect(() => {
+    let ativo = true
+    const carregarGastos = async () => {
+      try {
+        const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        const lista = await gastosService.listar()
+        if (!ativo) return
+        let soma = 0
+        let count = 0
+        for (const g of lista) {
+          const d = g.data ? new Date(g.data) : null
+          if (d && d >= seteDiasAtras) {
+            soma += Number(g.valor) || 0
+            count++
+          }
+        }
+        setTotalGastosSemana(soma)
+        setQtdGastosSemana(count)
+      } catch {
+        /* intentionally ignored */
+      }
+    }
+    carregarGastos()
+    return () => {
+      ativo = false
+    }
+  }, [])
+
   // Saudação de acordo com o horário do dia
   const saudacaoHorario = React.useMemo(() => {
     const hora = new Date().getHours()
@@ -203,10 +237,19 @@ export function ResumoManhaCard({
           </Badge>
         </div>
         {/* MENSAGEM DO ASSISTENTE */}
-        <div className="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15">
+        <div className="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 space-y-2">
           <p className="text-sm sm:text-base font-medium text-white/95 leading-relaxed">
             &ldquo;{textoAssistente}&rdquo;
           </p>
+          {totalGastosSemana > 0 && (
+            <div className="flex items-center gap-2 pt-1 border-t border-white/10 text-xs text-blue-100 font-medium">
+              <TrendingDown className="w-3.5 h-3.5 text-rose-300" />
+              <span>
+                Você registrou <strong>{formatarMoedaBRL(totalGastosSemana)}</strong> em gastos esta
+                semana ({qtdGastosSemana} lançamento{qtdGastosSemana === 1 ? '' : 's'}).
+              </span>
+            </div>
+          )}
         </div>
         {/* 3 INDICADORES RESUMIDOS */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">

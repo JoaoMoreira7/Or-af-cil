@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T00:18:20.388Z",
+  "generatedAt": "2026-10-06T09:45:22.370Z",
   "collections": [
     {
       "name": "users",
@@ -309,7 +309,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["orcamento", "cliente", "comando_status", "geral"]
+          "selectValues": ["orcamento", "cliente", "comando_status", "geral", "gasto"]
         },
         {
           "name": "resultado_json",
@@ -382,7 +382,8 @@
             "baixa_pagamento",
             "atualizar_preferencias_ia",
             "documento_orcamento",
-            "documento_despesa"
+            "documento_despesa",
+            "registro_gasto"
           ]
         },
         {
@@ -874,6 +875,101 @@
         "CREATE INDEX idx_pagamentos_forma ON pagamentos (forma_pagamento)",
         "CREATE INDEX idx_pagamentos_data_compra ON pagamentos (data_compra DESC)",
         "CREATE INDEX idx_pagamentos_created ON pagamentos (created DESC)"
+      ]
+    },
+    {
+      "name": "gastos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.body.user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "categoria",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "Material",
+            "Transporte",
+            "Alimentação",
+            "Moradia/Aluguel",
+            "Ferramentas",
+            "Serviços terceirizados",
+            "Impostos/Taxas",
+            "Outros"
+          ]
+        },
+        {
+          "name": "data",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "origem",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["voz", "manual", "documento"]
+        },
+        {
+          "name": "orcamento_vinculado",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "orcamentos"
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_gastos_user_id ON gastos (user_id)",
+        "CREATE INDEX idx_gastos_data ON gastos (data DESC)",
+        "CREATE INDEX idx_gastos_categoria ON gastos (categoria)",
+        "CREATE INDEX idx_gastos_orcamento ON gastos (orcamento_vinculado)",
+        "CREATE INDEX idx_gastos_created ON gastos (created DESC)"
       ]
     }
   ]

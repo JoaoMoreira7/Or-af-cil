@@ -107,9 +107,11 @@ export function ReciboAcaoVoz({
       case 'documento_orcamento':
         return 'Orçamento da Foto'
       case 'documento_despesa':
-        return 'Despesa de Campo'
+        return 'Despesa vinculada por foto'
+      case 'registro_gasto':
+        return 'Gasto registrado'
       default:
-        return 'Ação Registrada'
+        return 'Ação de voz realizada'
     }
   }
 
@@ -254,7 +256,9 @@ export function ReciboAcaoVoz({
                 {acao.tipo_acao === 'documento_orcamento' &&
                   'O orçamento gerado a partir da foto será excluído do sistema.'}
                 {acao.tipo_acao === 'documento_despesa' &&
-                  'O registro da despesa vinculada à foto será desfeito.'}
+                  'O registro da despesa vinculada à foto será desfeito e o gasto excluído.'}
+                {acao.tipo_acao === 'registro_gasto' &&
+                  'O gasto registrado por voz será excluído do seu controle financeiro.'}
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>

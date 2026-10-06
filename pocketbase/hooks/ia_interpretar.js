@@ -322,6 +322,476 @@ routerAdd(
         }
       } catch (errCob) {}
 
+      // 5.1 Carrega gastos recentes do usuário para consultas de gastos
+      let gastosUsuario = []
+      try {
+        const gastRecords = $app.findRecordsByFilter(
+          'gastos',
+          "user_id = '" + userId + "'",
+          '-data',
+          200,
+          0,
+        )
+        for (let i = 0; i < gastRecords.length; i++) {
+          const gRec = gastRecords[i]
+          gastosUsuario.push({
+            id: gRec.id,
+            descricao: gRec.getString('descricao') || '',
+            valor: gRec.getFloat('valor') || 0,
+            categoria: gRec.getString('categoria') || 'Outros',
+            data: gRec.getString('data') || '',
+            origem: gRec.getString('origem') || 'manual',
+            orcamento_vinculado: gRec.getString('orcamento_vinculado') || '',
+          })
+        }
+      } catch (errGastosDb) {}
+
+      // 5.2 Verificação de comando: "quanto gastei esse mês?" / consulta de gastos
+      const ehConsultaGastos =
+        transNorm.indexOf('quanto gastei') !== -1 ||
+        transNorm.indexOf('quanto eu gastei') !== -1 ||
+        transNorm.indexOf('total de gastos') !== -1 ||
+        transNorm.indexOf('meus gastos esse mes') !== -1 ||
+        transNorm.indexOf('meus gastos este mes') !== -1 ||
+        transNorm.indexOf('resumo de gastos') !== -1 ||
+        (transNorm.indexOf('quanto') !== -1 && transNorm.indexOf('gastei') !== -1)
+
+      if (ehConsultaGastos) {
+        const hojeObj = new Date()
+        const mesAtualStr = hojeObj.toISOString().slice(0, 7) // 'YYYY-MM'
+        const gastosMes = gastosUsuario.filter(function (g) {
+          return g.data && g.data.startsWith(mesAtualStr)
+        })
+
+        let totalGastoMes = 0
+        const porCategoria = {}
+        for (let i = 0; i < gastosMes.length; i++) {
+          const g = gastosMes[i]
+          totalGastoMes += g.valor
+          porCategoria[g.categoria] = (porCategoria[g.categoria] || 0) + g.valor
+        }
+
+        // Encontra a maior categoria
+        let maiorCategoria = null
+        let maiorValorCat = 0
+        for (const cat in porCategoria) {
+          if (porCategoria[cat] > maiorValorCat) {
+            maiorValorCat = porCategoria[cat]
+            maiorCategoria = cat
+          }
+        }
+
+        const trat = formatarTratamento()
+        const emojiGasto = prefEmojis ? '📊 ' : ''
+        let textoResposta = ''
+
+        if (gastosMes.length === 0) {
+          if (prefTom === 'formal') {
+            textoResposta =
+              (trat ? trat + ', ' : '') +
+              'nenhum gasto foi registrado no mês corrente até o momento.'
+          } else if (prefTom === 'direto') {
+            textoResposta = 'Nenhum gasto registrado este mês. Total: R$ 0,00.'
+          } else {
+            textoResposta =
+              (prefEmojis ? '💸 ' : '') +
+              (prefNome ? prefNome + ', ' : '') +
+              'você ainda não registrou nenhum gasto este mês!'
+          }
+        } else {
+          const valorFormatado = totalGastoMes.toFixed(2).replace('.', ',')
+          const detalheMaior = maiorCategoria
+            ? ', sendo a maior categoria "' +
+              maiorCategoria +
+              '" com R$ ' +
+              maiorValorCat.toFixed(2).replace('.', ',')
+            : ''
+
+          if (prefTom === 'formal') {
+            textoResposta =
+              (trat ? trat + ', ' : '') +
+              'o montante total de gastos registrados neste mês é de R$ ' +
+              valorFormatado +
+              ' (' +
+              gastosMes.length +
+              ' registro(s)' +
+              detalheMaior +
+              ').'
+          } else if (prefTom === 'direto') {
+            textoResposta =
+              'Total de gastos no mês: R$ ' +
+              valorFormatado +
+              ' em ' +
+              gastosMes.length +
+              ' lançamentos' +
+              (maiorCategoria ? ' (maior: ' + maiorCategoria + ')' : '') +
+              '.'
+          } else {
+            textoResposta =
+              emojiGasto +
+              (prefNome ? prefNome + ', ' : '') +
+              'você registrou R$ ' +
+              valorFormatado +
+              ' em gastos este mês (' +
+              gastosMes.length +
+              ' lançamentos' +
+              detalheMaior +
+              ').'
+          }
+        }
+
+        return e.json(200, {
+          sucesso: true,
+          audio_id: null,
+          transcricao_original: transcricao,
+          interpretacao: {
+            intencao_detectada: 'consulta_gastos',
+            comando_consulta_gastos: {
+              total_mes: totalGastoMes,
+              qtd_gastos: gastosMes.length,
+              maior_categoria: maiorCategoria,
+              valor_maior_categoria: maiorValorCat,
+              mensagem_resposta: textoResposta,
+            },
+            transcricao_corrigida: transcricao.trim(),
+            descricao_servico: 'Consulta de gastos do mês',
+            itens: [],
+            confianca: 'alta',
+            duvidas: [],
+          },
+          citations: [],
+        })
+      }
+
+      // 5.3 Detecção e extração de REGISTRO DE GASTO por voz
+      // Ex: "gastei 150 reais de gasolina hoje", "comprei material elétrico, 340 reais no cartão",
+      // "almoço 45 reais ontem", "paguei 1200 de aluguel da oficina", "gasto de 80 conto com brocas"
+      const temPalavrasGasto =
+        contexto === 'gasto' ||
+        transNorm.indexOf('gastei') !== -1 ||
+        transNorm.indexOf('gasto de') !== -1 ||
+        transNorm.indexOf('paguei') !== -1 ||
+        transNorm.indexOf('comprei') !== -1 ||
+        transNorm.indexOf('despesa') !== -1 ||
+        transNorm.indexOf('custo de') !== -1 ||
+        transNorm.indexOf('abasteci') !== -1 ||
+        transNorm.indexOf('almoco') !== -1 ||
+        transNorm.indexOf('almoco ') !== -1 ||
+        transNorm.indexOf('jantar') !== -1 ||
+        transNorm.indexOf('gasolina') !== -1
+
+      if (contexto === 'gasto' || temPalavrasGasto) {
+        // Tenta detectar orçamento vinculado na fala ("do orcamento 3", "da obra 2", "na empresa", etc.)
+        let orcVinculadoId = null
+        let orcVinculadoNum = null
+        const orcMatchGasto =
+          transcricao.match(/(?:orçamento|orcamento|obra|proposta)\s*#?(\d+)/i) ||
+          transcricao.match(/#(\d+)/)
+        if (orcMatchGasto) {
+          const numP = orcMatchGasto[1]
+          const numFmt1 = '#' + numP.padStart(3, '0')
+          const numFmt2 = '#' + numP
+          for (let i = 0; i < orcamentosUsuario.length; i++) {
+            const o = orcamentosUsuario[i]
+            if (
+              o.numero === numFmt1 ||
+              o.numero === numFmt2 ||
+              o.numero.replace(/\D/g, '') === numP
+            ) {
+              orcVinculadoId = o.id
+              orcVinculadoNum = o.numero
+              break
+            }
+          }
+        }
+
+        // Se não achou por número, verifica se citou cliente de algum orçamento
+        if (!orcVinculadoId && melhorClienteMatch && scoreMatch >= 8) {
+          for (let i = 0; i < orcamentosUsuario.length; i++) {
+            const o = orcamentosUsuario[i]
+            if (o.cliente_id === melhorClienteMatch.id) {
+              orcVinculadoId = o.id
+              orcVinculadoNum = o.numero
+              break
+            }
+          }
+        }
+
+        // Pede para o LLM estruturar o gasto com precisão
+        const promptGasto =
+          'Você é o assistente inteligente do OrçaFácil especializado em finanças e registro de gastos.\n' +
+          'O usuário falou um gasto/despesa em português brasileiro informal:\n' +
+          '"""\n' +
+          transcricao.trim() +
+          '\n"""\n\n' +
+          'DATA ATUAL DE REFERÊNCIA: ' +
+          new Date().toISOString().slice(0, 10) +
+          '\n' +
+          'CATEGORIAS PERMITIDAS (escolha EXATAMENTE uma destas):\n' +
+          '- "Material" (fios, canos, cimento, peças, tintas, parafusos, componentes)\n' +
+          '- "Transporte" (gasolina, combustível, pedágio, uber, estacionamento, passagem)\n' +
+          '- "Alimentação" (almoço, café, marmita, lanche, mercado, refeição)\n' +
+          '- "Moradia/Aluguel" (aluguel de oficina/galpão/sala, condomínio, luz, água da oficina)\n' +
+          '- "Ferramentas" (brocas, lixadeiras, alicates, discos de corte, chaves)\n' +
+          '- "Serviços terceirizados" (ajudante, terceirizado, mão de obra contratada, frete)\n' +
+          '- "Impostos/Taxas" (MEI, DAS, taxas bancárias, licenças, notas)\n' +
+          '- "Outros" (qualquer outro gasto não listado)\n\n' +
+          'REGRAS:\n' +
+          '1. Extraia o valor numérico (ex: "150 reais" -> 150; "um mil e duzentos" -> 1200; "cinquenta e cinco com cinquenta" -> 55.5; "80 conto" -> 80). Se não houver valor claro, retorne null.\n' +
+          '2. Extraia uma descricao curta e limpa (ex: "Gasolina do carro", "Material elétrico", "Almoço da equipe", "Aluguel da oficina").\n' +
+          '3. Calcule a data no formato YYYY-MM-DD. Se falou "hoje" ou omitiu -> data de hoje (' +
+          new Date().toISOString().slice(0, 10) +
+          '). Se falou "ontem" -> subtraia 1 dia. Se falou "anteontem" -> subtraia 2 dias. Se mencionou dia da semana passado, calcule a data correspondente.\n' +
+          '4. Escolha a categoria mais apropriada da lista.\n' +
+          '5. Se faltar o valor ou a descrição for ininteligível, liste a dúvida em "duvidas" e defina "precisa_confirmacao": true.\n' +
+          '6. Crie uma mensagem_resposta curta para o usuário respeitando o tom ' +
+          prefTom +
+          (prefNome ? ' e chamando-o de ' + prefNome : '') +
+          (prefEmojis ? ' com emoji.' : ' sem emoji.') +
+          '\n\n' +
+          'Retorne APENAS JSON válido sem formatação markdown:\n' +
+          '{\n' +
+          '  "valor": number | null,\n' +
+          '  "descricao": string,\n' +
+          '  "categoria": "Material" | "Transporte" | "Alimentação" | "Moradia/Aluguel" | "Ferramentas" | "Serviços terceirizados" | "Impostos/Taxas" | "Outros",\n' +
+          '  "data": "YYYY-MM-DD",\n' +
+          '  "precisa_confirmacao": boolean,\n' +
+          '  "mensagem_resposta": string,\n' +
+          '  "duvidas": string[]\n' +
+          '}'
+
+        let llmGastoResp = null
+        try {
+          llmGastoResp = $ai.agent('orcamento-assistente').chat({
+            user_id: userId,
+            message: promptGasto,
+          })
+        } catch (errLlmGasto) {}
+
+        let parsedGasto = null
+        if (llmGastoResp?.content) {
+          try {
+            const m = llmGastoResp.content.match(/\{[\s\S]*\}/)
+            if (m) parsedGasto = JSON.parse(m[0])
+          } catch (eParse) {}
+        }
+
+        // Heurística de fallback para valor e categoria caso o agente falhe
+        if (!parsedGasto || parsedGasto.valor === undefined) {
+          let valEncontrado = null
+          const valMatch =
+            transcricao.match(
+              /(?:r\$\s*|reais\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|conto|pila)?/i,
+            ) || transcricao.match(/(\d+(?:[.,]\d{1,2})?)/)
+          if (valMatch) {
+            valEncontrado = parseFloat(valMatch[1].replace(',', '.'))
+          }
+
+          let catHeuristica = 'Outros'
+          if (
+            transNorm.indexOf('gasolina') !== -1 ||
+            transNorm.indexOf('combustivel') !== -1 ||
+            transNorm.indexOf('abastecer') !== -1 ||
+            transNorm.indexOf('abasteci') !== -1 ||
+            transNorm.indexOf('pedagio') !== -1 ||
+            transNorm.indexOf('uber') !== -1
+          ) {
+            catHeuristica = 'Transporte'
+          } else if (
+            transNorm.indexOf('almoco') !== -1 ||
+            transNorm.indexOf('lanche') !== -1 ||
+            transNorm.indexOf('refeicao') !== -1 ||
+            transNorm.indexOf('cafe') !== -1 ||
+            transNorm.indexOf('marmita') !== -1
+          ) {
+            catHeuristica = 'Alimentação'
+          } else if (
+            transNorm.indexOf('aluguel') !== -1 ||
+            transNorm.indexOf('galpao') !== -1 ||
+            transNorm.indexOf('sala') !== -1 ||
+            transNorm.indexOf('condominio') !== -1
+          ) {
+            catHeuristica = 'Moradia/Aluguel'
+          } else if (
+            transNorm.indexOf('material') !== -1 ||
+            transNorm.indexOf('fio') !== -1 ||
+            transNorm.indexOf('cano') !== -1 ||
+            transNorm.indexOf('tinta') !== -1 ||
+            transNorm.indexOf('cimento') !== -1
+          ) {
+            catHeuristica = 'Material'
+          } else if (
+            transNorm.indexOf('ferramenta') !== -1 ||
+            transNorm.indexOf('broca') !== -1 ||
+            transNorm.indexOf('disco') !== -1 ||
+            transNorm.indexOf('alicate') !== -1
+          ) {
+            catHeuristica = 'Ferramentas'
+          } else if (
+            transNorm.indexOf('ajudante') !== -1 ||
+            transNorm.indexOf('diaria') !== -1 ||
+            transNorm.indexOf('terceirizado') !== -1 ||
+            transNorm.indexOf('frete') !== -1
+          ) {
+            catHeuristica = 'Serviços terceirizados'
+          } else if (
+            transNorm.indexOf('das') !== -1 ||
+            transNorm.indexOf('mei') !== -1 ||
+            transNorm.indexOf('imposto') !== -1 ||
+            transNorm.indexOf('taxa') !== -1
+          ) {
+            catHeuristica = 'Impostos/Taxas'
+          }
+
+          parsedGasto = {
+            valor: valEncontrado,
+            descricao: transcricao.trim(),
+            categoria: catHeuristica,
+            data: new Date().toISOString().slice(0, 10),
+            precisa_confirmacao: valEncontrado === null,
+            mensagem_resposta: valEncontrado
+              ? 'Identifiquei o gasto de R$ ' +
+                valEncontrado.toFixed(2).replace('.', ',') +
+                ' em ' +
+                catHeuristica +
+                '.'
+              : 'Não consegui identificar o valor do gasto. Pode repetir informando o valor?',
+            duvidas: valEncontrado === null ? ['Qual foi o valor exato gasto?'] : [],
+          }
+        }
+
+        // Validação da categoria contra as permitidas
+        const categoriasValidas = [
+          'Material',
+          'Transporte',
+          'Alimentação',
+          'Moradia/Aluguel',
+          'Ferramentas',
+          'Serviços terceirizados',
+          'Impostos/Taxas',
+          'Outros',
+        ]
+        let catFinal = parsedGasto.categoria || 'Outros'
+        if (categoriasValidas.indexOf(catFinal) === -1) {
+          catFinal = 'Outros'
+        }
+
+        // Data válida
+        let dataFinal = parsedGasto.data
+        if (!dataFinal || !dataFinal.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          dataFinal = new Date().toISOString().slice(0, 10)
+        }
+
+        const valorFinal =
+          typeof parsedGasto.valor === 'number' && !isNaN(parsedGasto.valor)
+            ? parsedGasto.valor
+            : null
+
+        const precisaConfirmacao =
+          valorFinal === null ||
+          valorFinal <= 0 ||
+          Boolean(parsedGasto.precisa_confirmacao) ||
+          (parsedGasto.duvidas && parsedGasto.duvidas.length > 0)
+
+        // Mensagem persona
+        let msgRespGasto = parsedGasto.mensagem_resposta
+        if (!msgRespGasto) {
+          const tratGasto = formatarTratamento()
+          const emojiOk = prefEmojis ? '📝 ' : ''
+          if (valorFinal !== null) {
+            const vStr = valorFinal.toFixed(2).replace('.', ',')
+            if (prefTom === 'formal') {
+              msgRespGasto =
+                (tratGasto ? tratGasto + ', ' : '') +
+                'registrei a intenção de gasto no valor de R$ ' +
+                vStr +
+                ' referente a ' +
+                (parsedGasto.descricao || 'despesa') +
+                ' na categoria ' +
+                catFinal +
+                '.'
+            } else if (prefTom === 'direto') {
+              msgRespGasto =
+                'Gasto: R$ ' +
+                vStr +
+                ' - ' +
+                catFinal +
+                ' (' +
+                (parsedGasto.descricao || 'despesa') +
+                '). Confirmar lançamento?'
+            } else {
+              msgRespGasto =
+                emojiOk +
+                (prefNome ? prefNome + ', ' : '') +
+                'entendi o gasto de R$ ' +
+                vStr +
+                ' com ' +
+                (parsedGasto.descricao || 'despesa') +
+                ' (' +
+                catFinal +
+                '). Deseja salvar?'
+            }
+          } else {
+            msgRespGasto =
+              (prefNome ? prefNome + ', ' : '') +
+              'não consegui identificar o valor do gasto. Pode falar novamente dizendo o valor em reais?'
+          }
+        }
+
+        // Salva áudio no histórico com contexto 'gasto'
+        let audioRecordIdGasto = null
+        try {
+          const audiosCol = $app.findCollectionByNameOrId('audios')
+          const audioRec = new Record(audiosCol)
+          audioRec.set('user_id', userId)
+          audioRec.set('transcricao_bruta', transcricao.trim())
+          audioRec.set('transcricao_corrigida', transcricao.trim())
+          audioRec.set('contexto', 'gasto')
+          audioRec.set('resultado_json', {
+            intencao_detectada: 'registro_gasto',
+            gasto_extraido: {
+              descricao: parsedGasto.descricao || transcricao.trim(),
+              valor: valorFinal,
+              categoria: catFinal,
+              data: dataFinal,
+              orcamento_vinculado_id: orcVinculadoId,
+              orcamento_vinculado_numero: orcVinculadoNum,
+            },
+          })
+          audioRec.set('confianca', precisaConfirmacao ? 'media' : 'alta')
+          audioRec.set('comando_executado', false)
+          $app.save(audioRec)
+          audioRecordIdGasto = audioRec.id
+        } catch (errAudioGasto) {}
+
+        return e.json(200, {
+          sucesso: true,
+          audio_id: audioRecordIdGasto,
+          transcricao_original: transcricao,
+          interpretacao: {
+            intencao_detectada: 'registro_gasto',
+            gasto_extraido: {
+              descricao: parsedGasto.descricao || transcricao.trim(),
+              valor: valorFinal,
+              categoria: catFinal,
+              data: dataFinal,
+              origem: 'voz',
+              orcamento_vinculado_id: orcVinculadoId,
+              orcamento_vinculado_numero: orcVinculadoNum,
+              precisa_confirmacao: precisaConfirmacao,
+              mensagem_resposta: msgRespGasto,
+            },
+            transcricao_corrigida: transcricao.trim(),
+            descricao_servico:
+              'Registro de gasto: ' + (parsedGasto.descricao || transcricao.trim()),
+            itens: [],
+            confianca: precisaConfirmacao ? 'media' : 'alta',
+            duvidas: parsedGasto.duvidas || [],
+          },
+          citations: llmGastoResp?.citations || [],
+        })
+      }
+
       // 6. Verificação de comando: "quem está me devendo?" / "contas a receber" (Melhoria 6)
       const ehConsultaDevedores =
         transNorm.indexOf('quem esta me devendo') !== -1 ||

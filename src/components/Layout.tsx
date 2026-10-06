@@ -58,6 +58,7 @@ export default function Layout() {
     if (path === '/audios') return 'Histórico de Ditados & Áudios'
     if (path === '/modo-voz') return 'Modo Voz — Só Falar'
     if (path === '/assistente-campo') return 'Assistente de Campo (Fotos & Notas)'
+    if (path === '/gastos') return 'Gastos & Despesas'
     if (path === '/planos') return 'Planos e Assinatura'
     if (path === '/configuracoes') return 'Configurações da Conta'
     return 'OrçaFácil'
@@ -75,6 +76,7 @@ export default function Layout() {
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Orçamentos', path: '/orcamentos', icon: FileText },
     { label: 'Contas a Receber', path: '/contas-a-receber', icon: DollarSign },
+    { label: 'Gastos', path: '/gastos', icon: DollarSign },
     { label: 'Assistente de Campo', path: '/assistente-campo', icon: Camera },
     { label: 'Modo Voz', path: '/modo-voz', icon: Mic },
     { label: 'Áudios', path: '/audios', icon: AudioLines },
@@ -432,6 +434,25 @@ export default function Layout() {
                   type="button"
                   onClick={() => {
                     setMobileMoreOpen(false)
+                    navigate('/gastos')
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
+                    location.pathname === '/gastos'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1">
+                    <DollarSign className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-semibold">Gastos</span>
+                  <span className="text-[10px] text-slate-500">Voz & Custos</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false)
                     navigate('/assistente-campo')
                   }}
                   className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-colors ${
@@ -665,6 +686,7 @@ export default function Layout() {
             onClick={() => setMobileMoreOpen((prev) => !prev)}
             className={`flex flex-col items-center justify-center py-1 px-2 transition-colors ${
               mobileMoreOpen ||
+              location.pathname === '/gastos' ||
               location.pathname === '/assistente-campo' ||
               location.pathname === '/contas-a-receber' ||
               location.pathname === '/clientes' ||

@@ -175,6 +175,27 @@ routerAdd(
         }
       } catch (err) {}
 
+      // 4.1 Busca gastos registrados nos últimos 7 dias
+      let totalGastosSemana = 0
+      let qtdGastosSemana = 0
+      try {
+        const gastosRec = $app.findRecordsByFilter(
+          'gastos',
+          "user_id = '" + userId + "'",
+          '-data',
+          200,
+          0,
+        )
+        for (let i = 0; i < gastosRec.length; i++) {
+          const g = gastosRec[i]
+          const gDataStr = g.getString('data') || g.getString('created')
+          if (gDataStr && new Date(gDataStr) >= seteDiasAtras) {
+            totalGastosSemana += g.getFloat('valor') || 0
+            qtdGastosSemana++
+          }
+        }
+      } catch (errGastos) {}
+
       const metricas = {
         orcamentos_criados: orcamentosCriadosSemana,
         orcamentos_enviados: orcamentosEnviadosSemana,
@@ -186,6 +207,8 @@ routerAdd(
         valor_pendente: valorPendenteReceber,
         novos_clientes: novosClientesSemana,
         orcamentos_sem_resposta_5_dias: orcamentosSemResposta5Dias,
+        total_gastos: totalGastosSemana,
+        qtd_gastos: qtdGastosSemana,
       }
 
       // 5. Monta texto fallback inteligente caso o LLM esteja sem resposta
@@ -224,6 +247,9 @@ routerAdd(
           (novosClientesSemana > 0
             ? 'Houve ' + novosClientesSemana + ' novo(s) cliente(s) cadastrado(s). '
             : '') +
+          (totalGastosSemana > 0
+            ? 'Você registrou ' + formatarMoeda(totalGastosSemana) + ' em gastos esta semana. '
+            : '') +
           'Desejamos uma excelente semana de trabalho.'
       } else if (prefTom === 'direto') {
         fallbackTexto =
@@ -240,6 +266,9 @@ routerAdd(
           formatarMoeda(valorPendenteReceber) +
           '. ' +
           (novosClientesSemana > 0 ? novosClientesSemana + ' novos clientes. ' : '') +
+          (totalGastosSemana > 0
+            ? 'Gastos na semana: ' + formatarMoeda(totalGastosSemana) + '. '
+            : '') +
           'Boa semana.'
       } else {
         // amigável padrão de podcast de 1 minuto
@@ -268,6 +297,9 @@ routerAdd(
               'Além disso, conquistou ' +
               novosClientesSemana +
               ' novo(s) cliente(s)! '
+            : '') +
+          (totalGastosSemana > 0
+            ? 'Você registrou ' + formatarMoeda(totalGastosSemana) + ' em gastos esta semana. '
             : '') +
           'Continue com esse ritmo e tenha uma excelente semana!'
       }
@@ -327,6 +359,14 @@ routerAdd(
           '\n' +
           '- Novos clientes cadastrados na semana: ' +
           metricas.novos_clientes +
+          '\n' +
+          (metricas.total_gastos > 0
+            ? '- Gastos registrados na semana: ' +
+              formatarMoeda(metricas.total_gastos) +
+              ' (' +
+              metricas.qtd_gastos +
+              ' lançamentos)\n'
+            : '') +
           '\n\n' +
           'Gere o roteiro do resumo semanal de voz agora:'
 
@@ -434,6 +474,16 @@ routerAdd(
                     <h3 style="font-size: 14px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 14px 0;">
                       Destaques da Operação
                     </h3>
+
+                    ${
+                      metricas.total_gastos > 0
+                        ? `
+                      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; color: #991b1b;">
+                        💸 <strong>Gastos da semana:</strong> Você registrou ${formatarMoeda(metricas.total_gastos)} em despesas (${metricas.qtd_gastos} lançamentos).
+                      </div>
+                    `
+                        : ''
+                    }
 
                     <div style="margin-bottom: 24px;">
                       <table width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout: fixed;">
