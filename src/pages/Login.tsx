@@ -23,6 +23,10 @@ export default function Login() {
   const [forgotModalOpen, setForgotModalOpen] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotFeedback, setForgotFeedback] = useState<{
+    type: 'success' | 'error'
+    message: string
+  } | null>(null)
 
   const isMountedRef = useRef(true)
   const forgotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -37,7 +41,7 @@ export default function Login() {
     }
   }, [])
 
-  const { login } = useAuth()
+  const { login, requestPasswordReset } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
 
@@ -71,22 +75,63 @@ export default function Login() {
     }
   }
 
-  const handleForgotSubmit = (e: React.FormEvent) => {
+  const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!forgotEmail) return
+    if (!forgotEmail.trim()) return
 
     setForgotLoading(true)
-    if (forgotTimerRef.current) clearTimeout(forgotTimerRef.current)
-    forgotTimerRef.current = setTimeout(() => {
+    setForgotFeedback(null)
+
+    try {
+      const res = await requestPasswordReset(forgotEmail.trim())
       if (!isMountedRef.current) return
-      setForgotLoading(false)
-      setForgotModalOpen(false)
-      setForgotEmail('')
-      toast({
-        title: 'Instruções enviadas!',
-        description: 'Se o e-mail estiver cadastrado, você receberá o link de redefinição.',
+
+      if (res.error) {
+        setForgotFeedback({
+          type: 'error',
+          message: res.error.message || 'Erro ao solicitar recuperação. Tente novamente.',
+        })
+        return
+      }
+
+      setForgotFeedback({
+        type: 'success',
+        message:
+          'Se existir uma conta com este e-mail, enviamos o link de recuperação. Verifique sua caixa de entrada e a pasta de spam.',
       })
-    }, 800)
+
+      toast({
+        title: 'Solicitação processada',
+        description:
+          'Se houver conta cadastrada, o link de recuperação foi enviado para seu e-mail.',
+      })
+
+      // Fecha modal após alguns segundos para o usuário ver a confirmação
+      if (forgotTimerRef.current) clearTimeout(forgotTimerRef.current)
+      forgotTimerRef.current = setTimeout(() => {
+        if (!isMountedRef.current) return
+        setForgotModalOpen(false)
+        setForgotEmail('')
+        setForgotFeedback(null)
+      }, 4000)
+    } catch (err: unknown) {
+      if (!isMountedRef.current) return
+      const msg = err instanceof Error ? err.message : 'Erro ao processar solicitação.'
+      setForgotFeedback({
+        type: 'error',
+        message: msg,
+      })
+    } finally {
+      if (isMountedRef.current) {
+        setForgotLoading(false)
+      }
+    }
+  }
+
+  const handleOpenForgotModal = () => {
+    setForgotFeedback(null)
+    setForgotEmail(email || '')
+    setForgotModalOpen(true)
   }
 
   return (
@@ -158,8 +203,8 @@ export default function Login() {
                 </Label>
                 <button
                   type="button"
-                  onClick={() => setForgotModalOpen(true)}
-                  className="text-xs text-blue-600 hover:text-blue-700 hover:underline font-medium"
+                  onClick={handleOpenForgotModal}
+                  className="text-xs text-blue-600 hover:text-blue-700 hover:underline font-medium transition-colors"
                 >
                   Esqueci minha senha
                 </button>
@@ -225,49 +270,111 @@ export default function Login() {
       </footer>
 
       {/* MODAL ESQUECI MINHA SENHA */}
-      <Dialog open={forgotModalOpen} onOpenChange={setForgotModalOpen}>
-        <DialogContent className="max-w-[380px] rounded-xl bg-white text-slate-900 p-6">
+      <Dialog
+        open={forgotModalOpen}
+        onOpenChange={(open) => {
+          setForgotModalOpen(open)
+          if (!open) {
+            setForgotFeedback(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-[420px] rounded-xl bg-white text-slate-900 p-6 shadow-xl border border-slate-200">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold">Recuperar senha</DialogTitle>
-            <DialogDescription className="text-xs text-slate-500">
-              Digite seu e-mail cadastrado e enviaremos um link para criar uma nova senha.
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                OF
+              </div>
+              <DialogTitle className="text-lg font-bold text-slate-900">
+                Recuperar senha
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-slate-500 leading-relaxed">
+              Informe seu e-mail cadastrado. Se houver uma conta associada, você receberá um link
+              seguro para redefinir sua senha.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleForgotSubmit} className="space-y-4 mt-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="forgot-email" className="text-xs font-semibold">
-                E-mail
-              </Label>
-              <Input
-                id="forgot-email"
-                type="email"
-                value={forgotEmail}
-                onChange={(e) => setForgotEmail(e.target.value)}
-                placeholder="seu.email@exemplo.com"
-                required
-                className="h-9 text-sm"
+          {forgotFeedback && (
+            <div
+              className={`p-3 rounded-lg text-xs leading-relaxed flex items-start gap-2.5 ${
+                forgotFeedback.type === 'success'
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                  : 'bg-rose-50 border border-rose-200 text-rose-700'
+              }`}
+            >
+              <AlertCircle
+                className={`w-4 h-4 shrink-0 mt-0.5 ${
+                  forgotFeedback.type === 'success' ? 'text-emerald-600' : 'text-rose-600'
+                }`}
               />
+              <span>{forgotFeedback.message}</span>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
+          )}
+
+          {forgotFeedback?.type !== 'success' ? (
+            <form onSubmit={handleForgotSubmit} className="space-y-4 mt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="forgot-email" className="text-xs font-semibold text-slate-700">
+                  E-mail da sua conta
+                </Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  autoComplete="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="seu.email@exemplo.com"
+                  required
+                  className="h-10 text-sm border-slate-300 focus:border-blue-600"
+                />
+              </div>
+
+              <div className="text-[11px] text-slate-500 leading-normal">
+                🔒 Por segurança, não informamos se o e-mail está ou não cadastrado no sistema.
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setForgotModalOpen(false)}
+                  disabled={forgotLoading}
+                  className="text-xs"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={forgotLoading}
+                  className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white text-xs font-medium"
+                >
+                  {forgotLoading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      Enviando link...
+                    </>
+                  ) : (
+                    'Enviar link de recuperação'
+                  )}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="pt-2 flex justify-end">
               <Button
                 type="button"
+                size="sm"
                 variant="outline"
-                size="sm"
                 onClick={() => setForgotModalOpen(false)}
+                className="text-xs"
               >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={forgotLoading}
-                className="bg-blue-600 text-white"
-              >
-                {forgotLoading ? 'Enviando...' : 'Enviar link'}
+                Fechar
               </Button>
             </div>
-          </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

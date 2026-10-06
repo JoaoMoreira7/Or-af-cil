@@ -17,6 +17,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 // Pages
 import Login from '@/pages/Login'
 import Signup from '@/pages/Signup'
+import RedefinirSenha from '@/pages/RedefinirSenha'
 import Dashboard from '@/pages/Dashboard'
 import Clientes from '@/pages/Clientes'
 import Orcamentos from '@/pages/Orcamentos'
@@ -82,6 +83,17 @@ const AppRoutes = () => {
           }
         />
         <Route path="/cadastro" element={<Navigate to="/signup" replace />} />
+        <Route
+          path="/redefinir-senha"
+          element={
+            <ErrorBoundary resetKey="/redefinir-senha">
+              <PublicOnlyRoute>
+                <RedefinirSenha />
+              </PublicOnlyRoute>
+            </ErrorBoundary>
+          }
+        />
+        <Route path="/reset-password" element={<Navigate to="/redefinir-senha" replace />} />
 
         {/* Root Redirect to Dashboard */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />

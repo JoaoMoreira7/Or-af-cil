@@ -21,6 +21,11 @@ interface AuthContextType {
   logout: () => void
   updateUser: (data: { name?: string }) => Promise<void>
   refreshAuth: () => void
+  requestPasswordReset: (email: string) => Promise<{ error: Error | null; mensagem?: string }>
+  confirmPasswordReset: (
+    token: string,
+    password: string,
+  ) => Promise<{ error: Error | null; mensagem?: string }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -125,6 +130,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     syncAuth()
   }
 
+  const requestPasswordReset = async (email: string) => {
+    try {
+      const { authRecoveryService } = await import('@/services/authRecovery')
+      const res = await authRecoveryService.solicitarRecuperacao(email)
+      return { error: null, mensagem: res.mensagem }
+    } catch (error: unknown) {
+      return { error: error instanceof Error ? error : new Error(String(error)) }
+    }
+  }
+
+  const confirmPasswordReset = async (token: string, pass: string) => {
+    try {
+      const { authRecoveryService } = await import('@/services/authRecovery')
+      const res = await authRecoveryService.confirmarRedefinicao(token, pass)
+      return { error: null, mensagem: res.mensagem }
+    } catch (error: unknown) {
+      return { error: error instanceof Error ? error : new Error(String(error)) }
+    }
+  }
+
   const updateUser = async (data: { name?: string }) => {
     if (!user) return
     const updated = await pb.collection('users').update(user.id, data)
@@ -147,6 +172,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         updateUser,
         refreshAuth,
+        requestPasswordReset,
+        confirmPasswordReset,
       }}
     >
       {children}
