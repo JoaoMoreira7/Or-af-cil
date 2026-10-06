@@ -186,13 +186,32 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
           p.set('renovacao_em', dataRenovacao.toISOString())
           $app.save(p)
         } else {
-          const colPlanos = $app.findCollectionByNameOrId('planos')
-          const p = new Record(colPlanos)
-          p.set('user_id', userId)
-          p.set('plano', planoIdContratado)
-          p.set('status', 'ativo')
-          p.set('renovacao_em', dataRenovacao.toISOString())
-          $app.save(p)
+          try {
+            const colPlanos = $app.findCollectionByNameOrId('planos')
+            const p = new Record(colPlanos)
+            p.set('user_id', userId)
+            p.set('plano', planoIdContratado)
+            p.set('status', 'ativo')
+            p.set('renovacao_em', dataRenovacao.toISOString())
+            $app.save(p)
+          } catch (createPlanErr) {
+            const retryPlanos = $app.findRecordsByFilter(
+              'planos',
+              "user_id = '" + userId + "'",
+              '-created',
+              1,
+              0,
+            )
+            if (retryPlanos.length > 0) {
+              const rp = retryPlanos[0]
+              rp.set('plano', planoIdContratado)
+              rp.set('status', 'ativo')
+              rp.set('renovacao_em', dataRenovacao.toISOString())
+              $app.save(rp)
+            } else {
+              throw createPlanErr
+            }
+          }
         }
         console.log(
           `[asaas_webhook] Assinatura do usuário ${userId} ATIVADA no plano ${planoNomeContratado} (${planoIdContratado}) até ${dataRenovacao.toISOString()}`,

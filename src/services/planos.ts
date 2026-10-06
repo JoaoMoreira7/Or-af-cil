@@ -43,12 +43,25 @@ export const planosService = {
         })
       }
 
-      return await pb.collection('planos').create<PlanoAssinatura>({
-        user_id: userId,
-        plano: plano as any,
-        status: 'ativo',
-        renovacao_em: renovacao.toISOString(),
-      })
+      try {
+        return await pb.collection('planos').create<PlanoAssinatura>({
+          user_id: userId,
+          plano: plano as any,
+          status: 'ativo',
+          renovacao_em: renovacao.toISOString(),
+        })
+      } catch (createErr) {
+        // Se outro fluxo criou concorrentemente e estourou unique constraint, busca e atualiza
+        const recriado = await this.obterPlanoUsuario(userId)
+        if (recriado) {
+          return await pb.collection('planos').update<PlanoAssinatura>(recriado.id, {
+            plano: plano as any,
+            status: 'ativo',
+            renovacao_em: renovacao.toISOString(),
+          })
+        }
+        throw createErr
+      }
     } catch (err) {
       console.error('Erro ao assinar plano:', err)
       throw err
@@ -103,7 +116,9 @@ export const planosService = {
           aviso_teste_enviado: true,
         })
       } catch (err) {
-        console.error('Erro ao criar plano do dono:', err)
+        console.warn('Aviso ao criar plano do dono (tentando fallback de busca):', err)
+        const rec = await this.obterPlanoUsuario(userId)
+        if (rec) return rec
       }
     }
 
@@ -121,6 +136,11 @@ export const planosService = {
         aviso_teste_enviado: false,
       })
     } catch (err) {
+      // Fallback gracioso caso tenha havido concorrência e o registro já exista
+      const rec = await this.obterPlanoUsuario(userId)
+      if (rec) {
+        return rec
+      }
       console.error('Erro ao criar trial inicial:', err)
       throw err
     }
@@ -139,12 +159,23 @@ export const planosService = {
       })
     }
 
-    return await pb.collection('planos').create<PlanoAssinatura>({
-      user_id: userId,
-      plano: 'essencial',
-      status: 'expirado',
-      trial_ate: ontem.toISOString(),
-    })
+    try {
+      return await pb.collection('planos').create<PlanoAssinatura>({
+        user_id: userId,
+        plano: 'essencial',
+        status: 'expirado',
+        trial_ate: ontem.toISOString(),
+      })
+    } catch {
+      const rec = await this.obterPlanoUsuario(userId)
+      if (rec) {
+        return await pb.collection('planos').update<PlanoAssinatura>(rec.id, {
+          status: 'expirado',
+          trial_ate: ontem.toISOString(),
+        })
+      }
+      throw new Error('Falha ao simular fim de teste')
+    }
   },
 
   async restaurarTeste(userId: string, dias: number = 3): Promise<PlanoAssinatura> {
@@ -161,12 +192,24 @@ export const planosService = {
       })
     }
 
-    return await pb.collection('planos').create<PlanoAssinatura>({
-      user_id: userId,
-      plano: 'essencial',
-      status: 'trial',
-      trial_ate: futuro.toISOString(),
-      aviso_teste_enviado: false,
-    })
+    try {
+      return await pb.collection('planos').create<PlanoAssinatura>({
+        user_id: userId,
+        plano: 'essencial',
+        status: 'trial',
+        trial_ate: futuro.toISOString(),
+        aviso_teste_enviado: false,
+      })
+    } catch {
+      const rec = await this.obterPlanoUsuario(userId)
+      if (rec) {
+        return await pb.collection('planos').update<PlanoAssinatura>(rec.id, {
+          status: 'trial',
+          trial_ate: futuro.toISOString(),
+          aviso_teste_enviado: false,
+        })
+      }
+      throw new Error('Falha ao restaurar teste')
+    }
   },
 }

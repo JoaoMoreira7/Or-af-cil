@@ -91,18 +91,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await pb.collection('users').authWithPassword(email.trim(), pass)
     syncAuth()
 
-    // 3. Criar registro inicial com Teste Grátis de 7 dias
+    // 3. Upsert inicial com Teste Grátis de 7 dias (plano 'essencial' válido, sem duplicar)
     try {
-      const trialDate = new Date()
-      trialDate.setDate(trialDate.getDate() + 7)
-      await pb.collection('planos').create({
-        user_id: createdUser.id,
-        plano: 'starter',
-        status: 'trial',
-        trial_ate: trialDate.toISOString(),
+      const emailNormalizado = (email || '').toLowerCase().trim()
+      const isDono = emailNormalizado === 'jaocarloss@gmail.com'
+
+      const existentes = await pb.collection('planos').getList(1, 1, {
+        filter: `user_id = "${createdUser.id}"`,
       })
-    } catch {
-      // silencioso se já existir
+
+      if (isDono) {
+        if (existentes.items.length > 0) {
+          await pb.collection('planos').update(existentes.items[0].id, {
+            plano: 'premium',
+            status: 'ativo',
+            renovacao_em: '2099-12-31T23:59:59.000Z',
+            trial_ate: '2099-12-31T23:59:59.000Z',
+            aviso_teste_enviado: true,
+          })
+        } else {
+          await pb.collection('planos').create({
+            user_id: createdUser.id,
+            plano: 'premium',
+            status: 'ativo',
+            renovacao_em: '2099-12-31T23:59:59.000Z',
+            trial_ate: '2099-12-31T23:59:59.000Z',
+            aviso_teste_enviado: true,
+          })
+        }
+      } else {
+        const trialDate = new Date()
+        trialDate.setDate(trialDate.getDate() + 7)
+
+        if (existentes.items.length > 0) {
+          // Se já existir, não sobrescreve se já estiver ativo
+          const p = existentes.items[0]
+          if (p.status !== 'ativo') {
+            await pb.collection('planos').update(p.id, {
+              plano: p.plano || 'essencial',
+              status: p.status || 'trial',
+              trial_ate: p.trial_ate || trialDate.toISOString(),
+            })
+          }
+        } else {
+          await pb.collection('planos').create({
+            user_id: createdUser.id,
+            plano: 'essencial',
+            status: 'trial',
+            trial_ate: trialDate.toISOString(),
+            aviso_teste_enviado: false,
+          })
+        }
+      }
+    } catch (err) {
+      console.warn('[Signup] Aviso ao configurar plano inicial:', err)
     }
   }
 

@@ -258,7 +258,7 @@ export const gatewayPagamentoService = {
       )
     }
 
-    // 2. Atualiza ou cria a assinatura do usuário na coleção 'planos' com o novo plano
+    // 2. Atualiza ou cria a assinatura do usuário na coleção 'planos' com o novo plano (upsert seguro)
     try {
       const planosExistentes = await pb.collection('planos').getList(1, 1, {
         filter: `user_id = "${userId}"`,
@@ -271,12 +271,25 @@ export const gatewayPagamentoService = {
           renovacao_em: dataVencimento.toISOString(),
         })
       } else {
-        await pb.collection('planos').create({
-          user_id: userId,
-          plano: planoId,
-          status: 'ativo',
-          renovacao_em: dataVencimento.toISOString(),
-        })
+        try {
+          await pb.collection('planos').create({
+            user_id: userId,
+            plano: planoId,
+            status: 'ativo',
+            renovacao_em: dataVencimento.toISOString(),
+          })
+        } catch {
+          const rec = await pb.collection('planos').getList(1, 1, {
+            filter: `user_id = "${userId}"`,
+          })
+          if (rec.items.length > 0) {
+            await pb.collection('planos').update(rec.items[0].id, {
+              plano: planoId,
+              status: 'ativo',
+              renovacao_em: dataVencimento.toISOString(),
+            })
+          }
+        }
       }
     } catch (err: unknown) {
       console.error('Erro ao ativar plano do usuário após pagamento:', err)
@@ -471,12 +484,25 @@ export const gatewayPagamentoService = {
     } else {
       const renovacao = new Date()
       renovacao.setDate(renovacao.getDate() + 30)
-      await pb.collection('planos').create({
-        user_id: userId,
-        plano: planoId,
-        status: novoStatus,
-        renovacao_em: novoStatus === 'ativo' ? renovacao.toISOString() : undefined,
-      })
+      try {
+        await pb.collection('planos').create({
+          user_id: userId,
+          plano: planoId,
+          status: novoStatus,
+          renovacao_em: novoStatus === 'ativo' ? renovacao.toISOString() : undefined,
+        })
+      } catch {
+        const rec = await pb.collection('planos').getList(1, 1, {
+          filter: `user_id = "${userId}"`,
+        })
+        if (rec.items.length > 0) {
+          await pb.collection('planos').update(rec.items[0].id, {
+            plano: planoId,
+            status: novoStatus,
+            renovacao_em: novoStatus === 'ativo' ? renovacao.toISOString() : undefined,
+          })
+        }
+      }
     }
   },
 
@@ -585,6 +611,37 @@ export const gatewayPagamentoService = {
     mensagem: string
   }> {
     return await pb.send('/backend/v1/admin/gateway/regenerar-webhook-token', {
+      method: 'POST',
+    })
+  },
+
+  /**
+   * Reativa a fila interrompida do Webhook diretamente na API Asaas (somente jaocarloss@gmail.com).
+   */
+  async reativarFilaWebhook(): Promise<{
+    sucesso: boolean
+    webhook_id: string
+    nome?: string
+    url?: string
+    status_anterior?: {
+      id: string
+      name: string
+      url: string
+      enabled?: boolean
+      interrupted?: boolean
+      status?: string
+    }
+    status_novo?: {
+      id: string
+      name: string
+      url: string
+      enabled?: boolean
+      interrupted?: boolean
+      status?: string
+    }
+    mensagem: string
+  }> {
+    return await pb.send('/backend/v1/admin/gateway/reativar-webhook', {
       method: 'POST',
     })
   },

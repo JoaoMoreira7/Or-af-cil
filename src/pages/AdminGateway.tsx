@@ -16,6 +16,7 @@ import {
   Radio,
   ExternalLink,
   Info,
+  PlayCircle,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -92,6 +93,9 @@ export default function AdminGateway() {
   const [modalRegenerarTokenOpen, setModalRegenerarTokenOpen] = useState<boolean>(false)
   const [novoTokenGerado, setNovoTokenGerado] = useState<string | null>(null)
   const [regenerandoToken, setRegenerandoToken] = useState<boolean>(false)
+
+  // Reativar Fila do Webhook na Asaas
+  const [reativandoFila, setReativandoFila] = useState<boolean>(false)
 
   // Revelação / Ocultação do Token do Webhook
   const [tokenRevelado, setTokenRevelado] = useState<string | null>(null)
@@ -284,6 +288,46 @@ export default function AdminGateway() {
     } finally {
       if (isMountedRef.current) {
         setRegenerandoToken(false)
+      }
+    }
+  }
+
+  // Ação: Reativar Fila do Webhook na Asaas
+  const handleReativarFilaWebhook = async () => {
+    setReativandoFila(true)
+    try {
+      const res = await gatewayPagamentoService.reativarFilaWebhook()
+      if (isMountedRef.current) {
+        if (res.sucesso) {
+          toast({
+            title: '✅ Fila Reativada na Asaas!',
+            description:
+              res.mensagem || 'A fila do webhook foi reativada e os envios foram retomados.',
+          })
+          await carregarStatus()
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Aviso ao reativar fila',
+            description: res.mensagem || 'Não foi possível reativar a fila automaticamente.',
+          })
+        }
+      }
+    } catch (err: unknown) {
+      if (isMountedRef.current) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Erro ao conectar à Asaas para reativar fila. Tente novamente ou reative pelo painel Asaas.'
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao reativar fila',
+          description: msg,
+        })
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setReativandoFila(false)
       }
     }
   }
@@ -839,18 +883,35 @@ export default function AdminGateway() {
               </CardDescription>
             </div>
 
-            <Button
-              type="button"
-              onClick={() => {
-                setNovoTokenGerado(null)
-                setModalRegenerarTokenOpen(true)
-              }}
-              variant="outline"
-              className="border-slate-300 hover:bg-slate-100 text-xs h-9 font-semibold self-start sm:self-auto"
-            >
-              <RefreshCw className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
-              Regenerar Token do Webhook
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+              <Button
+                type="button"
+                onClick={handleReativarFilaWebhook}
+                disabled={reativandoFila || loading}
+                variant="default"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 font-semibold shadow-sm gap-1.5"
+              >
+                {reativandoFila ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <PlayCircle className="w-4 h-4 text-white" />
+                )}
+                {reativandoFila ? 'Reativando na Asaas...' : 'Reativar Fila na Asaas'}
+              </Button>
+
+              <Button
+                type="button"
+                onClick={() => {
+                  setNovoTokenGerado(null)
+                  setModalRegenerarTokenOpen(true)
+                }}
+                variant="outline"
+                className="border-slate-300 hover:bg-slate-100 text-xs h-9 font-semibold"
+              >
+                <RefreshCw className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
+                Regenerar Token do Webhook
+              </Button>
+            </div>
           </div>
         </CardHeader>
 
