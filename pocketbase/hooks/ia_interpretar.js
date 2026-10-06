@@ -352,6 +352,236 @@ routerAdd(
         }
       } catch (errGastosDb) {}
 
+      // 5.1.1 Verificação de comando: "quanto lucrei esse mês?" / resultado do mês / lucro
+      const ehConsultaLucro =
+        transNorm.indexOf('quanto lucrei') !== -1 ||
+        transNorm.indexOf('quanto eu lucrei') !== -1 ||
+        transNorm.indexOf('qual o meu lucro') !== -1 ||
+        transNorm.indexOf('meu lucro') !== -1 ||
+        transNorm.indexOf('lucro desse mes') !== -1 ||
+        transNorm.indexOf('lucro deste mes') !== -1 ||
+        transNorm.indexOf('resultado do mes') !== -1 ||
+        transNorm.indexOf('resultado deste mes') !== -1 ||
+        transNorm.indexOf('resultado desse mes') !== -1 ||
+        (transNorm.indexOf('lucro') !== -1 &&
+          (transNorm.indexOf('mes') !== -1 || transNorm.indexOf('quanto') !== -1))
+
+      if (ehConsultaLucro) {
+        const hojeObj = new Date()
+        const mesAtualStr = hojeObj.toISOString().slice(0, 7) // 'YYYY-MM'
+
+        // Receita das cobranças pagas no mês
+        let receitaMes = 0
+        let qtdCobrancasPagasMes = 0
+        for (let i = 0; i < cobrancasUsuario.length; i++) {
+          const c = cobrancasUsuario[i]
+          if (c.status === 'pago') {
+            // Como cobrancasUsuario vem com created/updated, se tivermos somamos
+            receitaMes += c.valor || 0
+            qtdCobrancasPagasMes++
+          }
+        }
+
+        // Se não houver cobranças registradas, soma orçamentos aprovados do mês como receita base estimada
+        if (receitaMes === 0) {
+          for (let i = 0; i < orcamentosUsuario.length; i++) {
+            const o = orcamentosUsuario[i]
+            if (o.status === 'aprovado' && o.created && o.created.startsWith(mesAtualStr)) {
+              receitaMes += o.valor_total || 0
+            }
+          }
+        }
+
+        // Gastos de empresa do mês
+        const gastosMes = gastosUsuario.filter(function (g) {
+          return g.data && g.data.startsWith(mesAtualStr)
+        })
+
+        let gastosEmpresaMes = 0
+        let gastosPessoalMes = 0
+        for (let i = 0; i < gastosMes.length; i++) {
+          const g = gastosMes[i]
+          const ctxG = g.contexto === 'pessoal' ? 'pessoal' : 'empresa'
+          if (ctxG === 'empresa') {
+            gastosEmpresaMes += g.valor
+          } else {
+            gastosPessoalMes += g.valor
+          }
+        }
+
+        const lucroApurado = receitaMes - gastosEmpresaMes
+        const lucroFmt = lucroApurado.toFixed(2).replace('.', ',')
+        const recFmt = receitaMes.toFixed(2).replace('.', ',')
+        const gastEmpFmt = gastosEmpresaMes.toFixed(2).replace('.', ',')
+
+        const trat = formatarTratamento()
+        let textoRespLucro = ''
+        if (lucroApurado >= 0) {
+          if (prefTom === 'formal') {
+            textoRespLucro =
+              (trat ? trat + ', ' : '') +
+              'o resultado operacional estimado deste mês é positivo em R$ ' +
+              lucroFmt +
+              ' (receita de R$ ' +
+              recFmt +
+              ' menos R$ ' +
+              gastEmpFmt +
+              ' em despesas da empresa).'
+          } else if (prefTom === 'direto') {
+            textoRespLucro =
+              'Lucro do mês: R$ ' +
+              lucroFmt +
+              ' (Receita R$ ' +
+              recFmt +
+              ' - Gastos Empresa R$ ' +
+              gastEmpFmt +
+              ').'
+          } else {
+            textoRespLucro =
+              (prefEmojis ? '📈 ' : '') +
+              (prefNome ? prefNome + ', ' : '') +
+              'seu lucro neste mês está em R$ ' +
+              lucroFmt +
+              '! Receita de R$ ' +
+              recFmt +
+              ' menos R$ ' +
+              gastEmpFmt +
+              ' de gastos da empresa.'
+          }
+        } else {
+          const defFmt = Math.abs(lucroApurado).toFixed(2).replace('.', ',')
+          if (prefTom === 'formal') {
+            textoRespLucro =
+              (trat ? trat + ', ' : '') +
+              'no momento as despesas da empresa (R$ ' +
+              gastEmpFmt +
+              ') superam a receita (R$ ' +
+              recFmt +
+              '), com déficit de R$ ' +
+              defFmt +
+              '.'
+          } else if (prefTom === 'direto') {
+            textoRespLucro =
+              'Atenção ao fluxo: déficit de R$ ' +
+              defFmt +
+              ' este mês (Gastos R$ ' +
+              gastEmpFmt +
+              ' vs Receita R$ ' +
+              recFmt +
+              ').'
+          } else {
+            textoRespLucro =
+              (prefEmojis ? '⚠️ ' : '') +
+              (prefNome ? prefNome + ', ' : '') +
+              'atenção ao fluxo: os gastos da empresa somam R$ ' +
+              gastEmpFmt +
+              ' contra R$ ' +
+              recFmt +
+              ' de receita, com déficit temporário de R$ ' +
+              defFmt +
+              '.'
+          }
+        }
+
+        return e.json(200, {
+          sucesso: true,
+          audio_id: null,
+          transcricao_original: transcricao,
+          interpretacao: {
+            intencao_detectada: 'resultado_mes',
+            comando_resultado_mes: {
+              lucro: lucroApurado,
+              receita: receitaMes,
+              gastos_empresa: gastosEmpresaMes,
+              gastos_pessoal: gastosPessoalMes,
+              mensagem_resposta: textoRespLucro,
+            },
+            transcricao_corrigida: transcricao.trim(),
+            descricao_servico: 'Consulta do Resultado do Mês (Lucro)',
+            itens: [],
+            confianca: 'alta',
+            duvidas: [],
+          },
+          citations: [],
+        })
+      }
+
+      // 5.1.2 Verificação de comando: "resumo do dia" / "resumo da manhã" / "como está meu dia"
+      const ehConsultaResumoDia =
+        transNorm.indexOf('resumo do dia') !== -1 ||
+        transNorm.indexOf('resumo da manha') !== -1 ||
+        transNorm.indexOf('resumo de hoje') !== -1 ||
+        transNorm.indexOf('como esta meu dia') !== -1 ||
+        transNorm.indexOf('como ta meu dia') !== -1 ||
+        transNorm.indexOf('o que tenho pra hoje') !== -1 ||
+        transNorm.indexOf('o que eu tenho pra hoje') !== -1 ||
+        transNorm.indexOf('minhas tarefas de hoje') !== -1
+
+      if (ehConsultaResumoDia) {
+        // Agrupa orçamentos aguardando resposta
+        let qtdAguardando = 0
+        let valorAguardando = 0
+        let qtdAprovados = 0
+        let totalAReceber = 0
+
+        for (let i = 0; i < orcamentosUsuario.length; i++) {
+          const o = orcamentosUsuario[i]
+          if (o.status === 'enviado' || o.status === 'rascunho') {
+            qtdAguardando++
+            valorAguardando += o.valor_total || 0
+          } else if (o.status === 'aprovado') {
+            qtdAprovados++
+            totalAReceber += o.valor_total || 0
+          }
+        }
+
+        const trat = formatarTratamento()
+        const horaAtual = new Date().getHours()
+        let saudacaoDia = 'Bom dia'
+        if (horaAtual >= 12 && horaAtual < 18) saudacaoDia = 'Boa tarde'
+        else if (horaAtual >= 18 || horaAtual < 5) saudacaoDia = 'Boa noite'
+
+        const vAguardFmt = valorAguardando.toFixed(2).replace('.', ',')
+        const vRecFmt = totalAReceber.toFixed(2).replace('.', ',')
+
+        let textoRespResumo =
+          saudacaoDia +
+          (prefNome ? ', ' + prefNome : '') +
+          '! ' +
+          (qtdAguardando > 0
+            ? 'Você tem ' +
+              qtdAguardando +
+              ' proposta(s) aguardando aprovação (R$ ' +
+              vAguardFmt +
+              ')'
+            : 'Nenhuma proposta aguardando resposta') +
+          (totalAReceber > 0
+            ? ' e R$ ' + vRecFmt + ' a receber em orçamentos aprovados.'
+            : ' e nenhum pagamento pendente.')
+
+        return e.json(200, {
+          sucesso: true,
+          audio_id: null,
+          transcricao_original: transcricao,
+          interpretacao: {
+            intencao_detectada: 'resumo_dia',
+            comando_resumo_dia: {
+              qtd_aguardando: qtdAguardando,
+              valor_aguardando: valorAguardando,
+              qtd_aprovados: qtdAprovados,
+              total_a_receber: totalAReceber,
+              mensagem_resposta: textoRespResumo,
+            },
+            transcricao_corrigida: transcricao.trim(),
+            descricao_servico: 'Resumo do dia e operações',
+            itens: [],
+            confianca: 'alta',
+            duvidas: [],
+          },
+          citations: [],
+        })
+      }
+
       // 5.2 Verificação de comando: "quanto gastei esse mês?" / consulta de gastos (empresa / pessoal / ambos)
       const ehConsultaGastos =
         transNorm.indexOf('quanto gastei') !== -1 ||
@@ -1428,8 +1658,9 @@ routerAdd(
         ' e chamando pelo nome ' +
         (prefNome || 'usuário') +
         '.\n' +
-        '3. Se for criação de orçamento:\n' +
-        '   - Extraia descricao_servico, itens (descricao, quantidade, valor_unitario), cliente_sugerido ou cliente_novo.\n' +
+        '3. CLASSIFICAÇÃO DE INTENÇÃO UNIVERSAL:\n' +
+        '   - Se a pessoa disser "cadastrar cliente...", "novo cliente...", "adicionar cliente...", ou apenas ditar dados de contato de uma pessoa/empresa (ex: "cliente Maria Silva, telefone 19 99999-9999") -> defina "intencao_detectada": "cliente" e preencha "cliente_novo".\n' +
+        '   - Se for criação de orçamento ou prestação de serviço com valor/itens (ex: "orçamento para João, pintura de sala, R$ 800") -> defina "intencao_detectada": "orcamento", extraia descricao_servico, itens (descricao, quantidade, valor_unitario), cliente_sugerido ou cliente_novo.\n' +
         '4. Se for cliente novo, extraia os dados em cliente_novo (nome, telefone, email, empresa, endereco):\n' +
         '   - REGRA CRÍTICA PARA E-MAIL: NUNCA invente, deduza ou gere e-mail placeholder (ex: derivado do nome ou @cliente.com). Se o usuário NÃO ditou explicitamente um endereço de e-mail na fala, o campo "email" DEVE ser estritamente null ou omitido.\n' +
         'RETORNE ESTRITAMENTE JSON VÁLIDO sem formatação markdown:\n' +
@@ -1452,6 +1683,19 @@ routerAdd(
         '  "confianca": "alta" | "media" | "baixa",\n' +
         '  "duvidas": []\n' +
         '}'
+
+      // 9.1 Detecção heurística de criação explícita de cliente:
+      // Ex: "cadastrar cliente Maria Silva, telefone 19 99999-9999", "novo cliente João Paulo"
+      const ehCadastroClienteHeuristico =
+        transNorm.indexOf('cadastrar cliente') !== -1 ||
+        transNorm.indexOf('cadastra cliente') !== -1 ||
+        transNorm.indexOf('novo cliente') !== -1 ||
+        transNorm.indexOf('adicionar cliente') !== -1 ||
+        transNorm.indexOf('adiciona cliente') !== -1 ||
+        transNorm.indexOf('salvar cliente') !== -1 ||
+        transNorm.indexOf('salva cliente') !== -1 ||
+        transNorm.indexOf('inserir cliente') !== -1 ||
+        contexto === 'cliente'
 
       let agentResponse = null
       try {
@@ -1568,7 +1812,11 @@ routerAdd(
 
       if (!parsed) {
         parsed = {
-          intencao_detectada: comandoStatusHeuristico ? 'comando_status' : contexto,
+          intencao_detectada: comandoStatusHeuristico
+            ? 'comando_status'
+            : ehCadastroClienteHeuristico
+              ? 'cliente'
+              : contexto,
           transcricao_corrigida: transcricao.trim(),
           descricao_servico: transcricao.trim(),
           cliente_sugerido_id: melhorClienteMatch ? melhorClienteMatch.id : null,
@@ -1586,6 +1834,43 @@ routerAdd(
           comando_status: comandoStatusHeuristico,
           confianca: 'media',
           duvidas: [],
+        }
+      }
+
+      // Se foi expressamente falado "cadastrar cliente ...", garante intencao_detectada = 'cliente'
+      if (ehCadastroClienteHeuristico && !parsed.comando_status) {
+        parsed.intencao_detectada = 'cliente'
+        if (!parsed.cliente_novo) {
+          // Extração heurística simples de cliente da fala
+          // Remove marcadores como "cadastrar cliente", "novo cliente"
+          const limpoCli = transcricao
+            .replace(/cadastrar\s+cliente/i, '')
+            .replace(/cadastra\s+cliente/i, '')
+            .replace(/novo\s+cliente/i, '')
+            .replace(/adicionar\s+cliente/i, '')
+            .replace(/adiciona\s+cliente/i, '')
+            .trim()
+
+          // Procura telefone
+          let telExtraido = ''
+          const telMatch = limpoCli.match(
+            /(?:telefone|fone|celular|whatsapp|zap)?\s*\(?(\d{2})\)?\s*(9?\d{4})[-.\s]?(\d{4})/i,
+          )
+          if (telMatch) {
+            telExtraido = '(' + telMatch[1] + ') ' + telMatch[2] + '-' + telMatch[3]
+          }
+
+          // Nome: texto antes de telefone ou vírgula
+          let nomeCliExtraido = limpoCli.split(/telefone|fone|celular|whatsapp|zap|,/i)[0].trim()
+          nomeCliExtraido = nomeCliExtraido.replace(/^(?:do|da|o|a|para|pra)\s+/i, '').trim()
+
+          parsed.cliente_novo = {
+            nome: nomeCliExtraido || 'Cliente',
+            telefone: telExtraido,
+            email: null,
+            empresa: '',
+            endereco: '',
+          }
         }
       }
 

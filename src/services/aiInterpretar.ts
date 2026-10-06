@@ -32,6 +32,8 @@ export interface InterpretacaoResultado {
     | 'consulta_devedores'
     | 'registro_gasto'
     | 'consulta_gastos'
+    | 'resultado_mes'
+    | 'resumo_dia'
   comando_desfazer?: boolean
   transcricao_corrigida: string
   descricao_servico?: string
@@ -40,6 +42,20 @@ export interface InterpretacaoResultado {
   cliente_novo?: ClienteNovoExtraido | null
   gasto_extraido?: GastoExtraido | null
   comando_consulta_gastos?: ComandoConsultaGastosExtraido | null
+  comando_resultado_mes?: {
+    lucro: number
+    receita: number
+    gastos_empresa: number
+    gastos_pessoal: number
+    mensagem_resposta: string
+  } | null
+  comando_resumo_dia?: {
+    qtd_aguardando: number
+    valor_aguardando: number
+    qtd_aprovados: number
+    total_a_receber: number
+    mensagem_resposta: string
+  } | null
   itens: OrçamentoItem[]
   prazo?: string | null
   observacoes?: string | null

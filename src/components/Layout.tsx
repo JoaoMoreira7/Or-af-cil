@@ -24,6 +24,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { useSubscription } from '@/contexts/SubscriptionContext'
 import { TrialExpiredPaywall } from '@/components/TrialExpiredPaywall'
+import { GlobalVoiceFAB } from '@/components/GlobalVoiceFAB'
 import { Button } from '@/components/ui/button'
 import { PLANO_CONFIG } from '@/config/plans'
 
@@ -736,6 +737,9 @@ export default function Layout() {
           </button>
         </nav>
       </div>
+
+      {/* Assistente de Voz Universal Livre (FAB) - Disponível em todas as telas */}
+      <GlobalVoiceFAB />
     </div>
   )
 }
