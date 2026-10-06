@@ -59,6 +59,7 @@ export default function AdminVendas() {
     'todos',
   )
   const [filtroForma, setFiltroForma] = useState<'todos' | 'pix' | 'cartao' | 'boleto'>('todos')
+  const [filtroPlano, setFiltroPlano] = useState<'todos' | PlanoId>('todos')
 
   // Modal de Ação Manual de Assinatura (Cancelar / Reativar)
   const [modalAcaoOpen, setModalAcaoOpen] = useState<boolean>(false)
@@ -125,9 +126,12 @@ export default function AdminVendas() {
       const matchesStatus = filtroStatus === 'todos' ? true : item.status === filtroStatus
       const matchesForma = filtroForma === 'todos' ? true : item.forma_pagamento === filtroForma
 
-      return matchesSearch && matchesStatus && matchesForma
+      const planoDaVenda = normalizarPlanoId(item.plano_nome)
+      const matchesPlano = filtroPlano === 'todos' ? true : planoDaVenda === filtroPlano
+
+      return matchesSearch && matchesStatus && matchesForma && matchesPlano
     })
-  }, [vendas, searchTerm, filtroStatus, filtroForma])
+  }, [vendas, searchTerm, filtroStatus, filtroForma, filtroPlano])
 
   const abrirModalAcao = (venda: PagamentoRegistro, tipo: 'cancelar' | 'reativar') => {
     setVendaSelecionada(venda)
@@ -215,6 +219,22 @@ export default function AdminVendas() {
     }
   }
 
+  const renderPlanoBadge = (planoNome: string) => {
+    const config = obterConfigPlano(planoNome)
+    const cores: Record<string, string> = {
+      essencial: 'bg-slate-100 text-slate-700 border-slate-300',
+      profissional: 'bg-blue-50 text-blue-700 border-blue-300',
+      premium: 'bg-purple-50 text-purple-700 border-purple-300',
+    }
+    return (
+      <span
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${cores[config.id] || cores.essencial}`}
+      >
+        {config.nome}
+      </span>
+    )
+  }
+
   const renderFormaBadge = (forma: string) => {
     if (forma === 'pix') {
       return (
@@ -288,9 +308,9 @@ export default function AdminVendas() {
             </Badge>
           </div>
           <p className="text-sm text-slate-500 mt-1">
-            Gestão financeira de assinaturas do plano {PLANO_CONFIG.nome} (
-            {PLANO_CONFIG.precoMensalExtenso}). Controle de vendas reais Asaas, receita mensal
-            acumulada e ações manuais de liberação/cancelamento.
+            Gestão financeira da escada de 3 planos (Essencial R$ 49,90 · Profissional R$ 64,90 ·
+            Premium R$ 79,90). Controle de vendas reais Asaas, receita mensal recorrente ponderada
+            por plano e ações manuais de liberação/cancelamento.
           </p>
         </div>
 
@@ -332,7 +352,10 @@ export default function AdminVendas() {
         <div className="shrink-0 flex items-center gap-2 bg-white/90 p-2.5 rounded-xl border border-emerald-200">
           <Info className="w-4 h-4 text-emerald-600 shrink-0" />
           <div className="text-[11px] leading-tight text-slate-700">
-            <strong>Plano Único Starter:</strong> {PLANO_CONFIG.precoFormatado}/mês
+            <strong>Escada de planos:</strong> Essencial{' '}
+            {obterConfigPlano('essencial').precoFormatado} · Profissional{' '}
+            {obterConfigPlano('profissional').precoFormatado} · Premium{' '}
+            {obterConfigPlano('premium').precoFormatado}
           </div>
         </div>
       </div>
@@ -393,7 +416,7 @@ export default function AdminVendas() {
           </CardContent>
         </Card>
 
-        {/* 4. RECEITA MENSAL ATUAL (ATIVOS x 49,90) */}
+        {/* 4. RECEITA MENSAL ATUAL (MRR PONDERADO PELO PREÇO DE CADA PLANO) */}
         <Card className="border-slate-200 shadow-sm bg-white hover:border-slate-300 transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -407,7 +430,11 @@ export default function AdminVendas() {
             <div className="text-2xl font-extrabold text-indigo-600">
               {loading ? '...' : formatarMoedaBRL(metricas?.receitaMensalAtual || 0)}
             </div>
-            <p className="text-xs text-slate-500 mt-1">Ativos × {PLANO_CONFIG.precoFormatado}</p>
+            <p className="text-xs text-slate-500 mt-1">
+              {metricas?.vendasPorPlano
+                ? `${metricas.vendasPorPlano.essencial}× Ess · ${metricas.vendasPorPlano.profissional}× Prof · ${metricas.vendasPorPlano.premium}× Prem`
+                : 'Ponderado por plano'}
+            </p>
           </CardContent>
         </Card>
 
@@ -484,6 +511,30 @@ export default function AdminVendas() {
                 ))}
               </div>
 
+              {/* Filtro Plano (escada de 3 planos) */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                {(['todos', 'essencial', 'profissional', 'premium'] as const).map((pl) => (
+                  <button
+                    key={pl}
+                    type="button"
+                    onClick={() => setFiltroPlano(pl)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                      filtroPlano === pl
+                        ? 'bg-white text-slate-900 shadow-xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {pl === 'todos'
+                      ? 'Todos'
+                      : pl === 'essencial'
+                        ? 'Essencial'
+                        : pl === 'profissional'
+                          ? 'Profissional'
+                          : 'Premium'}
+                  </button>
+                ))}
+              </div>
+
               {/* Filtro Status */}
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
                 {(['todos', 'pago', 'pendente', 'cancelado'] as const).map((st) => (
@@ -531,6 +582,7 @@ export default function AdminVendas() {
                 <thead>
                   <tr className="bg-slate-50/75 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">Cliente</th>
+                    <th className="py-3 px-4">Plano</th>
                     <th className="py-3 px-4">Valor</th>
                     <th className="py-3 px-4">Forma</th>
                     <th className="py-3 px-4">Status</th>
@@ -553,6 +605,9 @@ export default function AdminVendas() {
                           <div className="font-semibold text-slate-900">{nome}</div>
                           <div className="text-[11px] text-slate-500 font-mono">{email}</div>
                         </td>
+
+                        {/* PLANO */}
+                        <td className="py-3 px-4">{renderPlanoBadge(item.plano_nome || '')}</td>
 
                         {/* VALOR */}
                         <td className="py-3 px-4 font-bold text-slate-900 tabular-nums">

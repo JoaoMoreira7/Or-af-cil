@@ -60,10 +60,14 @@ export interface GrupoClienteReceber {
   qtdPendentes: number
 }
 
+import { useSubscription } from '@/contexts/SubscriptionContext'
+
 export default function ContasReceber() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { toast } = useToast()
+  const { temAcessoRecurso } = useSubscription()
+  const temAcessoWhatsAppCobranca = temAcessoRecurso('profissional')
 
   const [loading, setLoading] = useState(true)
   const [orcamentosAprovados, setOrcamentosAprovados] = useState<Orçamento[]>([])
@@ -300,6 +304,16 @@ export default function ContasReceber() {
 
   // Ação: Cobrar pelo WhatsApp com mensagem pré-preenchida cordial
   const handleCobrarWhatsApp = (item: ItemReceber) => {
+    if (!temAcessoWhatsAppCobranca) {
+      toast({
+        title: 'Recurso do Plano Profissional',
+        description:
+          'A cobrança direta pelo WhatsApp está disponível no plano Profissional — faça upgrade!',
+      })
+      navigate('/planos')
+      return
+    }
+
     const tel = item.cliente?.telefone?.replace(/\D/g, '') || ''
     const nome = item.cliente?.nome ? ` ${item.cliente.nome}` : ''
     const num = item.orcamento.numero || ''

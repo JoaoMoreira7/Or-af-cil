@@ -1,105 +1,137 @@
 import pb from '@/lib/pocketbase/client'
 import { PlanoAssinatura, FormaPagamentoAssinatura } from '@/types'
-import { gatewayPagamentoService } from '@/services/gatewayPagamento'
+import { gatewayPagamentoService } from './gatewayPagamento'
+import { PlanoId } from '@/config/plans'
 
 export const planosService = {
   async obterPlanoUsuario(userId: string): Promise<PlanoAssinatura | null> {
     try {
-      const registros = await pb.collection('planos').getList<PlanoAssinatura>(1, 1, {
+      const records = await pb.collection('planos').getList<PlanoAssinatura>(1, 1, {
         filter: `user_id = "${userId}"`,
+        sort: '-created',
       })
-      return registros.items[0] || null
-    } catch {
+      return records.items[0] || null
+    } catch (err) {
+      console.error('Erro ao buscar plano do usuário:', err)
       return null
     }
   },
 
   async assinarPlano(
     userId: string,
-    plano: 'starter' | 'pro' = 'starter',
+    plano: PlanoId | string = 'essencial',
     formaPagamento: FormaPagamentoAssinatura = 'pix',
   ): Promise<PlanoAssinatura> {
     try {
       // Registra a venda através do gateway de pagamento oficial
       await gatewayPagamentoService.processarAssinatura({
         userId,
+        planoId: plano,
         formaPagamento,
       })
 
-      const atual = await this.obterPlanoUsuario(userId)
-      if (!atual) {
-        throw new Error('Falha ao obter registro atualizado da assinatura')
+      const hoje = new Date()
+      const renovacao = new Date(hoje)
+      renovacao.setDate(renovacao.getDate() + 30)
+
+      const planoExistente = await this.obterPlanoUsuario(userId)
+      if (planoExistente) {
+        return await pb.collection('planos').update<PlanoAssinatura>(planoExistente.id, {
+          plano: plano as any,
+          status: 'ativo',
+          renovacao_em: renovacao.toISOString(),
+        })
       }
-      return atual
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Falha ao processar assinatura do plano'
-      throw new Error(msg)
+
+      return await pb.collection('planos').create<PlanoAssinatura>({
+        user_id: userId,
+        plano: plano as any,
+        status: 'ativo',
+        renovacao_em: renovacao.toISOString(),
+      })
+    } catch (err) {
+      console.error('Erro ao assinar plano:', err)
+      throw err
     }
   },
 
   async iniciarOuVerificarTrial(userId: string): Promise<PlanoAssinatura> {
-    const atual = await this.obterPlanoUsuario(userId)
-    if (atual) {
-      // Se estiver em trial, verificar se a data já expirou
-      if (atual.status === 'trial' && atual.trial_ate) {
-        const expirou = new Date(atual.trial_ate).getTime() <= Date.now()
-        if (expirou) {
-          return await pb.collection('planos').update<PlanoAssinatura>(atual.id, {
+    const planoExistente = await this.obterPlanoUsuario(userId)
+    if (planoExistente) {
+      // Se está em trial, verifica se expirou
+      if (planoExistente.status === 'trial' && planoExistente.trial_ate) {
+        const agora = new Date()
+        const trialAte = new Date(planoExistente.trial_ate)
+        if (agora > trialAte) {
+          // Atualiza para expirado
+          return await pb.collection('planos').update<PlanoAssinatura>(planoExistente.id, {
             status: 'expirado',
           })
         }
       }
-      return atual
+      return planoExistente
     }
 
-    // Se ainda não existir registro de plano, inicia o trial de 7 dias
-    const trialDate = new Date()
-    trialDate.setDate(trialDate.getDate() + 7)
-    return await pb.collection('planos').create<PlanoAssinatura>({
-      user_id: userId,
-      plano: 'starter',
-      status: 'trial',
-      trial_ate: trialDate.toISOString(),
-    })
+    // Cria trial de 7 dias iniciando no plano Essencial
+    const agora = new Date()
+    const trialAte = new Date(agora)
+    trialAte.setDate(trialAte.getDate() + 7)
+
+    try {
+      return await pb.collection('planos').create<PlanoAssinatura>({
+        user_id: userId,
+        plano: 'essencial',
+        status: 'trial',
+        trial_ate: trialAte.toISOString(),
+        aviso_teste_enviado: false,
+      })
+    } catch (err) {
+      console.error('Erro ao criar trial inicial:', err)
+      throw err
+    }
   },
 
   async simularFimTeste(userId: string): Promise<PlanoAssinatura> {
-    const ontem = new Date()
+    const planoExistente = await this.obterPlanoUsuario(userId)
+    const agora = new Date()
+    const ontem = new Date(agora)
     ontem.setDate(ontem.getDate() - 1)
 
-    const atual = await this.obterPlanoUsuario(userId)
-    if (atual) {
-      return await pb.collection('planos').update<PlanoAssinatura>(atual.id, {
-        status: 'expirado',
-        trial_ate: ontem.toISOString(),
-      })
-    } else {
-      return await pb.collection('planos').create<PlanoAssinatura>({
-        user_id: userId,
-        plano: 'starter',
+    if (planoExistente) {
+      return await pb.collection('planos').update<PlanoAssinatura>(planoExistente.id, {
         status: 'expirado',
         trial_ate: ontem.toISOString(),
       })
     }
+
+    return await pb.collection('planos').create<PlanoAssinatura>({
+      user_id: userId,
+      plano: 'essencial',
+      status: 'expirado',
+      trial_ate: ontem.toISOString(),
+    })
   },
 
   async restaurarTeste(userId: string, dias: number = 3): Promise<PlanoAssinatura> {
-    const futuro = new Date()
+    const planoExistente = await this.obterPlanoUsuario(userId)
+    const agora = new Date()
+    const futuro = new Date(agora)
     futuro.setDate(futuro.getDate() + dias)
 
-    const atual = await this.obterPlanoUsuario(userId)
-    if (atual) {
-      return await pb.collection('planos').update<PlanoAssinatura>(atual.id, {
+    if (planoExistente) {
+      return await pb.collection('planos').update<PlanoAssinatura>(planoExistente.id, {
         status: 'trial',
         trial_ate: futuro.toISOString(),
-      })
-    } else {
-      return await pb.collection('planos').create<PlanoAssinatura>({
-        user_id: userId,
-        plano: 'starter',
-        status: 'trial',
-        trial_ate: futuro.toISOString(),
+        aviso_teste_enviado: false,
       })
     }
+
+    return await pb.collection('planos').create<PlanoAssinatura>({
+      user_id: userId,
+      plano: 'essencial',
+      status: 'trial',
+      trial_ate: futuro.toISOString(),
+      aviso_teste_enviado: false,
+    })
   },
 }

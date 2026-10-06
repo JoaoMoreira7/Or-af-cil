@@ -26,7 +26,6 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
     )
 
     if (!asaasPaymentId) {
-      // Evento que não é de cobrança ou sem ID, responde 200 OK para o Asaas não reenviar
       return e.json(200, { recebido: true, ignorado: true, motivo: 'Sem ID de cobrança' })
     }
 
@@ -47,7 +46,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
       console.warn(`[asaas_webhook] Aviso na busca da cobrança ${asaasPaymentId}:`, findErr)
     }
 
-    // Se não encontrou por asaas_id, tenta por externalReference se houver
+    // Se não encontrou por asaas_id, tenta por externalReference
     if (!pagamentoRecord && payment.externalReference) {
       try {
         const pagamentosPorRef = $app.findRecordsByFilter(
@@ -67,7 +66,6 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
       console.warn(
         `[asaas_webhook] Registro de pagamento não encontrado para Asaas ID: ${asaasPaymentId}.`,
       )
-      // Retornamos 200 para a Asaas considerar entregue
       return e.json(200, {
         recebido: true,
         aviso: 'Pagamento não encontrado na base do OrçaFácil',
@@ -78,6 +76,38 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
     const userId = pagamentoRecord.getString('user_id')
     const statusAtual = pagamentoRecord.getString('status')
     const agora = new Date()
+
+    // Descobrir qual o plano contratado registrado na venda
+    const metaPag = pagamentoRecord.get('metadados') || {}
+    let planoIdContratado = metaPag.plano_id || 'essencial'
+    let planoNomeContratado = pagamentoRecord.getString('plano_nome') || metaPag.plano_nome || ''
+
+    // Se não estiver preenchido no metadados, infere pelo valor do pagamento ou descrição
+    const valorPagoNum = Number(payment.value) || Number(pagamentoRecord.get('valor')) || 49.9
+    if (!planoNomeContratado) {
+      if (valorPagoNum >= 75) {
+        planoIdContratado = 'premium'
+        planoNomeContratado = 'Premium'
+      } else if (valorPagoNum >= 60) {
+        planoIdContratado = 'profissional'
+        planoNomeContratado = 'Profissional'
+      } else {
+        planoIdContratado = 'essencial'
+        planoNomeContratado = 'Essencial'
+      }
+    } else {
+      const lower = planoNomeContratado.toLowerCase()
+      if (lower.includes('premium')) {
+        planoIdContratado = 'premium'
+        planoNomeContratado = 'Premium'
+      } else if (lower.includes('pro')) {
+        planoIdContratado = 'profissional'
+        planoNomeContratado = 'Profissional'
+      } else {
+        planoIdContratado = 'essencial'
+        planoNomeContratado = 'Essencial'
+      }
+    }
 
     // Tratar eventos de confirmação / recebimento de pagamento
     const isPagoEvent = eventName === 'PAYMENT_RECEIVED' || eventName === 'PAYMENT_CONFIRMED'
@@ -94,22 +124,23 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
     // CASO 1: PAGAMENTO CONFIRMADO / RECEBIDO
     // =======================================================================
     if (isPagoEvent) {
-      // Idempotência: se já estava pago, não refaz envios nem duplica renovação
       const jaEstavaPago = statusAtual === 'pago'
-
       const pagoEmData = payment.paymentDate || payment.clientPaymentDate || agora.toISOString()
 
-      // Calcula renovação para +30 dias a partir do pagamento
+      // Renovação para +30 dias a partir do pagamento
       const dataRenovacao = new Date(pagoEmData)
       dataRenovacao.setDate(dataRenovacao.getDate() + 30)
 
       pagamentoRecord.set('status', 'pago')
       pagamentoRecord.set('pago_em', new Date(pagoEmData).toISOString())
       pagamentoRecord.set('data_vencimento', dataRenovacao.toISOString())
+      pagamentoRecord.set('plano_nome', planoNomeContratado)
 
       const metaAtual = pagamentoRecord.get('metadados') || {}
       metaAtual.webhook_evento_pago = eventName
       metaAtual.webhook_processado_em = agora.toISOString()
+      metaAtual.plano_id = planoIdContratado
+      metaAtual.plano_nome = planoNomeContratado
       metaAtual.asaas_payment_data = {
         status: payment.status,
         netValue: payment.netValue,
@@ -122,7 +153,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
       pagamentoRecord.set('metadados', metaAtual)
       $app.save(pagamentoRecord)
 
-      // Atualizar assinatura do usuário na coleção 'planos'
+      // Atualizar assinatura do usuário na coleção 'planos' com o plano exato
       try {
         const planos = $app.findRecordsByFilter(
           'planos',
@@ -134,7 +165,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
 
         if (planos.length > 0) {
           const p = planos[0]
-          p.set('plano', 'starter')
+          p.set('plano', planoIdContratado)
           p.set('status', 'ativo')
           p.set('renovacao_em', dataRenovacao.toISOString())
           $app.save(p)
@@ -142,19 +173,19 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
           const colPlanos = $app.findCollectionByNameOrId('planos')
           const p = new Record(colPlanos)
           p.set('user_id', userId)
-          p.set('plano', 'starter')
+          p.set('plano', planoIdContratado)
           p.set('status', 'ativo')
           p.set('renovacao_em', dataRenovacao.toISOString())
           $app.save(p)
         }
         console.log(
-          `[asaas_webhook] Assinatura do usuário ${userId} ATIVADA até ${dataRenovacao.toISOString()}`,
+          `[asaas_webhook] Assinatura do usuário ${userId} ATIVADA no plano ${planoNomeContratado} (${planoIdContratado}) até ${dataRenovacao.toISOString()}`,
         )
       } catch (planErr) {
         console.error(`[asaas_webhook] Erro ao atualizar coleção planos para ${userId}:`, planErr)
       }
 
-      // Enviar e-mails transacionais (comprovante ao cliente e aviso ao dono) se não estava pago antes
+      // Enviar e-mails transacionais (comprovante com plano contratado e valor correto)
       if (!jaEstavaPago) {
         try {
           let usuario = null
@@ -164,7 +195,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
 
           const clienteEmail = usuario ? usuario.getString('email') : ''
           const clienteNome = usuario ? usuario.getString('name') || 'Assinante' : 'Assinante'
-          const valorFormatado = 'R$ ' + (payment.value || 49.9).toFixed(2).replace('.', ',')
+          const valorFormatado = 'R$ ' + valorPagoNum.toFixed(2).replace('.', ',')
           const refTransacao = pagamentoRecord.getString('referencia_transacao')
           const dataPagamentoFormatada = new Intl.DateTimeFormat('pt-BR', {
             day: '2-digit',
@@ -176,7 +207,6 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
 
           const remetente = $app.settings().meta.senderAddress || 'suporte@orcafacil.com.br'
 
-          // Template HTML do comprovante do cliente
           const corpoComprovanteHtml = `
               <!DOCTYPE html>
               <html lang="pt-BR">
@@ -204,7 +234,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
                       Olá, <strong>${clienteNome}</strong>!
                     </p>
                     <p style="font-size: 14px; color: #475569; margin: 0 0 24px 0;">
-                      Confirmamos o recebimento do seu pagamento via <strong>PIX</strong> através do nosso gateway oficial Asaas. Seu plano <strong>Starter</strong> foi ativado com sucesso por mais 30 dias de acesso irrestrito.
+                      Confirmamos o recebimento do seu pagamento via <strong>PIX</strong> através do nosso gateway oficial Asaas. Seu <strong>Plano ${planoNomeContratado}</strong> foi ativado com sucesso por mais 30 dias de acesso com todos os recursos contratados.
                     </p>
 
                     <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
@@ -215,7 +245,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
                       <table width="100%" cellpadding="6" cellspacing="0" style="font-size: 13px; color: #334155;">
                         <tr>
                           <td style="color: #64748b; width: 45%;">Plano Contratado:</td>
-                          <td style="font-weight: 700; color: #0f172a;">Plano Starter Mensal</td>
+                          <td style="font-weight: 700; color: #0f172a;">Plano ${planoNomeContratado} Mensal</td>
                         </tr>
                         <tr>
                           <td style="color: #64748b;">Valor Pago:</td>
@@ -254,7 +284,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
 
                     <div style="text-align: center; margin: 28px 0 10px 0;">
                       <a href="https://orcafacil.jmsistemas.app.br/orcamentos" style="display: inline-block; background: linear-gradient(135deg, #059669, #047857); color: #ffffff; text-decoration: none; font-weight: 700; font-size: 15px; padding: 14px 32px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.3);">
-                        Entrar no OrçaFácil e Criar Orçamentos
+                        Entrar no OrçaFácil e Usar Meu Plano
                       </a>
                     </div>
                   </div>
@@ -268,7 +298,6 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
               </html>
             `
 
-          // Envio ao cliente se tiver e-mail
           if (clienteEmail) {
             try {
               const msgCliente = new MailerMessage({
@@ -277,7 +306,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
                   name: 'OrçaFácil',
                 },
                 to: [{ address: clienteEmail, name: clienteNome }],
-                subject: `Comprovante de Pagamento — Plano Starter OrçaFácil (${valorFormatado})`,
+                subject: `Comprovante de Pagamento — Plano ${planoNomeContratado} OrçaFácil (${valorFormatado})`,
                 html: corpoComprovanteHtml,
               })
               $app.newMailClient().send(msgCliente)
@@ -289,7 +318,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
             }
           }
 
-          // Notificação ao dono jaocarloss@gmail.com
+          // Notificação ao dono jaocarloss@gmail.com com indicação do plano
           const emailDono = 'jaocarloss@gmail.com'
           try {
             const msgDono = new MailerMessage({
@@ -298,12 +327,14 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
                 name: 'OrçaFácil Notificações',
               },
               to: [{ address: emailDono, name: 'João Carlos' }],
-              subject: `💰 Nova Venda Aprovada no OrçaFácil: ${valorFormatado} (${clienteNome})`,
+              subject: `💰 Nova Venda: Plano ${planoNomeContratado} (${valorFormatado}) - ${clienteNome}`,
               html: `
                   <div style="font-family: sans-serif; padding: 20px; color: #1e293b;">
                     <h2 style="color: #059669;">🎉 Nova venda de assinatura confirmada via Asaas!</h2>
-                    <p>O cliente <strong>${clienteNome}</strong> (<a href="mailto:${clienteEmail}">${clienteEmail}</a>) acabou de ter o pagamento confirmado no valor de <strong>${valorFormatado}</strong> via PIX.</p>
+                    <p>O cliente <strong>${clienteNome}</strong> (<a href="mailto:${clienteEmail}">${clienteEmail}</a>) contratou o <strong>Plano ${planoNomeContratado}</strong> no valor de <strong>${valorFormatado}</strong> via PIX.</p>
                     <ul>
+                      <li><strong>Plano:</strong> ${planoNomeContratado}</li>
+                      <li><strong>Valor:</strong> ${valorFormatado}</li>
                       <li><strong>Transação:</strong> ${refTransacao}</li>
                       <li><strong>Asaas ID:</strong> ${asaasPaymentId}</li>
                       <li><strong>Data:</strong> ${dataPagamentoFormatada}</li>
@@ -327,6 +358,7 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
         sucesso: true,
         evento: eventName,
         status: 'pago',
+        plano: planoNomeContratado,
         mensagem: 'Cobrança quitada e assinatura do usuário liberada com sucesso!',
       })
     }
@@ -342,7 +374,6 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
       pagamentoRecord.set('metadados', metaAtual)
       $app.save(pagamentoRecord)
 
-      // Atualizar assinatura para expirado
       try {
         const planos = $app.findRecordsByFilter(
           'planos',
@@ -380,7 +411,6 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
       })
     }
 
-    // Outros eventos (ex: PAYMENT_CREATED)
     return e.json(200, {
       sucesso: true,
       evento: eventName,

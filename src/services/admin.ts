@@ -1,7 +1,7 @@
 import pb from '@/lib/pocketbase/client'
 import { PlanoAssinatura, UsuarioAssinanteAdmin, AdminMetricas } from '@/types'
 import { RecordModel } from 'pocketbase'
-import { PLANO_CONFIG } from '@/config/plans'
+import { obterConfigPlano } from '@/config/plans'
 
 export interface UserRecordModel extends RecordModel {
   name?: string
@@ -12,7 +12,8 @@ export interface UserRecordModel extends RecordModel {
 
 export const adminService = {
   /**
-   * Carrega lista combinada de usuários e seus respectivos planos
+   * Carrega lista combinada de usuários e seus respectivos planos,
+   * calculando a receita mensal estimada ponderada pelo preço real de cada plano ativo.
    */
   async obterUsuariosEPlanos(): Promise<{
     metricas: AdminMetricas
@@ -39,11 +40,13 @@ export const adminService = {
       let totalEmTrial = 0
       let totalAtivos = 0
       let totalExpirados = 0
+      let receitaMensalEstimada = 0
 
       const agora = Date.now()
 
       const assinantes: UsuarioAssinanteAdmin[] = usersResult.items.map((u) => {
         const plano = mapPlanosPorUser.get(u.id)
+        const configPlano = obterConfigPlano(plano?.plano)
 
         let status = plano?.status || 'trial'
         let diasRestantes: number | undefined = undefined
@@ -59,6 +62,7 @@ export const adminService = {
 
         if (status === 'ativo') {
           totalAtivos++
+          receitaMensalEstimada += configPlano.precoMensal
         } else if (status === 'trial') {
           totalEmTrial++
         } else {
@@ -71,10 +75,7 @@ export const adminService = {
           email: u.email || '',
           admin: !!u.admin,
           planoStatus: status,
-          planoNome:
-            plano?.plano === 'pro'
-              ? 'Pro'
-              : `${PLANO_CONFIG.nome} (${PLANO_CONFIG.precoMensalExtenso})`,
+          planoNome: `${configPlano.nome} (${configPlano.precoMensalExtenso})`,
           trialAte: plano?.trial_ate,
           renovacaoEm: plano?.renovacao_em,
           diasRestantesTrial: diasRestantes,
@@ -82,15 +83,12 @@ export const adminService = {
         }
       })
 
-      const VALOR_MENSAL_STARTER = PLANO_CONFIG.precoMensal
-      const receitaMensalEstimada = totalAtivos * VALOR_MENSAL_STARTER
-
       const metricas: AdminMetricas = {
         totalUsuarios: usersResult.totalItems || usersResult.items.length,
         totalEmTrial,
         totalAtivos,
         totalExpirados,
-        receitaMensalEstimada,
+        receitaMensalEstimada: Number(receitaMensalEstimada.toFixed(2)),
       }
 
       return {

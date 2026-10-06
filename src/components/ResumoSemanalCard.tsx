@@ -24,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ResumoSemanalData, formatarMoedaBRL } from '@/types'
 import { resumoSemanalService } from '@/services/resumoSemanal'
 import { toast } from '@/hooks/use-toast'
+import { useSubscription } from '@/contexts/SubscriptionContext'
 
 export interface ResumoSemanalCardProps {
   userName?: string
@@ -46,6 +47,9 @@ export const ResumoSemanalCard: React.FC<ResumoSemanalCardProps> = ({
   const [erro, setErro] = useState<string | null>(null)
 
   // Estados de reprodução de voz nativa (SpeechSynthesis)
+  const { temAcessoRecurso } = useSubscription()
+  const temAcessoAudio = temAcessoRecurso('profissional')
+
   const [isPlaying, setIsPlaying] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(true)
@@ -169,6 +173,15 @@ export const ResumoSemanalCard: React.FC<ResumoSemanalCardProps> = ({
 
   // Reproduzir / Pausar áudio do resumo usando SpeechSynthesis
   const togglePlayAudio = () => {
+    if (!temAcessoAudio) {
+      toast({
+        title: 'Recurso do Plano Profissional',
+        description:
+          'O Resumo Semanal em Áudio (Podcast Executivo) faz parte do plano Profissional — faça upgrade!',
+      })
+      return
+    }
+
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       return
     }

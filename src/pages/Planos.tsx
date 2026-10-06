@@ -1,81 +1,99 @@
 import React, { useState, useEffect, useRef } from 'react'
-import {
-  CreditCard,
-  QrCode,
-  Barcode,
-  Check,
-  CheckCircle2,
-  Copy,
-  AlertCircle,
-  Loader2,
-  Calendar,
-  Sparkles,
-  ShieldCheck,
-  Lock,
-  ArrowRight,
-  Clock,
-  RefreshCw,
-  Info,
-  ExternalLink,
-} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSubscription } from '@/contexts/SubscriptionContext'
-import { formatarData } from '@/types'
-import { useToast } from '@/hooks/use-toast'
-import { PLANO_CONFIG } from '@/config/plans'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { gatewayPagamentoService, ResultadoCriacaoPixAsaas } from '@/services/gatewayPagamento'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Check,
+  CheckCircle2,
+  Clock,
+  Lock,
+  Calendar,
+  Sparkles,
+  ArrowRight,
+  ShieldCheck,
+  Copy,
+  CreditCard,
+  QrCode,
+  Barcode,
+  Loader2,
+  Info,
+  RefreshCw,
+  AlertCircle,
+  ExternalLink,
+  Zap,
+  Award,
+} from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
 import { COMPANY_LEGAL } from '@/config/company'
+import { PLANOS_LISTA, PlanoId, obterConfigPlano } from '@/config/plans'
+import { gatewayPagamentoService, ResultadoCriacaoPixAsaas } from '@/services/gatewayPagamento'
 
-export default function Planos() {
+export const Planos: React.FC = () => {
   const { user } = useAuth()
-  const { toast } = useToast()
   const {
-    plano,
-    loading: loadingSub,
-    isBloqueado,
+    assinatura: plano,
     isTrial,
     isAtivo,
+    isExpirado: isBloqueado,
     diasRestantesTrial,
-    simularFimDeTeste,
-    restaurarTesteDemo,
-    assinarPlanoSimulado,
-    recarregarPlano,
+    planoId: planoIdAtual,
+    assinarPlano: assinarPlanoSimulado,
+    simularFimTeste: simularFimDeTeste,
+    restaurarTeste: restaurarTesteDemo,
+    recarregarAssinatura: recarregarPlano,
+    loading: loadingSub,
   } = useSubscription()
 
-  // Modal Assinatura / Pagamento
+  const { toast } = useToast()
+
+  // Plano selecionado para checkout (inicia no Profissional por ser o melhor custo-benefício)
+  const [planoSelecionadoId, setPlanoSelecionadoId] = useState<PlanoId>('profissional')
+  const planoSelecionadoConfig = obterConfigPlano(planoSelecionadoId)
+
+  // Estado do modal de checkout
   const [modalOpen, setModalOpen] = useState(false)
   const [formaPagamento, setFormaPagamento] = useState<'pix' | 'cartao' | 'boleto'>('pix')
   const [processingPayment, setProcessingPayment] = useState(false)
-  const [pixCopiado, setPixCopiado] = useState(false)
-  const [boletoCopiado, setBoletoCopiado] = useState(false)
 
-  // Estado PIX REAL ASAAS
+  // Estados específicos para PIX Real via Asaas
   const [loadingPixAsaas, setLoadingPixAsaas] = useState(false)
   const [pixData, setPixData] = useState<ResultadoCriacaoPixAsaas | null>(null)
+  const [pixCopiado, setPixCopiado] = useState(false)
   const [pixStatusPago, setPixStatusPago] = useState(false)
   const [pollingAtivo, setPollingAtivo] = useState(false)
-  const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollingTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Campos Cartão
+  // Formulário do Cartão de Crédito
   const [cardNome, setCardNome] = useState('')
   const [cardNumero, setCardNumero] = useState('')
   const [cardValidade, setCardValidade] = useState('')
   const [cardCvv, setCardCvv] = useState('')
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({})
 
-  // Códigos fictícios para fallback
-  const fakeBoletoLinha = '34191.79001 01043.510047 91020.150008 5 94520000004990'
+  // Boleto Bancário
+  const [boletoCopiado, setBoletoCopiado] = useState(false)
+  const fakeBoletoLinha = '23793.38128 60000.123456 78000.654321 1 95450000004990'
+
+  // Formatar data em padrão brasileiro
+  const formatarData = (isoString?: string) => {
+    if (!isoString) return '—'
+    const d = new Date(isoString)
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(d)
+  }
 
   // Limpa timer de polling ao desmontar ou fechar modal
   useEffect(() => {
@@ -86,12 +104,14 @@ export default function Planos() {
     }
   }, [])
 
-  // Iniciar geração de PIX Real assim que abrir o modal na aba PIX
-  const gerarPixRealAsaas = async () => {
+  // Iniciar geração de PIX Real para o plano selecionado
+  const gerarPixRealAsaas = async (planoIdAlvo: PlanoId = planoSelecionadoId) => {
     setLoadingPixAsaas(true)
     setPixStatusPago(false)
     try {
-      const res = await gatewayPagamentoService.criarPixAsaas()
+      const res = await gatewayPagamentoService.criarPixAsaas({
+        planoId: planoIdAlvo,
+      })
       setPixData(res)
 
       // Inicia polling para detectar quando o webhook ou o banco confirmar o pagamento
@@ -132,7 +152,7 @@ export default function Planos() {
 
           toast({
             title: '🎉 Pagamento confirmado pela Asaas!',
-            description: 'Sua assinatura do Plano Starter foi ativada com sucesso por +30 dias!',
+            description: `Sua assinatura do Plano ${planoSelecionadoConfig.nome} foi ativada com sucesso por +30 dias!`,
           })
         }
       } catch (err) {
@@ -141,7 +161,8 @@ export default function Planos() {
     }, 4000)
   }
 
-  const handleOpenCheckout = () => {
+  const handleOpenCheckout = (planoEscolhidoId: PlanoId) => {
+    setPlanoSelecionadoId(planoEscolhidoId)
     setCardNome(user?.name || '')
     setCardNumero('')
     setCardValidade('')
@@ -150,11 +171,12 @@ export default function Planos() {
     setPixCopiado(false)
     setBoletoCopiado(false)
     setPixStatusPago(false)
+    setPixData(null)
     setModalOpen(true)
 
-    // Se estiver em modo PIX, já gera ou revalida o PIX real
-    if (formaPagamento === 'pix' && !pixData) {
-      gerarPixRealAsaas()
+    // Se estiver em modo PIX, já gera ou revalida o PIX real para o plano escolhido
+    if (formaPagamento === 'pix') {
+      gerarPixRealAsaas(planoEscolhidoId)
     }
   }
 
@@ -246,6 +268,7 @@ export default function Planos() {
 
       await assinarPlanoSimulado({
         formaPagamento: metodo,
+        planoId: planoSelecionadoId,
         dadosCartao:
           metodo === 'cartao'
             ? {
@@ -261,7 +284,7 @@ export default function Planos() {
 
       toast({
         title: 'Assinatura ativada!',
-        description: `Seu plano ${PLANO_CONFIG.nome} (${PLANO_CONFIG.precoMensalExtenso}) foi ativado ${labelMetodo}. Acesso liberado por +30 dias!`,
+        description: `Seu plano ${planoSelecionadoConfig.nome} (${planoSelecionadoConfig.precoMensalExtenso}) foi ativado ${labelMetodo}. Acesso liberado por +30 dias!`,
       })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha ao processar simulação de pagamento'
@@ -288,7 +311,7 @@ export default function Planos() {
         await recarregarPlano()
         toast({
           title: 'Pagamento confirmado com sucesso!',
-          description: 'A Asaas confirmou o recebimento do PIX. Seu plano já está ativo.',
+          description: `A Asaas confirmou o recebimento do PIX. Seu plano ${planoSelecionadoConfig.nome} já está ativo.`,
         })
       } else {
         toast({
@@ -332,14 +355,21 @@ export default function Planos() {
     setTimeout(() => setBoletoCopiado(false), 3000)
   }
 
+  const planoUsuarioAtualConfig = obterConfigPlano(planoIdAtual)
+
   return (
     <div className="space-y-8 animate-fade-in-up">
-      {/* HEADER DA PÁGINA */}
+      {/* HEADER DA PÁGINA COM SLOGAN OFICIAL */}
       <div className="pb-1">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Plano e Assinatura</h2>
-        <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          Acesso completo e irrestrito ao gerador de orçamentos com Inteligência Artificial e gestão
-          de clientes.
+        <div className="inline-block px-3 py-1 mb-2 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+          Feito para quem vive de serviço
+        </div>
+        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+          Planos e Assinaturas
+        </h2>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
+          Escolha a escala ideal para o seu negócio de prestação de serviços. Da emissão rápida de
+          propostas até a gestão avançada de campo e relatórios executivos.
         </p>
       </div>
 
@@ -357,9 +387,9 @@ export default function Planos() {
               </span>
             </div>
             <p className="text-xs text-emerald-800 mt-0.5">
-              Cobranças via <strong>PIX</strong> são geradas diretamente na API de produção da
-              Asaas. Confirmação automática instantânea via Webhook e envio imediato de comprovante
-              por e-mail.
+              Cobranças via <strong>PIX</strong> para qualquer plano são geradas em tempo real na
+              API de produção da Asaas. Confirmação instantânea via Webhook e emissão de
+              comprovante.
             </p>
           </div>
         </div>
@@ -414,7 +444,7 @@ export default function Planos() {
 
               {isAtivo && (
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Plano Ativo
+                  <Check className="w-3 h-3" /> Plano Ativo ({planoUsuarioAtualConfig.nome})
                 </span>
               )}
 
@@ -432,7 +462,12 @@ export default function Planos() {
               )}
             </div>
 
-            <h3 className="text-2xl font-extrabold text-white">Plano Starter</h3>
+            <h3 className="text-2xl font-extrabold text-white flex items-center gap-2">
+              Plano {planoUsuarioAtualConfig.nome}
+              <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-white/10 text-slate-200">
+                {planoUsuarioAtualConfig.posicionamento}
+              </span>
+            </h3>
 
             <p className="text-xs text-slate-300 flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-blue-400 shrink-0" />
@@ -445,14 +480,13 @@ export default function Planos() {
                 </span>
               ) : isTrial && !isBloqueado ? (
                 <span>
-                  Teste grátis válido até:{' '}
+                  Teste grátis de 7 dias válido até:{' '}
                   <strong>{plano?.trial_ate ? formatarData(plano.trial_ate) : '7 dias'}</strong> (
                   {diasRestantesTrial} {diasRestantesTrial === 1 ? 'dia' : 'dias'} restante(s))
                 </span>
               ) : (
                 <span className="text-rose-300 font-medium">
-                  Seu teste expirou. Contrate o plano por {PLANO_CONFIG.precoMensalExtenso} para
-                  desbloquear o sistema.
+                  Seu período de teste expirou. Escolha um plano abaixo para desbloquear o sistema.
                 </span>
               )}
             </p>
@@ -460,7 +494,7 @@ export default function Planos() {
 
           <div className="sm:text-right pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
             <span className="text-3xl font-extrabold tabular-nums text-white">
-              {PLANO_CONFIG.precoFormatado}
+              {planoUsuarioAtualConfig.precoFormatado}
             </span>
             <span className="text-xs text-slate-400 ml-1">/mês</span>
             <p className="text-[11px] text-blue-200 mt-1">Cobrança mensal Asaas</p>
@@ -468,105 +502,278 @@ export default function Planos() {
         </div>
       </div>
 
-      {/* PLANO ÚNICO: R$ 49,90/mês (STARTER) */}
-      <div className="max-w-xl mx-auto">
-        <div className="relative bg-white rounded-3xl border-2 border-blue-600 p-6 sm:p-8 shadow-xl">
-          {/* Badge de Destaque */}
-          <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-            <span className="px-4 py-1 rounded-full text-xs font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-md flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" /> Plano Único Completo
-            </span>
-          </div>
-
-          <div className="text-center pt-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-1">
-              Feito para quem vive de serviço
-            </p>
-            <h4 className="text-2xl font-bold text-slate-900">Plano {PLANO_CONFIG.nome}</h4>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Tudo o que você precisa para emitir propostas impecáveis e fechar negócios.
-            </p>
-
-            <div className="my-6">
-              <span className="text-5xl font-extrabold text-slate-900 tabular-nums">
-                {PLANO_CONFIG.precoFormatado}
-              </span>
-              <span className="text-sm font-medium text-slate-500 ml-1">/mês</span>
-              <p className="text-xs text-emerald-600 font-semibold mt-1">
-                7 dias de teste grátis inclusos no cadastro
-              </p>
-            </div>
-          </div>
-
-          {/* Vantagens e Recursos */}
-          <div className="space-y-3 pt-2 pb-6 border-t border-slate-100">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              O que está incluso:
-            </p>
-            <ul className="space-y-3 text-xs sm:text-sm text-slate-700">
-              {[
-                'Criação de orçamentos e propostas comerciais completas',
-                'Assistente de IA integrado para detalhar serviços e preços',
-                'Comando de voz para geração rápida de orçamentos',
-                'Cadastro ilimitado de clientes com histórico',
-                'Exportação em PDF pronta para impressão',
-                'Envio direto do orçamento para o WhatsApp do cliente',
-                'Pagamento via PIX Real Asaas com baixa instantânea',
-                'Comprovante oficial emitido por e-mail com CNPJ',
-              ].map((feat, i) => (
-                <li key={i} className="flex items-start gap-2.5">
-                  <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
-                    <Check className="w-3 h-3 stroke-[3]" />
-                  </div>
-                  <span className="leading-snug">{feat}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Botão de Contratação / Ação */}
-          <Button
-            size="lg"
-            onClick={handleOpenCheckout}
-            className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:brightness-110 text-white font-bold text-base shadow-lg shadow-blue-500/20 active:scale-[0.99] transition-all"
-          >
-            {isAtivo ? (
-              <span className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-emerald-300" />
-                Renovar ou Pagar com PIX ({PLANO_CONFIG.precoFormatado})
-              </span>
-            ) : isBloqueado ? (
-              <span className="flex items-center gap-2">
-                <Lock className="w-5 h-5 text-amber-300" />
-                Desbloquear Acesso por {PLANO_CONFIG.precoMensalExtenso}
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                <span>Contratar Plano por {PLANO_CONFIG.precoMensalExtenso}</span>
-                <ArrowRight className="w-5 h-5" />
-              </span>
-            )}
-          </Button>
-
-          <p className="text-[11px] text-center text-slate-400 mt-3 flex items-center justify-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            Pagamento seguro processado via gateway Asaas
+      {/* ESCADA DE TRÊS PLANOS LADO A LADO (MOBILE: EMPILHADOS) */}
+      <div>
+        <div className="text-center max-w-xl mx-auto mb-8">
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-1">
+            Feito para quem vive de serviço
           </p>
+          <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+            Três planos feitos sob medida para a sua rotina
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-500 mt-2">
+            Comece no seu ritmo e evolua conforme a demanda de clientes e serviços crescer.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-7 items-stretch">
+          {PLANOS_LISTA.map((planoItem) => {
+            const isDestaque = planoItem.id === 'profissional'
+            const isPlanoAtual = isAtivo && planoIdAtual === planoItem.id
+
+            return (
+              <div
+                key={planoItem.id}
+                className={`relative flex flex-col justify-between rounded-3xl p-6 sm:p-7 transition-all duration-200 ${
+                  isDestaque
+                    ? 'bg-gradient-to-b from-blue-50/50 via-white to-indigo-50/30 border-2 border-blue-600 shadow-2xl shadow-blue-500/10 lg:-translate-y-2'
+                    : 'bg-white border border-slate-200/90 shadow-md hover:shadow-lg'
+                }`}
+              >
+                {/* Badge de Destaque para o Profissional ("Mais escolhido") */}
+                {planoItem.badgeDestaque && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                    <span className="px-4 py-1 rounded-full text-[11px] font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-md flex items-center gap-1.5 whitespace-nowrap">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      {planoItem.badgeDestaque}
+                    </span>
+                  </div>
+                )}
+
+                <div>
+                  {/* Cabeçalho do Card */}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${
+                        isDestaque
+                          ? 'bg-blue-100/80 text-blue-800 border-blue-300'
+                          : planoItem.id === 'premium'
+                            ? 'bg-purple-100 text-purple-800 border-purple-200'
+                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      {planoItem.posicionamento}
+                    </span>
+
+                    {isPlanoAtual && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Seu plano atual
+                      </span>
+                    )}
+                  </div>
+
+                  <h4 className="text-2xl font-extrabold text-slate-900 mt-1">
+                    Plano {planoItem.nome}
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed min-h-[38px]">
+                    {planoItem.descricaoCurta}
+                  </p>
+
+                  {/* Preço Exato */}
+                  <div className="my-5 pb-5 border-b border-slate-100">
+                    <div className="flex items-baseline">
+                      <span className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight tabular-nums">
+                        {planoItem.precoFormatado}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-500 ml-1.5">/mês</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> 7 dias de teste grátis no primeiro acesso
+                    </p>
+                  </div>
+
+                  {/* Lista de Recursos com diferenciação clara */}
+                  <div className="space-y-3 pb-6">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Recursos inclusos:
+                    </p>
+                    <ul className="space-y-2.5 text-xs sm:text-sm text-slate-700">
+                      {planoItem.recursos.map((recurso, idx) => (
+                        <li key={idx} className="flex items-start gap-2.5">
+                          <div
+                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                              isDestaque
+                                ? 'bg-blue-100 text-blue-700'
+                                : planoItem.id === 'premium'
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : 'bg-emerald-100 text-emerald-700'
+                            }`}
+                          >
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                          <span
+                            className={`leading-snug ${
+                              idx === 1 &&
+                              (planoItem.id === 'profissional' || planoItem.id === 'premium')
+                                ? 'font-semibold text-slate-900'
+                                : ''
+                            }`}
+                          >
+                            {recurso}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Botão de Escolha do Plano */}
+                <div className="pt-2">
+                  <Button
+                    size="lg"
+                    onClick={() => handleOpenCheckout(planoItem.id)}
+                    className={`w-full h-12 rounded-xl font-bold text-sm shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2 ${
+                      isDestaque
+                        ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:brightness-110 text-white shadow-blue-500/25 ring-2 ring-blue-600/30'
+                        : planoItem.id === 'premium'
+                          ? 'bg-gradient-to-r from-slate-900 to-purple-950 hover:bg-slate-800 text-white shadow-purple-950/20'
+                          : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/10'
+                    }`}
+                  >
+                    {isPlanoAtual ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-400" />
+                        Renovar {planoItem.nome} ({planoItem.precoFormatado})
+                      </>
+                    ) : (
+                      <>
+                        <span>
+                          Contratar {planoItem.nome} ({planoItem.precoFormatado})
+                        </span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-[10px] text-center text-slate-400 mt-2 flex items-center justify-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                    PIX Instantâneo Oficial Asaas
+                  </p>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
-      {/* MODAL DE CHECKOUT COM PIX REAL ASAAS */}
+      {/* TABELA COMPARATIVA RESUMIDA */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm">
+        <div className="mb-6">
+          <h4 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <Award className="w-5 h-5 text-blue-600" />
+            Comparativo Direto de Recursos por Plano
+          </h4>
+          <p className="text-xs text-slate-500 mt-1">
+            Entenda claramente o que é liberado em cada degrau da plataforma OrçaFácil.
+          </p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm text-left">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-500 uppercase text-[10px] tracking-wider">
+                <th className="py-3 px-3">Funcionalidade</th>
+                <th className="py-3 px-3 text-center">Essencial (R$ 49,90)</th>
+                <th className="py-3 px-3 text-center bg-blue-50/70 text-blue-900 font-bold rounded-t-lg">
+                  Profissional (R$ 64,90)
+                </th>
+                <th className="py-3 px-3 text-center">Premium (R$ 79,90)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-slate-700">
+              <tr>
+                <td className="py-3 px-3 font-medium">
+                  Orçamentos Ilimitados & Cadastro de Clientes
+                </td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold">Sim</td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold bg-blue-50/30">
+                  Sim
+                </td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold">Sim</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-3 font-medium">IA de Voz & Gastos por Voz</td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold">Sim</td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold bg-blue-50/30">
+                  Sim
+                </td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold">Sim</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-3 font-medium">Dashboard Financeiro Básico</td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold">Sim</td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold bg-blue-50/30">
+                  Sim
+                </td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold">Sim</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-3 font-medium font-semibold text-slate-900">
+                  Assistente de Campo (Fotos de Notas, Recibos e Orçamentos)
+                </td>
+                <td className="py-3 px-3 text-center text-slate-300 font-bold">—</td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold bg-blue-50/30">
+                  Sim (Incluso)
+                </td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold">Sim (Incluso)</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-3 font-medium font-semibold text-slate-900">
+                  Contas a Receber Avançado (Cobrança via WhatsApp com Chave PIX)
+                </td>
+                <td className="py-3 px-3 text-center text-slate-300 font-bold">—</td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold bg-blue-50/30">
+                  Sim (Incluso)
+                </td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold">Sim (Incluso)</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-3 font-medium font-semibold text-slate-900">
+                  Resumo Semanal em Áudio (Podcast Executivo)
+                </td>
+                <td className="py-3 px-3 text-center text-slate-300 font-bold">—</td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold bg-blue-50/30">
+                  Sim (Incluso)
+                </td>
+                <td className="py-3 px-3 text-center text-emerald-600 font-bold">Sim (Incluso)</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-3 font-medium font-semibold text-slate-900">
+                  Exportação & Relatórios Financeiros Avançados
+                </td>
+                <td className="py-3 px-3 text-center text-slate-300 font-bold">—</td>
+                <td className="py-3 px-3 text-center text-slate-300 font-bold bg-blue-50/30">—</td>
+                <td className="py-3 px-3 text-center text-purple-700 font-bold">Sim (Exclusivo)</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-3 font-medium font-semibold text-slate-900">
+                  Selo e Canal de Atendimento com Suporte Prioritário VIP
+                </td>
+                <td className="py-3 px-3 text-center text-slate-400">Padrão</td>
+                <td className="py-3 px-3 text-center text-slate-600 bg-blue-50/30">WhatsApp</td>
+                <td className="py-3 px-3 text-center text-purple-700 font-bold">VIP Prioritário</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* MODAL DE CHECKOUT COM PIX REAL ASAAS POR PLANO SELECIONADO */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-[540px] rounded-3xl bg-white text-slate-900 p-6 sm:p-7 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                {planoSelecionadoConfig.posicionamento}
+              </span>
+            </div>
             <DialogTitle className="text-xl font-bold flex items-center gap-2 text-slate-900">
               <CreditCard className="w-5 h-5 text-blue-600" />
-              Contratar Plano {PLANO_CONFIG.nome}
+              Contratar Plano {planoSelecionadoConfig.nome}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
               Valor da assinatura:{' '}
               <strong className="text-slate-900 text-sm">
-                {PLANO_CONFIG.precoFormatado} / mês
+                {planoSelecionadoConfig.precoFormatado} / mês
               </strong>
             </DialogDescription>
           </DialogHeader>
@@ -592,7 +799,7 @@ export default function Planos() {
               const f = val as 'pix' | 'cartao' | 'boleto'
               setFormaPagamento(f)
               if (f === 'pix' && !pixData && !loadingPixAsaas) {
-                gerarPixRealAsaas()
+                gerarPixRealAsaas(planoSelecionadoId)
               }
             }}
             className="w-full mt-2"
@@ -627,10 +834,11 @@ export default function Planos() {
                 <div className="py-12 text-center text-slate-500">
                   <Loader2 className="w-8 h-8 animate-spin mx-auto text-emerald-600 mb-2" />
                   <p className="text-sm font-semibold text-slate-800">
-                    Gerando cobrança PIX oficial na Asaas...
+                    Gerando cobrança PIX do Plano {planoSelecionadoConfig.nome} na Asaas...
                   </p>
                   <p className="text-xs text-slate-400 mt-1">
-                    Criando cliente e gerando QR Code dinâmico com chave de segurança.
+                    Criando cliente e gerando QR Code dinâmico (
+                    {planoSelecionadoConfig.precoFormatado}).
                   </p>
                 </div>
               ) : pixStatusPago ? (
@@ -642,8 +850,9 @@ export default function Planos() {
                     Pagamento PIX Aprovado com Sucesso!
                   </h4>
                   <p className="text-xs text-emerald-800 leading-relaxed">
-                    Sua assinatura do plano <strong>Starter</strong> foi ativada por mais 30 dias. O
-                    comprovante oficial e a nota foram enviados para seu e-mail cadastrado.
+                    Sua assinatura do plano <strong>{planoSelecionadoConfig.nome}</strong> foi
+                    ativada por mais 30 dias. O comprovante oficial com CNPJ foi enviado para seu
+                    e-mail cadastrado.
                   </p>
                   <Button
                     onClick={handleCloseModal}
@@ -657,7 +866,8 @@ export default function Planos() {
                   <div className="text-center p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col items-center">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 mb-2">
                       <Sparkles className="w-3.5 h-3.5" />
-                      QR Code Dinâmico Oficial Asaas (R$ 49,90):
+                      QR Code Dinâmico Oficial Asaas ({planoSelecionadoConfig.nome} —{' '}
+                      {planoSelecionadoConfig.precoFormatado}):
                     </div>
 
                     {/* QR Code Real da Asaas */}
@@ -678,7 +888,7 @@ export default function Planos() {
 
                     <div className="text-[11px] text-slate-600 mt-2 font-mono flex items-center gap-2">
                       <span>
-                        Valor: <strong>{PLANO_CONFIG.precoFormatado}</strong>
+                        Valor: <strong>{planoSelecionadoConfig.precoFormatado}</strong>
                       </span>
                       <span>•</span>
                       <span>
@@ -740,7 +950,7 @@ export default function Planos() {
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={gerarPixRealAsaas}
+                      onClick={() => gerarPixRealAsaas(planoSelecionadoId)}
                       disabled={loadingPixAsaas}
                       className="h-10 text-xs border-slate-300"
                     >
@@ -778,9 +988,10 @@ export default function Planos() {
               <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-start gap-2">
                 <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <p>
-                  <strong>Cartão de Crédito:</strong> Para contratação imediata, utilize o{' '}
+                  <strong>Plano {planoSelecionadoConfig.nome}:</strong>{' '}
+                  {planoSelecionadoConfig.precoFormatado}/mês. Para ativação imediata, utilize o{' '}
                   <strong>PIX</strong> (aprovação instantânea). Se preferir cartão, preencha os
-                  dados abaixo para simulação homologada.
+                  dados abaixo para simulação.
                 </p>
               </div>
 
@@ -868,7 +1079,7 @@ export default function Planos() {
                       Processando pagamento no cartão...
                     </>
                   ) : (
-                    `Confirmar no Cartão (${PLANO_CONFIG.precoFormatado})`
+                    `Confirmar no Cartão (${planoSelecionadoConfig.precoFormatado})`
                   )}
                 </Button>
               </form>
@@ -885,7 +1096,7 @@ export default function Planos() {
                     </span>
                   </div>
                   <span className="text-xs font-extrabold text-slate-900">
-                    {PLANO_CONFIG.precoFormatado}
+                    {planoSelecionadoConfig.precoFormatado}
                   </span>
                 </div>
 
@@ -916,8 +1127,9 @@ export default function Planos() {
                 <div className="p-2.5 rounded-lg bg-blue-50/70 border border-blue-200/60 text-[11px] text-blue-900 flex items-start gap-2">
                   <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                   <p>
-                    Para ativação imediata recomendada, pague via <strong>PIX</strong>. Se optar por
-                    boleto, confirme a compensação abaixo para liberar o acesso.
+                    Para ativação imediata recomendada, pague via <strong>PIX</strong> (
+                    {planoSelecionadoConfig.precoFormatado}). Se optar por boleto, confirme a
+                    compensação abaixo para liberar o acesso.
                   </p>
                 </div>
               </div>
@@ -936,7 +1148,7 @@ export default function Planos() {
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-400" />
-                    Confirmar Compensação do Boleto
+                    Confirmar Compensação do Boleto ({planoSelecionadoConfig.precoFormatado})
                   </>
                 )}
               </Button>

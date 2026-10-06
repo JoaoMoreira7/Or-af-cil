@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { COMPANY_LEGAL } from '@/config/company'
-import { PLANO_CONFIG } from '@/config/plans'
+import { PLANOS_LISTA } from '@/config/plans'
 import { AlertTriangle, ArrowLeft } from 'lucide-react'
 
 export default function TermosDeUso() {
@@ -103,19 +103,49 @@ export default function TermosDeUso() {
 
           <section>
             <h2 className="text-base font-bold text-slate-900 mb-2">
-              4. Planos, Teste Grátis e Cobrança (Simulada)
+              4. Planos, Valores, Período de Teste e Cobrança
             </h2>
-            <p>
-              A plataforma oferece acesso completo através do plano{' '}
-              <strong>
-                {PLANO_CONFIG.nome} ({PLANO_CONFIG.precoMensalExtenso})
-              </strong>
-              , antecedido por um período de teste grátis de <strong>7 dias</strong> para novos
-              usuários. Após a conclusão do período de teste, o acesso é bloqueado até a contratação
-              do plano via PIX, Cartão de Crédito ou Boleto. Nesta versão de demonstração e
-              homologação, toda a cobrança, processamento de cartões e transações financeiras são
-              estritamente <strong>SIMULADAS</strong>. Nenhuma transação bancária ou débito real é
-              efetuado nos dados fornecidos nos formulários de pagamento.
+            <p className="mb-3">
+              A plataforma {COMPANY_LEGAL.nomeFantasia} opera no modelo de assinatura mensal com uma
+              escada de três planos estruturados de acordo com as necessidades operacionais do
+              prestador de serviços:
+            </p>
+
+            <div className="overflow-x-auto my-3 border border-slate-200 rounded-xl bg-slate-50">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-100 text-slate-700 font-bold uppercase text-[10px]">
+                    <th className="py-2.5 px-3">Plano</th>
+                    <th className="py-2.5 px-3">Preço Mensal</th>
+                    <th className="py-2.5 px-3">Posicionamento</th>
+                    <th className="py-2.5 px-3">Escopo Principal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-slate-700">
+                  {PLANOS_LISTA.map((p) => (
+                    <tr key={p.id}>
+                      <td className="py-2.5 px-3 font-bold text-slate-900">{p.nome}</td>
+                      <td className="py-2.5 px-3 font-semibold text-emerald-700">
+                        {p.precoFormatado}/mês
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-2 py-0.5 rounded bg-white border border-slate-300 text-[10px] font-bold">
+                          {p.posicionamento}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600">{p.descricaoCurta}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Novos usuários contam com um período de degustação de{' '}
+              <strong>7 dias de teste grátis</strong> a contar da criação da conta. Após esse prazo,
+              o acesso aos módulos requer a assinatura de um dos três planos via PIX Dinâmico
+              através do gateway oficial homologado Asaas. O pagamento confere liberação de 30 dias
+              contínuos de acesso, renovável a cada ciclo.
             </p>
           </section>
 

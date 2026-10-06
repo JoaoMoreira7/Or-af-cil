@@ -3,9 +3,17 @@ import { useAuth } from '@/contexts/AuthContext'
 import { planosService } from '@/services/planos'
 import { gatewayPagamentoService } from '@/services/gatewayPagamento'
 import { PlanoAssinatura, FormaPagamentoAssinatura } from '@/types'
+import {
+  PlanoId,
+  PlanoConfig,
+  obterConfigPlano,
+  normalizarPlanoId,
+  planoTemAcesso,
+} from '@/config/plans'
 
 interface AssinarPlanoParams {
   formaPagamento?: FormaPagamentoAssinatura
+  planoId?: PlanoId | string
   dadosCartao?: {
     nomeTitular: string
     numeroMascarado: string
@@ -14,110 +22,121 @@ interface AssinarPlanoParams {
 }
 
 interface SubscriptionContextType {
-  plano: PlanoAssinatura | null
+  assinatura: PlanoAssinatura | null
   loading: boolean
-  isBloqueado: boolean
   isTrial: boolean
   isAtivo: boolean
+  isExpirado: boolean
   diasRestantesTrial: number
-  recarregarPlano: () => Promise<void>
-  simularFimDeTeste: () => Promise<void>
-  restaurarTesteDemo: (dias?: number) => Promise<void>
-  assinarPlanoSimulado: (params?: AssinarPlanoParams) => Promise<PlanoAssinatura>
+  planoId: PlanoId
+  planoConfig: PlanoConfig
+  temAcessoRecurso: (planoMinimo: PlanoId) => boolean
+  assinarPlano: (params?: AssinarPlanoParams) => Promise<void>
+  simularFimTeste: () => Promise<void>
+  restaurarTeste: () => Promise<void>
+  recarregarAssinatura: () => Promise<void>
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined)
 
 export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isAuthenticated } = useAuth()
-  const [plano, setPlano] = useState<PlanoAssinatura | null>(null)
-  const [loading, setLoading] = useState<boolean>(true)
+  const { user } = useAuth()
+  const [assinatura, setAssinatura] = useState<PlanoAssinatura | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const recarregarPlano = useCallback(async () => {
-    if (!user?.id || !isAuthenticated) {
-      setPlano(null)
+  const carregarAssinatura = useCallback(async () => {
+    if (!user?.id) {
+      setAssinatura(null)
       setLoading(false)
       return
     }
 
     try {
-      const p = await planosService.iniciarOuVerificarTrial(user.id)
-      setPlano(p)
+      setLoading(true)
+      const plano = await planosService.iniciarOuVerificarTrial(user.id)
+      setAssinatura(plano)
     } catch (err) {
-      console.error('Erro ao sincronizar plano/trial:', err)
+      console.error('Erro ao verificar status do plano:', err)
     } finally {
       setLoading(false)
     }
-  }, [user?.id, isAuthenticated])
+  }, [user?.id])
 
   useEffect(() => {
-    recarregarPlano()
-  }, [recarregarPlano])
+    carregarAssinatura()
+  }, [carregarAssinatura])
 
-  // Cálculo de dias restantes e status
-  let diasRestantesTrial = 0
-  let isTrial = false
-  let isAtivo = false
-  let isBloqueado = false
+  // Cálculos de status
+  const isTrial = assinatura?.status === 'trial'
+  const isAtivo = assinatura?.status === 'ativo'
+  const isExpirado = assinatura?.status === 'expirado'
 
-  if (plano) {
-    if (plano.status === 'ativo') {
-      isAtivo = true
-      isBloqueado = false
-    } else if (plano.status === 'trial') {
-      isTrial = true
-      if (plano.trial_ate) {
-        const diffMs = new Date(plano.trial_ate).getTime() - Date.now()
-        // Arredondamento para cima dos dias
-        const dias = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-        diasRestantesTrial = Math.max(0, dias)
-        if (diffMs <= 0) {
-          isBloqueado = true
-        }
-      }
-    } else if (plano.status === 'expirado' || plano.status === 'inativo') {
-      isBloqueado = true
-    }
-  }
+  const diasRestantesTrial = React.useMemo(() => {
+    if (!assinatura?.trial_ate) return 0
+    const agora = new Date()
+    const trialAte = new Date(assinatura.trial_ate)
+    const diffMs = trialAte.getTime() - agora.getTime()
+    const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return diffDias > 0 ? diffDias : 0
+  }, [assinatura?.trial_ate])
 
-  const simularFimDeTeste = async () => {
-    if (!user?.id) return
-    setLoading(true)
-    try {
-      const p = await planosService.simularFimTeste(user.id)
-      setPlano(p)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const planoId: PlanoId = normalizarPlanoId(assinatura?.plano)
+  const planoConfig: PlanoConfig = obterConfigPlano(planoId)
 
-  const restaurarTesteDemo = async (dias = 3) => {
-    if (!user?.id) return
-    setLoading(true)
-    try {
-      const p = await planosService.restaurarTeste(user.id, dias)
-      setPlano(p)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Verificação de gate de recurso por nível de plano
+  const temAcessoRecurso = useCallback(
+    (planoMinimo: PlanoId): boolean => {
+      if (isExpirado) return false
+      // No período de testes liberamos todos os recursos para experimentação completa da ferramenta
+      if (isTrial && diasRestantesTrial > 0) return true
+      return planoTemAcesso(planoId, planoMinimo)
+    },
+    [isExpirado, isTrial, diasRestantesTrial, planoId],
+  )
 
-  const assinarPlanoSimulado = async (params?: AssinarPlanoParams) => {
+  const assinarPlano = async (params?: AssinarPlanoParams) => {
     if (!user?.id) throw new Error('Usuário não autenticado')
     setLoading(true)
     try {
       const forma = params?.formaPagamento || 'pix'
+      const planoEscolhido = params?.planoId || 'essencial'
       // Processa através do gateway de pagamentos registrando a venda na coleção pagamentos
       await gatewayPagamentoService.processarAssinatura({
         userId: user.id,
+        planoId: planoEscolhido,
         formaPagamento: forma,
         dadosCartao: params?.dadosCartao,
       })
+      await carregarAssinatura()
+    } catch (err) {
+      console.error('Erro ao assinar plano:', err)
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }
 
-      // Atualiza o estado do plano local
-      const planoAtualizado = await planosService.obterPlanoUsuario(user.id)
-      setPlano(planoAtualizado)
-      return planoAtualizado!
+  const simularFimTeste = async () => {
+    if (!user?.id) return
+    setLoading(true)
+    try {
+      const atualizado = await planosService.simularFimTeste(user.id)
+      setAssinatura(atualizado)
+    } catch (err) {
+      console.error('Erro ao simular fim de teste:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const restaurarTeste = async () => {
+    if (!user?.id) return
+    setLoading(true)
+    try {
+      const atualizado = await planosService.restaurarTeste(user.id, 3)
+      setAssinatura(atualizado)
+    } catch (err) {
+      console.error('Erro ao restaurar teste:', err)
     } finally {
       setLoading(false)
     }
@@ -126,16 +145,19 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   return (
     <SubscriptionContext.Provider
       value={{
-        plano,
+        assinatura,
         loading,
-        isBloqueado,
         isTrial,
         isAtivo,
+        isExpirado,
         diasRestantesTrial,
-        recarregarPlano,
-        simularFimDeTeste,
-        restaurarTesteDemo,
-        assinarPlanoSimulado,
+        planoId,
+        planoConfig,
+        temAcessoRecurso,
+        assinarPlano,
+        simularFimTeste,
+        restaurarTeste,
+        recarregarAssinatura: carregarAssinatura,
       }}
     >
       {children}

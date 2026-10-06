@@ -72,10 +72,12 @@ import {
 
 export default function AssistenteDeCampo() {
   const { user } = useAuth()
-  const { isBloqueado } = useSubscription()
+  const { isBloqueado, temAcessoRecurso } = useSubscription()
   const { toast } = useToast()
   const navigate = useNavigate()
   const location = useLocation()
+
+  const temAcessoAssistente = temAcessoRecurso('profissional')
 
   // REGRA DE PROJETO OBRIGATÓRIA: isMountedRef e limpeza de streams/timers
   const isMountedRef = useRef(true)
@@ -277,6 +279,16 @@ export default function AssistenteDeCampo() {
 
   // Análise da foto com IA
   const analisarFotoComIA = async (file: File, b64?: string) => {
+    if (!temAcessoAssistente) {
+      toast({
+        title: 'Recurso do Plano Profissional',
+        description:
+          'Este recurso está no plano Profissional — faça upgrade para analisar notas e recibos por foto.',
+      })
+      navigate('/planos')
+      return
+    }
+
     setIsAnalyzing(true)
     setAnalysisResult(null)
     try {
@@ -815,6 +827,32 @@ export default function AssistenteDeCampo() {
 
   return (
     <div className="space-y-6 animate-fade-in pb-12 max-w-5xl mx-auto">
+      {/* BANNER DE UPGRADE SE O PLANO FOR ESSENCIAL E NÃO TIVER ACESSO */}
+      {!temAcessoAssistente && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-lg border border-blue-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-200 border border-blue-400/30">
+              <Sparkles className="w-3 h-3 text-blue-300" />
+              Recurso do Plano Profissional
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-white">
+              Assistente de Campo com Leitura de Fotos por IA
+            </h3>
+            <p className="text-xs text-slate-300 max-w-xl">
+              Este recurso está no plano Profissional — faça upgrade para escanear fotos de notas
+              fiscais, recibos e orçamentos em papel instantaneamente.
+            </p>
+          </div>
+          <Button
+            type="button"
+            onClick={() => navigate('/planos')}
+            className="shrink-0 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold text-xs h-10 px-5 rounded-xl shadow-md"
+          >
+            Fazer Upgrade para Profissional
+          </Button>
+        </div>
+      )}
+
       {/* HEADER DA PÁGINA */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>

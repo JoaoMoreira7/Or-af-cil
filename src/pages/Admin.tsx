@@ -379,9 +379,7 @@ export default function Admin() {
               {loading ? '...' : metricas?.totalAtivos || 0}
             </div>
             <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-              <span>
-                Plano {PLANO_CONFIG.nome} {PLANO_CONFIG.precoMensalExtenso}
-              </span>
+              <span>Assinantes com acesso liberado</span>
             </p>
           </CardContent>
         </Card>
@@ -401,7 +399,7 @@ export default function Admin() {
               {loading ? '...' : formatarMoedaBRL(metricas?.receitaMensalEstimada || 0)}
             </div>
             <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-              <span>Ativos × {PLANO_CONFIG.precoFormatado} / mês</span>
+              <span>Ponderada pelos planos ativos</span>
             </p>
           </CardContent>
         </Card>
@@ -585,9 +583,9 @@ export default function Admin() {
             </span>
           </div>
           <p className="text-xs text-slate-400 leading-relaxed max-w-2xl">
-            O sistema opera com plano único {PLANO_CONFIG.nome} ({PLANO_CONFIG.precoMensalExtenso})
-            com cobrança simulada (PIX, Boleto e Cartão). O cron job automático dispara e-mails de
-            alerta em pt-BR aos usuários com 2 dias de teste restantes.
+            O sistema opera com a escada de 3 planos: Essencial (R$ 49,90), Profissional (R$ 64,90)
+            e Premium (R$ 79,90) via gateway oficial Asaas. O cron job automático dispara e-mails de
+            alerta com os 3 planos aos usuários com 2 dias de teste restantes.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs">

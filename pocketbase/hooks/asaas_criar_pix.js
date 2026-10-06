@@ -21,6 +21,25 @@ routerAdd(
       const cpfCnpj = (body.cpfCnpj || '').replace(/\D/g, '')
       const telefone = (body.telefone || '').replace(/\D/g, '')
 
+      // Mapeamento dos 3 planos com preços oficiais definidos pelo usuário
+      // Essencial: R$ 49,90 | Profissional: R$ 64,90 | Premium: R$ 79,90
+      const planosPrecos = {
+        essencial: { id: 'essencial', nome: 'Essencial', valor: 49.9 },
+        profissional: { id: 'profissional', nome: 'Profissional', valor: 64.9 },
+        premium: { id: 'premium', nome: 'Premium', valor: 79.9 },
+        // Compatibilidade legada
+        starter: { id: 'essencial', nome: 'Essencial', valor: 49.9 },
+        pro: { id: 'profissional', nome: 'Profissional', valor: 64.9 },
+      }
+
+      const planoSolicitado = String(body.plano || body.plano_id || 'essencial')
+        .toLowerCase()
+        .trim()
+      const planoEscolhido = planosPrecos[planoSolicitado] || planosPrecos.essencial
+      const valorPlano = planoEscolhido.valor
+      const nomePlano = planoEscolhido.nome
+      const idPlano = planoEscolhido.id
+
       const asaasBaseUrl = 'https://api.asaas.com/v3'
       const headers = {
         'Content-Type': 'application/json',
@@ -31,7 +50,6 @@ routerAdd(
       // 1. Localizar ou criar cliente na Asaas
       let asaasCustomerId = ''
 
-      // Tenta buscar se já temos esse cliente cadastrado no Asaas pelo e-mail
       if (userEmail) {
         try {
           const findCustRes = $http.send({
@@ -49,7 +67,6 @@ routerAdd(
         }
       }
 
-      // Se não encontrou, cria o cliente no Asaas
       if (!asaasCustomerId) {
         const customerPayload = {
           name: userName,
@@ -94,21 +111,21 @@ routerAdd(
       const dd = String(dataVenc.getDate()).padStart(2, '0')
       const dueDateStr = `${yyyy}-${mm}-${dd}`
 
-      const valorPlano = 49.9
       const refTransacao =
         'OF-PIX-' +
         Date.now().toString().slice(-6) +
         '-' +
         Math.random().toString(36).substring(2, 6).toUpperCase()
 
-      // 3. Criar cobrança PIX no Asaas
+      const valorFormatadoBr = 'R$ ' + valorPlano.toFixed(2).replace('.', ',')
+
+      // 3. Criar cobrança PIX no Asaas com valor e descrição do plano escolhido
       const paymentPayload = {
         customer: asaasCustomerId,
         billingType: 'PIX',
         value: valorPlano,
         dueDate: dueDateStr,
-        description:
-          'OrçaFácil — Plano Starter (Mensal R$ 49,90) - Feito para quem vive de serviço',
+        description: `OrçaFácil — Plano ${nomePlano} (${valorFormatadoBr}/mês) - Feito para quem vive de serviço`,
         externalReference: refTransacao,
         postalService: false,
       }
@@ -157,7 +174,7 @@ routerAdd(
         console.warn('[asaas_criar_pix] Aviso ao obter QR Code do Pix:', qrRes.raw)
       }
 
-      // 5. Gravar na coleção 'pagamentos' com status pendente
+      // 5. Gravar na coleção 'pagamentos' com o plano correto e status pendente
       const agora = new Date()
       const dataVencAssinatura = new Date(agora)
       dataVencAssinatura.setDate(dataVencAssinatura.getDate() + 30)
@@ -171,7 +188,7 @@ routerAdd(
       rec.set('data_compra', agora.toISOString())
       rec.set('data_vencimento', dataVencAssinatura.toISOString())
       rec.set('referencia_transacao', refTransacao)
-      rec.set('plano_nome', 'Starter')
+      rec.set('plano_nome', nomePlano)
       rec.set('asaas_id', paymentId)
       rec.set('asaas_customer_id', asaasCustomerId)
       rec.set('pix_qr_code_url', encodedImage ? 'data:image/png;base64,' + encodedImage : '')
@@ -180,6 +197,8 @@ routerAdd(
       rec.set('metadados', {
         modo: 'real',
         gateway: 'Asaas',
+        plano_id: idPlano,
+        plano_nome: nomePlano,
         asaas_payment_id: paymentId,
         asaas_customer_id: asaasCustomerId,
         asaas_status: paymentData.status,
@@ -192,12 +211,14 @@ routerAdd(
       $app.save(rec)
 
       console.log(
-        `[asaas_criar_pix] Cobrança PIX criada com sucesso: ${paymentId} para usuário ${userId}`,
+        `[asaas_criar_pix] Cobrança PIX criada com sucesso: ${paymentId} para plano ${nomePlano} (R$ ${valorPlano}) usuário ${userId}`,
       )
 
       return e.json(200, {
         sucesso: true,
         pagamento_id: rec.id,
+        plano_id: idPlano,
+        plano_nome: nomePlano,
         asaas_id: paymentId,
         asaas_customer_id: asaasCustomerId,
         referencia: refTransacao,
@@ -208,7 +229,7 @@ routerAdd(
         invoice_url: invoiceUrl,
         vencimento_pix: dueDateStr,
         expiracao_qr: expirationDate,
-        mensagem: 'Cobrança PIX gerada com sucesso via Asaas. Aguardando pagamento.',
+        mensagem: `Cobrança PIX do plano ${nomePlano} (${valorFormatadoBr}) gerada com sucesso via Asaas. Aguardando pagamento.`,
       })
     } catch (err) {
       console.error('[asaas_criar_pix] Erro inesperado:', err)

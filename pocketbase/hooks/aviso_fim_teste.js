@@ -5,7 +5,6 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
   )
 
   try {
-    // Buscar todos os planos que estão em período de teste
     const planosEmTrial = $app.findRecordsByFilter(
       'planos',
       'status = "trial"',
@@ -26,7 +25,6 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
       const plano = planosEmTrial[i]
       totalProcessados++
 
-      // Se já enviou aviso anteriormente, pular para não duplicar
       const jaEnviado = plano.getBool('aviso_teste_enviado')
       if (jaEnviado) {
         continue
@@ -41,7 +39,7 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
       const diffMs = trialAte.getTime() - agora.getTime()
       const diffHoras = diffMs / (1000 * 60 * 60)
 
-      // Identifica contas cujo vencimento é em aproximadamente 2 dias (entre 24h e 60h restantes, ideal para checagem diária)
+      // Identifica contas com vencimento em aproximadamente 2 dias (entre 24h e 60h restantes)
       if (diffHoras >= 24 && diffHoras <= 60) {
         const userId = plano.getString('user_id')
         if (!userId) continue
@@ -70,11 +68,14 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
 
         const assunto = 'Seu teste grátis do OrçaFácil termina em 2 dias'
         const corpoHtml = `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; line-height: 1.6;">
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 620px; margin: 0 auto; padding: 24px; color: #1e293b; line-height: 1.6;">
             <div style="text-align: center; margin-bottom: 24px;">
-              <div style="display: inline-block; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; font-weight: bold; font-size: 20px; padding: 12px 20px; border-radius: 12px;">
+              <div style="display: inline-block; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; font-weight: bold; font-size: 20px; padding: 12px 24px; border-radius: 12px;">
                 OrçaFácil
               </div>
+              <p style="margin: 6px 0 0 0; font-size: 13px; color: #64748b; font-weight: 600;">
+                Feito para quem vive de serviço
+              </p>
             </div>
             
             <h2 style="color: #0f172a; font-size: 20px; font-weight: bold; margin-bottom: 16px;">
@@ -82,7 +83,7 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
             </h2>
             
             <p style="font-size: 15px; margin-bottom: 16px;">
-              Esperamos que você esteja aproveitando a praticidade de gerar orçamentos ágeis e gerenciar clientes no <strong>OrçaFácil</strong> com o apoio da nossa Inteligência Artificial.
+              Esperamos que você esteja aproveitando a praticidade de gerar orçamentos rápidos e gerenciar clientes no <strong>OrçaFácil</strong> com o apoio da nossa Inteligência Artificial.
             </p>
             
             <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 6px; margin-bottom: 20px;">
@@ -91,30 +92,72 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
               </p>
             </div>
             
-            <p style="font-size: 15px; margin-bottom: 16px;">
-              Após o encerramento do teste, o seu acesso ao painel e a emissão de novos orçamentos serão <strong>bloqueados</strong> até a ativação da assinatura.
+            <p style="font-size: 15px; margin-bottom: 20px;">
+              Após o encerramento do teste, a emissão de novos orçamentos e o acesso ao sistema serão bloqueados. Escolha o plano ideal para continuar acelerando seus orçamentos:
             </p>
-            
-            <p style="font-size: 15px; margin-bottom: 24px;">
-              Para continuar emitindo orçamentos profissionais sem interrupções, assine agora o <strong>Plano Starter por apenas R$ 49,90/mês</strong>.
-            </p>
-            
+
+            <!-- ESCADA DE 3 PLANOS -->
+            <div style="margin-bottom: 24px;">
+              <!-- PLANO 1: ESSENCIAL -->
+              <div style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 12px; background-color: #ffffff;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+                  <div>
+                    <span style="display: inline-block; background-color: #f1f5f9; color: #475569; font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-bottom: 4px;">Entrada</span>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">Plano Essencial</h3>
+                  </div>
+                  <div style="text-align: right;">
+                    <span style="font-size: 18px; font-weight: 800; color: #0f172a;">R$ 49,90</span><span style="font-size: 12px; color: #64748b;">/mês</span>
+                  </div>
+                </div>
+                <p style="margin: 0; font-size: 13px; color: #64748b;">Núcleo do produto: orçamentos básicos ilimitados, clientes, IA e gastos por voz, dashboard.</p>
+              </div>
+
+              <!-- PLANO 2: PROFISSIONAL (DESTAQUE) -->
+              <div style="border: 2px solid #2563eb; border-radius: 12px; padding: 18px; margin-bottom: 12px; background-color: #eff6ff; position: relative;">
+                <div style="margin-bottom: 8px;">
+                  <span style="display: inline-block; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 3px 10px; border-radius: 9999px;">★ Mais Escolhido • Melhor Custo-Benefício</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+                  <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: #1e3a8a;">Plano Profissional</h3>
+                  <div style="text-align: right;">
+                    <span style="font-size: 20px; font-weight: 800; color: #1e3a8a;">R$ 64,90</span><span style="font-size: 12px; color: #1e40af;">/mês</span>
+                  </div>
+                </div>
+                <p style="margin: 0; font-size: 13px; color: #1e3a8a; font-weight: 500;">
+                  Tudo do Essencial + Assistente de Campo (fotos de notas/recibos) + Contas a Receber no WhatsApp + Resumo semanal em áudio.
+                </p>
+              </div>
+
+              <!-- PLANO 3: PREMIUM -->
+              <div style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; background-color: #ffffff;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+                  <div>
+                    <span style="display: inline-block; background-color: #f5f3ff; color: #6d28d9; font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-bottom: 4px;">Completo</span>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">Plano Premium</h3>
+                  </div>
+                  <div style="text-align: right;">
+                    <span style="font-size: 18px; font-weight: 800; color: #0f172a;">R$ 79,90</span><span style="font-size: 12px; color: #64748b;">/mês</span>
+                  </div>
+                </div>
+                <p style="margin: 0; font-size: 13px; color: #64748b;">Tudo do Profissional + relatórios e exportação financeira avançada + suporte prioritário VIP.</p>
+              </div>
+            </div>
+
             <div style="text-align: center; margin-bottom: 30px;">
-              <a href="https://finalizacao-do-sistema-913b5.shrd00.internal.goskip.dev/planos" style="display: inline-block; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px; padding: 14px 28px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-                Garantir meu acesso por R$ 49,90/mês
+              <a href="https://finalizacao-do-sistema-913b5.shrd00.internal.goskip.dev/planos" style="display: inline-block; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; text-decoration: none; font-weight: 700; font-size: 16px; padding: 14px 32px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                Ver Planos e Ativar Minha Assinatura
               </a>
             </div>
             
             <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
             
             <p style="font-size: 12px; color: #64748b; text-align: center; margin: 0;">
-              OrçaFácil — Orçamentos Profissionais e Gestão com IA para Prestadores de Serviço.<br />
+              OrçaFácil — Feito para quem vive de serviço • Gestão comercial e orçamentos com IA.<br />
               Mensagem automática enviada pela plataforma OrçaFácil.
             </p>
           </div>
         `
 
-        // Tentativa de envio com proteção contra falhas (no-op se SMTP não configurado)
         try {
           const emailMessage = new MailerMessage({
             from: {
@@ -129,13 +172,11 @@ cronAdd('aviso_fim_teste', '0 9 * * *', () => {
           $app.newMailClient().send(emailMessage)
           console.log(`[cron:aviso_fim_teste] E-mail enviado com sucesso para ${emailDestinatario}`)
         } catch (sendErr) {
-          // Log amigável sem quebrar o job se o servidor de e-mail não estiver configurado
           console.warn(
             `[cron:aviso_fim_teste] Aviso registrado (envio SMTP em modo simulação/no-op): ${sendErr}`,
           )
         }
 
-        // Marcar aviso como enviado para nunca duplicar
         try {
           plano.set('aviso_teste_enviado', true)
           $app.save(plano)

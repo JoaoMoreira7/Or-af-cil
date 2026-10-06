@@ -3,15 +3,19 @@
  *
  * PONTO CENTRAL DE PROCESSAMENTO DE COBRANÇAS E ASSINATURAS DO SISTEMA.
  *
- * Integração oficial em PRODUÇÃO com o gateway ASAAS:
- * - PIX Dinâmico com geração automática de Customer, Cobrança, QR Code Base64 e Copia-e-Cola
+ * Integração oficial em PRODUÇÃO com o gateway ASAAS para os 3 PLANOS:
+ * - Essencial: R$ 49,90/mês
+ * - Profissional: R$ 64,90/mês
+ * - Premium: R$ 79,90/mês
+ *
+ * - PIX Dinâmico com geração automática de Customer, Cobrança por plano, QR Code Base64 e Copia-e-Cola
  * - Webhook idempotente para confirmação automática de pagamentos e liberação imediata do acesso
  * - Envio de e-mail de comprovante de pagamento ao cliente e notificação ao dono (jaocarloss@gmail.com)
- * - Suporte a fallback de simulação e ferramentas administrativas completas
+ * - Suporte a fallback de simulação e ferramentas administrativas completas com filtros por plano
  */
 
 import pb from '@/lib/pocketbase/client'
-import { PLANO_CONFIG } from '@/config/plans'
+import { PlanoId, obterConfigPlano, normalizarPlanoId } from '@/config/plans'
 import {
   FormaPagamentoAssinatura,
   PagamentoRegistro,
@@ -23,6 +27,7 @@ export type ModoGateway = 'simulado' | 'real'
 
 export interface ProcessarAssinaturaParams {
   userId: string
+  planoId?: PlanoId | string
   formaPagamento: FormaPagamentoAssinatura
   dadosCartao?: {
     nomeTitular: string
@@ -36,6 +41,8 @@ export interface ResultadoProcessamentoAssinatura {
   pagamento: PagamentoRegistro
   mensagem: string
   referencia: string
+  plano_id?: PlanoId
+  plano_nome?: string
   asaas_id?: string
   pix_copia_cola?: string
   pix_qr_code_base64?: string
@@ -45,6 +52,8 @@ export interface ResultadoProcessamentoAssinatura {
 export interface ResultadoCriacaoPixAsaas {
   sucesso: boolean
   pagamento_id: string
+  plano_id?: PlanoId
+  plano_nome?: string
   asaas_id: string
   asaas_customer_id: string
   referencia: string
@@ -94,16 +103,21 @@ export const gatewayPagamentoService = {
 
   /**
    * Cria uma cobrança PIX real na Asaas através do endpoint de backend seguro em pb_hooks.
-   * Cria o cliente na Asaas, a cobrança de R$ 49,90, busca o QR Code e grava o pagamento como 'pendente'.
+   * Cria o cliente na Asaas, a cobrança do plano escolhido (49,90 / 64,90 / 79,90),
+   * busca o QR Code e grava o pagamento como 'pendente'.
    */
   async criarPixAsaas(params?: {
+    planoId?: PlanoId | string
     cpfCnpj?: string
     telefone?: string
   }): Promise<ResultadoCriacaoPixAsaas> {
     try {
+      const planoEscolhido = normalizarPlanoId(params?.planoId)
       const res = await pb.send<ResultadoCriacaoPixAsaas>('/backend/v1/asaas/criar-pix', {
         method: 'POST',
         body: {
+          plano: planoEscolhido,
+          plano_id: planoEscolhido,
           cpfCnpj: params?.cpfCnpj,
           telefone: params?.telefone,
         },
@@ -160,7 +174,8 @@ export const gatewayPagamentoService = {
   },
 
   /**
-   * Processa a contratação/renovação de uma assinatura do plano Starter (R$ 49,90)
+   * Processa a contratação/renovação de uma assinatura do plano escolhido
+   * (Essencial R$ 49,90, Profissional R$ 64,90, Premium R$ 79,90)
    *
    * Para PIX no modo real: chama a API Asaas e retorna os dados reais de QR Code.
    * Para Cartão / Boleto ou modo simulado: executa o registro correspondente.
@@ -173,16 +188,19 @@ export const gatewayPagamentoService = {
       throw new Error('Identificação do usuário não fornecida para processamento.')
     }
 
+    const planoId = normalizarPlanoId(params.planoId)
+    const configPlano = obterConfigPlano(planoId)
+
     const agora = new Date()
     const dataVencimento = new Date(agora)
     dataVencimento.setDate(dataVencimento.getDate() + 30)
 
     const referencia = this.gerarReferenciaTransacao(formaPagamento)
-    const valor = PLANO_CONFIG.precoMensal
+    const valor = configPlano.precoMensal
 
-    // SE MODO REAL E FORMA PIX: usa endpoint Asaas
+    // SE MODO REAL E FORMA PIX: usa endpoint Asaas passando o plano
     if (this.modo === 'real' && formaPagamento === 'pix') {
-      const asaasRes = await this.criarPixAsaas()
+      const asaasRes = await this.criarPixAsaas({ planoId })
       const pagRecord = await pb
         .collection('pagamentos')
         .getOne<PagamentoRegistro>(asaasRes.pagamento_id)
@@ -190,9 +208,10 @@ export const gatewayPagamentoService = {
       return {
         sucesso: true,
         pagamento: pagRecord,
-        mensagem:
-          'Cobrança PIX gerada com sucesso via Asaas! Realize o pagamento pelo seu app bancário.',
+        mensagem: `Cobrança PIX do plano ${configPlano.nome} gerada com sucesso via Asaas! Realize o pagamento pelo seu app bancário.`,
         referencia: asaasRes.referencia,
+        plano_id: planoId,
+        plano_nome: configPlano.nome,
         asaas_id: asaasRes.asaas_id,
         pix_copia_cola: asaasRes.pix_copia_cola,
         pix_qr_code_base64: asaasRes.pix_qr_code_base64,
@@ -203,8 +222,9 @@ export const gatewayPagamentoService = {
     // MODO SIMULADO OU CARTÃO/BOLETO DE TESTE
     const metadados: Record<string, unknown> = {
       modo: this.modo,
-      plano_id: PLANO_CONFIG.id,
-      valor_formatado: PLANO_CONFIG.precoFormatado,
+      plano_id: planoId,
+      plano_nome: configPlano.nome,
+      valor_formatado: configPlano.precoFormatado,
       processado_em: agora.toISOString(),
       gateway_provedor:
         this.modo === 'simulado' ? 'Simulação Homologada OrçaFácil' : 'Asaas Gateway (Simulado)',
@@ -215,7 +235,7 @@ export const gatewayPagamentoService = {
       metadados.cartao_final = dadosCartao.numeroMascarado
     }
 
-    // 1. Grava na coleção 'pagamentos'
+    // 1. Grava na coleção 'pagamentos' com o plano e valor corretos
     let pagamentoCriado: PagamentoRegistro
     try {
       pagamentoCriado = await pb.collection('pagamentos').create<PagamentoRegistro>({
@@ -226,7 +246,7 @@ export const gatewayPagamentoService = {
         data_compra: agora.toISOString(),
         data_vencimento: dataVencimento.toISOString(),
         referencia_transacao: referencia,
-        plano_nome: PLANO_CONFIG.nome,
+        plano_nome: configPlano.nome,
         pago_em: agora.toISOString(),
         metadados,
       })
@@ -238,7 +258,7 @@ export const gatewayPagamentoService = {
       )
     }
 
-    // 2. Atualiza ou cria a assinatura do usuário na coleção 'planos'
+    // 2. Atualiza ou cria a assinatura do usuário na coleção 'planos' com o novo plano
     try {
       const planosExistentes = await pb.collection('planos').getList(1, 1, {
         filter: `user_id = "${userId}"`,
@@ -246,14 +266,14 @@ export const gatewayPagamentoService = {
 
       if (planosExistentes.items.length > 0) {
         await pb.collection('planos').update(planosExistentes.items[0].id, {
-          plano: 'starter',
+          plano: planoId,
           status: 'ativo',
           renovacao_em: dataVencimento.toISOString(),
         })
       } else {
         await pb.collection('planos').create({
           user_id: userId,
-          plano: 'starter',
+          plano: planoId,
           status: 'ativo',
           renovacao_em: dataVencimento.toISOString(),
         })
@@ -272,8 +292,10 @@ export const gatewayPagamentoService = {
     return {
       sucesso: true,
       pagamento: pagamentoCriado,
-      mensagem: `Assinatura ${PLANO_CONFIG.nome} ativada com sucesso via ${labelForma}!`,
+      mensagem: `Assinatura ${configPlano.nome} (${configPlano.precoMensalExtenso}) ativada com sucesso via ${labelForma}!`,
       referencia,
+      plano_id: planoId,
+      plano_nome: configPlano.nome,
     }
   },
 
@@ -295,7 +317,7 @@ export const gatewayPagamentoService = {
 
   /**
    * Lista todas as vendas da plataforma para o painel exclusivo do dono.
-   * Inclui expand dos dados do usuário (nome, e-mail).
+   * Recalcula métricas por plano e MRR real ponderado.
    */
   async listarTodasVendasAdmin(): Promise<{
     metricas: VendasMetricas
@@ -308,16 +330,28 @@ export const gatewayPagamentoService = {
         expand: 'user_id',
       })
 
-      // 2. Busca planos para consolidar assinantes ativos reais no momento
+      // 2. Busca planos para consolidar assinantes ativos reais no momento e calcular MRR exato por plano
       const planosRes = await pb.collection('planos').getList(1, 500)
 
       let assinantesAtivos = 0
       let canceladosOuExpirados = 0
+      let receitaMensalAtual = 0
       const agora = Date.now()
 
+      const vendasPorPlano = {
+        essencial: 0,
+        profissional: 0,
+        premium: 0,
+      }
+
       for (const p of planosRes.items) {
+        const idPlano = normalizarPlanoId(p.plano)
+        const configPlano = obterConfigPlano(idPlano)
+
         if (p.status === 'ativo') {
           assinantesAtivos++
+          receitaMensalAtual += configPlano.precoMensal
+          vendasPorPlano[idPlano] = (vendasPorPlano[idPlano] || 0) + 1
         } else if (p.status === 'expirado' || p.status === 'inativo') {
           canceladosOuExpirados++
         } else if (p.status === 'trial' && p.trial_ate) {
@@ -339,14 +373,13 @@ export const gatewayPagamentoService = {
         }
       }
 
-      const receitaMensalAtual = assinantesAtivos * PLANO_CONFIG.precoMensal
-
       const metricas: VendasMetricas = {
         totalVendido,
         ativosAgora: assinantesAtivos,
         canceladosOuExpirados,
-        receitaMensalAtual,
-        receitaTotalAcumulada,
+        receitaMensalAtual: Number(receitaMensalAtual.toFixed(2)),
+        receitaTotalAcumulada: Number(receitaTotalAcumulada.toFixed(2)),
+        vendasPorPlano,
       }
 
       return {
@@ -372,12 +405,14 @@ export const gatewayPagamentoService = {
       pago_em: novoStatus === 'pago' ? new Date().toISOString() : undefined,
     })
 
-    // Sincroniza o plano do usuário correspondente
     if (atualizado.user_id) {
       try {
         const planos = await pb.collection('planos').getList(1, 1, {
           filter: `user_id = "${atualizado.user_id}"`,
         })
+
+        const metaPag = atualizado.metadados || {}
+        const planoParaSetar = normalizarPlanoId(metaPag.plano_id || atualizado.plano_nome)
 
         if (planos.items.length > 0) {
           const planoId = planos.items[0].id
@@ -389,6 +424,7 @@ export const gatewayPagamentoService = {
             const renovacao = new Date()
             renovacao.setDate(renovacao.getDate() + 30)
             await pb.collection('planos').update(planoId, {
+              plano: planoParaSetar,
               status: 'ativo',
               renovacao_em: renovacao.toISOString(),
             })
@@ -409,22 +445,24 @@ export const gatewayPagamentoService = {
   async alterarAcessoUsuarioManual(
     userId: string,
     novoStatus: 'ativo' | 'expirado',
+    planoId: PlanoId = 'essencial',
   ): Promise<void> {
     const planos = await pb.collection('planos').getList(1, 1, {
       filter: `user_id = "${userId}"`,
     })
 
     if (planos.items.length > 0) {
-      const planoId = planos.items[0].id
+      const pId = planos.items[0].id
       if (novoStatus === 'ativo') {
         const renovacao = new Date()
         renovacao.setDate(renovacao.getDate() + 30)
-        await pb.collection('planos').update(planoId, {
+        await pb.collection('planos').update(pId, {
+          plano: planoId,
           status: 'ativo',
           renovacao_em: renovacao.toISOString(),
         })
       } else {
-        await pb.collection('planos').update(planoId, {
+        await pb.collection('planos').update(pId, {
           status: 'expirado',
         })
       }
@@ -433,7 +471,7 @@ export const gatewayPagamentoService = {
       renovacao.setDate(renovacao.getDate() + 30)
       await pb.collection('planos').create({
         user_id: userId,
-        plano: 'starter',
+        plano: planoId,
         status: novoStatus,
         renovacao_em: novoStatus === 'ativo' ? renovacao.toISOString() : undefined,
       })

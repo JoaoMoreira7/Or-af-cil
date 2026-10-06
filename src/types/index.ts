@@ -37,11 +37,12 @@ export interface Orçamento {
 }
 
 export type PlanoStatus = 'trial' | 'ativo' | 'expirado' | 'inativo'
+export type PlanoTipo = 'essencial' | 'profissional' | 'premium' | 'starter' | 'pro'
 
 export interface PlanoAssinatura {
   id: string
   user_id: string
-  plano: 'starter' | 'pro'
+  plano: PlanoTipo
   status: PlanoStatus
   trial_ate?: string
   renovacao_em?: string
@@ -107,8 +108,13 @@ export interface VendasMetricas {
   totalVendido: number // quantidade de assinaturas vendidas
   ativosAgora: number // assinantes ativos
   canceladosOuExpirados: number // cancelados ou expirados
-  receitaMensalAtual: number // ativos * 49.90
+  receitaMensalAtual: number // MRR ponderado pelo preço de cada plano ativo
   receitaTotalAcumulada: number // soma dos pagamentos com status 'pago'
+  vendasPorPlano?: {
+    essencial: number
+    profissional: number
+    premium: number
+  }
 }
 
 export type AudioContexto =

@@ -333,7 +333,7 @@ export default function Layout() {
                 className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800 cursor-pointer hover:bg-emerald-100 transition-colors"
               >
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Plano Ativo ({PLANO_CONFIG.precoMensalExtenso})</span>
+                <span>Plano Ativo</span>
               </div>
             )}
 
@@ -397,7 +397,7 @@ export default function Layout() {
                 onClick={() => navigate('/planos')}
                 className="text-xs bg-white/20 hover:bg-white text-white hover:text-blue-900 px-2.5 py-0.5 rounded-full font-semibold transition-colors"
               >
-                Contratar por {PLANO_CONFIG.precoMensalExtenso}
+                Conhecer Planos
               </button>
             </div>
           </div>
