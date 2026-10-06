@@ -50,6 +50,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import { detectPlatform, getPermissionGuide, PlatformPermissionGuide } from '@/lib/audioPermissions'
 
 export default function ModoVoz() {
   const navigate = useNavigate()
@@ -61,6 +62,8 @@ export default function ModoVoz() {
   const [duration, setDuration] = useState(0)
   const [liveTranscript, setLiveTranscript] = useState('')
   const [finalTranscript, setFinalTranscript] = useState('')
+  const [permissionDeniedGuide, setPermissionDeniedGuide] =
+    useState<PlatformPermissionGuide | null>(null)
   const [micPermissionError, setMicPermissionError] = useState<string | null>(null)
 
   // Estados de IA
@@ -165,6 +168,7 @@ export default function ModoVoz() {
   // Iniciar escuta contínua com microfone
   const startListening = async () => {
     if (isProcessing) return
+    setPermissionDeniedGuide(null)
     setMicPermissionError(null)
     setLiveTranscript('')
     setFinalTranscript('')
@@ -172,8 +176,15 @@ export default function ModoVoz() {
     setResultado(null)
     setAppliedSuccess(null)
 
-    // 1. Solicita permissão do microfone
+    // 1. Solicita permissão do microfone explicitamente pelo gesto do usuário
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setMicPermissionError(
+          'Este navegador não suporta captura de microfone. Experimente abrir no Safari (iOS) ou Google Chrome.',
+        )
+        return
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -181,11 +192,18 @@ export default function ModoVoz() {
           autoGainControl: true,
         },
       })
+
+      if (!isMountedRef.current) {
+        stream.getTracks().forEach((t) => t.stop())
+        return
+      }
+
       mediaStreamRef.current = stream
       setIsListening(true)
 
       const startTime = Date.now()
       timerRef.current = window.setInterval(() => {
+        if (!isMountedRef.current) return
         setDuration(Math.floor((Date.now() - startTime) / 1000))
       }, 100)
 
@@ -203,6 +221,7 @@ export default function ModoVoz() {
         let accum = ''
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognition.onresult = (ev: any) => {
+          if (!isMountedRef.current) return
           let interim = ''
           for (let i = ev.resultIndex; i < ev.results.length; i++) {
             const t = ev.results[i][0].transcript
@@ -219,15 +238,16 @@ export default function ModoVoz() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognition.onerror = (e: any) => {
           console.warn('SpeechRecognition erro:', e)
+          if (!isMountedRef.current) return
           if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-            setMicPermissionError(
-              'Permissão do microfone negada. Clique no ícone de cadeado na barra de endereços para permitir.',
-            )
+            const guide = getPermissionGuide()
+            setPermissionDeniedGuide(guide)
+            stopAllMedia()
           }
         }
 
         recognition.onend = () => {
-          // Se ainda montado e marcado como ouvindo, mantém ativo
+          // Se ainda montado e com stream ativo, mantém reconhecimento vivo
           if (isMountedRef.current && mediaStreamRef.current) {
             try {
               recognition.start()
@@ -242,14 +262,15 @@ export default function ModoVoz() {
       }
     } catch (err: unknown) {
       console.error('Erro de microfone:', err)
+      if (!isMountedRef.current) return
+
       const errName = (err as { name?: string })?.name
       if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
-        setMicPermissionError(
-          'Permissão de microfone bloqueada pelo navegador. Conceda permissão para usar o Modo Só Falar.',
-        )
+        const guide = getPermissionGuide()
+        setPermissionDeniedGuide(guide)
       } else {
         setMicPermissionError(
-          'Não foi possível iniciar o microfone neste dispositivo. Verifique as configurações de áudio.',
+          'Não foi possível iniciar o microfone neste dispositivo. Verifique se o microfone está conectado e liberado.',
         )
       }
       stopAllMedia()
@@ -260,6 +281,11 @@ export default function ModoVoz() {
   const stopAndProcess = async () => {
     const fullText = `${finalTranscript} ${liveTranscript}`.trim()
     stopAllMedia()
+
+    // Se houve erro de permissão identificado, não exibe toast confuso de "fala não detectada"
+    if (permissionDeniedGuide || micPermissionError) {
+      return
+    }
 
     if (!fullText) {
       toast({
@@ -829,22 +855,88 @@ export default function ModoVoz() {
 
       {/* ÁREA CENTRAL INTERATIVA */}
       <div className="my-auto py-6 flex flex-col items-center justify-center text-center space-y-6">
-        {/* MENSAGEM DE ERRO DE MICROFONE */}
-        {micPermissionError && (
+        {/* GUIA ESPECÍFICO DE PERMISSÃO BLOQUEADA (IPHONE / ANDROID / DESKTOP) */}
+        {permissionDeniedGuide && (
+          <div className="w-full p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-950 text-xs sm:text-sm text-left space-y-3 shadow-md animate-fade-in">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 font-bold text-rose-900">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                <span className="text-sm">Acesso ao Microfone Necessário</span>
+              </div>
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-rose-200 text-rose-900 shrink-0">
+                {permissionDeniedGuide.badge}
+              </span>
+            </div>
+
+            <p className="text-rose-800 text-xs font-medium">{permissionDeniedGuide.subtitle}</p>
+
+            <div className="bg-white/90 border border-rose-200 rounded-xl p-3 space-y-2 text-xs">
+              <span className="font-bold text-slate-800 block text-xs">
+                {permissionDeniedGuide.title}
+              </span>
+              <ol className="list-decimal pl-4 space-y-1.5 text-slate-700 leading-relaxed">
+                {permissionDeniedGuide.steps.map((step, idx) => (
+                  <li key={idx} className="font-medium">
+                    {step}
+                  </li>
+                ))}
+              </ol>
+              {permissionDeniedGuide.alternativeStep && (
+                <p className="text-[11px] text-slate-600 pt-1 border-t border-slate-200 italic">
+                  💡 {permissionDeniedGuide.alternativeStep}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                type="button"
+                size="sm"
+                onClick={startListening}
+                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold h-9"
+              >
+                Tentar novamente
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => window.location.reload()}
+                className="text-xs h-9 border-rose-300 text-rose-900 hover:bg-rose-100"
+              >
+                Recarregar página
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* OUTROS ERROS DE DISPOSITIVO / HARDWARE */}
+        {!permissionDeniedGuide && micPermissionError && (
           <div className="w-full p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs sm:text-sm text-left space-y-2">
             <div className="flex items-center gap-2 font-bold text-rose-800">
               <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
               <span>Acesso ao Microfone Necessário</span>
             </div>
             <p>{micPermissionError}</p>
-            <Button
-              type="button"
-              size="sm"
-              onClick={startListening}
-              className="bg-rose-600 hover:bg-rose-700 text-white text-xs"
-            >
-              Tentar novamente
-            </Button>
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                type="button"
+                size="sm"
+                onClick={startListening}
+                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold"
+              >
+                Tentar novamente
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => window.location.reload()}
+                className="text-xs border-rose-300 text-rose-900 hover:bg-rose-100"
+              >
+                Recarregar página
+              </Button>
+            </div>
           </div>
         )}
 

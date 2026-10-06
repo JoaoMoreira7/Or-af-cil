@@ -15,6 +15,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { useToast } from '@/hooks/use-toast'
+import { getPermissionGuide } from '@/lib/audioPermissions'
 
 export interface VoiceRecorderProps {
   onAudioReady?: (blob: Blob, transcript: string) => void
@@ -33,6 +35,8 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   compact = false,
   className,
 }) => {
+  const { toast } = useToast()
+
   // Estados de gravação
   const [isRecording, setIsRecording] = useState(false)
   const [recordDuration, setRecordDuration] = useState(0)
@@ -200,6 +204,17 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       console.error('Erro ao acessar microfone:', err)
       if (isMountedRef.current) {
         setIsRecording(false)
+        const isDenied =
+          (err as { name?: string })?.name === 'NotAllowedError' ||
+          (err as { name?: string })?.name === 'PermissionDeniedError'
+        if (isDenied) {
+          const guide = getPermissionGuide()
+          toast({
+            variant: 'destructive',
+            title: 'Permissão de microfone negada',
+            description: `${guide.title} ${guide.steps[0]}`,
+          })
+        }
       }
       stopRecordingCleanup()
     }
