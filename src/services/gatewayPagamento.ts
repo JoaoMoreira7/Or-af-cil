@@ -1,17 +1,13 @@
 /**
  * SERVIÇO DE GATEWAY DE PAGAMENTO — ORÇAFÁCIL
  *
- * PONTO ÚNICO DE PROCESSAMENTO DE COBRANÇAS E ASSINATURAS DO SISTEMA.
+ * PONTO CENTRAL DE PROCESSAMENTO DE COBRANÇAS E ASSINATURAS DO SISTEMA.
  *
- * ============================================================================
- * [GATEWAY REAL: conectar credenciais Mercado Pago/Stripe aqui]
- *
- * Para migrar do modo simulado atual para um gateway real (Mercado Pago, Stripe,
- * Asaas, PagBank, etc.), altere a flag `MODO_GATEWAY` para 'real' e implemente as
- * chamadas de API nas funções correspondentes abaixo (gerarQrCodePixReal,
- * processarCartaoReal, gerarBoletoReal). Toda a camada visual de telas (Planos,
- * Paywall, Painel de Vendas e Admin) consome exclusivamente este service.
- * ============================================================================
+ * Integração oficial em PRODUÇÃO com o gateway ASAAS:
+ * - PIX Dinâmico com geração automática de Customer, Cobrança, QR Code Base64 e Copia-e-Cola
+ * - Webhook idempotente para confirmação automática de pagamentos e liberação imediata do acesso
+ * - Envio de e-mail de comprovante de pagamento ao cliente e notificação ao dono (jaocarloss@gmail.com)
+ * - Suporte a fallback de simulação e ferramentas administrativas completas
  */
 
 import pb from '@/lib/pocketbase/client'
@@ -30,7 +26,7 @@ export interface ProcessarAssinaturaParams {
   formaPagamento: FormaPagamentoAssinatura
   dadosCartao?: {
     nomeTitular: string
-    numeroMascarado: string // Ex: **** **** **** 1234 (nunca gravar número completo)
+    numeroMascarado: string
     validade: string
   }
 }
@@ -40,14 +36,51 @@ export interface ResultadoProcessamentoAssinatura {
   pagamento: PagamentoRegistro
   mensagem: string
   referencia: string
+  asaas_id?: string
+  pix_copia_cola?: string
+  pix_qr_code_base64?: string
+  invoice_url?: string
+}
+
+export interface ResultadoCriacaoPixAsaas {
+  sucesso: boolean
+  pagamento_id: string
+  asaas_id: string
+  asaas_customer_id: string
+  referencia: string
+  valor: number
+  status: string
+  pix_copia_cola: string
+  pix_qr_code_base64: string
+  invoice_url: string
+  vencimento_pix: string
+  expiracao_qr?: string
+  mensagem: string
+}
+
+export interface ResultadoConsultaCobrancaAsaas {
+  sucesso: boolean
+  cobranca: {
+    id: string
+    status: string
+    value: number
+    netValue?: number
+    dueDate?: string
+    paymentDate?: string
+    clientPaymentDate?: string
+    billingType?: string
+    invoiceUrl?: string
+    transactionReceiptUrl?: string
+    [key: string]: unknown
+  }
+  status_local?: PagamentoStatus | null
 }
 
 export const gatewayPagamentoService = {
   /**
-   * Flag de controle do ambiente.
-   * Quando receber as credenciais de produção, basta mudar para 'real'.
+   * Modo do gateway: 'real' conecta ao Asaas em produção.
    */
-  modo: 'simulado' as ModoGateway,
+  modo: 'real' as ModoGateway,
 
   /**
    * Gera uma referência única para a transação.
@@ -60,11 +93,77 @@ export const gatewayPagamentoService = {
   },
 
   /**
+   * Cria uma cobrança PIX real na Asaas através do endpoint de backend seguro em pb_hooks.
+   * Cria o cliente na Asaas, a cobrança de R$ 49,90, busca o QR Code e grava o pagamento como 'pendente'.
+   */
+  async criarPixAsaas(params?: {
+    cpfCnpj?: string
+    telefone?: string
+  }): Promise<ResultadoCriacaoPixAsaas> {
+    try {
+      const res = await pb.send<ResultadoCriacaoPixAsaas>('/backend/v1/asaas/criar-pix', {
+        method: 'POST',
+        body: {
+          cpfCnpj: params?.cpfCnpj,
+          telefone: params?.telefone,
+        },
+      })
+      return res
+    } catch (err: unknown) {
+      console.error('[gatewayPagamentoService] Erro ao criar cobrança PIX no Asaas:', err)
+      const errorMsg =
+        (err as { data?: { error?: string } })?.data?.error ||
+        (err instanceof Error ? err.message : 'Falha ao conectar ao Asaas')
+      throw new Error(errorMsg)
+    }
+  },
+
+  /**
+   * Consulta o status atual de uma cobrança na Asaas e sincroniza o banco local.
+   */
+  async consultarCobrancaAsaas(asaasPaymentId: string): Promise<ResultadoConsultaCobrancaAsaas> {
+    try {
+      const res = await pb.send<ResultadoConsultaCobrancaAsaas>(
+        `/backend/v1/asaas/cobranca/${asaasPaymentId}`,
+        {
+          method: 'GET',
+        },
+      )
+      return res
+    } catch (err: unknown) {
+      console.error('[gatewayPagamentoService] Erro ao consultar cobrança Asaas:', err)
+      throw err
+    }
+  },
+
+  /**
+   * Cancela uma cobrança diretamente na API Asaas (exclusivo para o dono).
+   */
+  async cancelarCobrancaAsaas(
+    asaasPaymentId: string,
+  ): Promise<{ sucesso: boolean; mensagem: string }> {
+    try {
+      const res = await pb.send<{ sucesso: boolean; mensagem: string }>(
+        `/backend/v1/asaas/cancelar-cobranca/${asaasPaymentId}`,
+        {
+          method: 'POST',
+        },
+      )
+      return res
+    } catch (err: unknown) {
+      console.error('[gatewayPagamentoService] Erro ao cancelar cobrança Asaas:', err)
+      const errorMsg =
+        (err as { data?: { error?: string } })?.data?.error ||
+        (err instanceof Error ? err.message : 'Falha ao cancelar cobrança na Asaas')
+      throw new Error(errorMsg)
+    }
+  },
+
+  /**
    * Processa a contratação/renovação de uma assinatura do plano Starter (R$ 49,90)
    *
-   * 1. Processa a cobrança (no modo simulado com validação, ou via gateway real);
-   * 2. Registra o pagamento na coleção 'pagamentos';
-   * 3. Atualiza ou cria a assinatura do usuário na coleção 'planos' para 'ativo' com +30 dias.
+   * Para PIX no modo real: chama a API Asaas e retorna os dados reais de QR Code.
+   * Para Cartão / Boleto ou modo simulado: executa o registro correspondente.
    */
   async processarAssinatura(
     params: ProcessarAssinaturaParams,
@@ -81,22 +180,34 @@ export const gatewayPagamentoService = {
     const referencia = this.gerarReferenciaTransacao(formaPagamento)
     const valor = PLANO_CONFIG.precoMensal
 
-    // ========================================================================
-    // GATEWAY REAL: conectar credenciais Mercado Pago/Stripe aqui
-    // Exemplo:
-    // if (this.modo === 'real') {
-    //   const respostaGateway = await fetch('https://api.mercadopago.com/v1/payments', ...)
-    //   ...
-    // }
-    // ========================================================================
+    // SE MODO REAL E FORMA PIX: usa endpoint Asaas
+    if (this.modo === 'real' && formaPagamento === 'pix') {
+      const asaasRes = await this.criarPixAsaas()
+      const pagRecord = await pb
+        .collection('pagamentos')
+        .getOne<PagamentoRegistro>(asaasRes.pagamento_id)
 
+      return {
+        sucesso: true,
+        pagamento: pagRecord,
+        mensagem:
+          'Cobrança PIX gerada com sucesso via Asaas! Realize o pagamento pelo seu app bancário.',
+        referencia: asaasRes.referencia,
+        asaas_id: asaasRes.asaas_id,
+        pix_copia_cola: asaasRes.pix_copia_cola,
+        pix_qr_code_base64: asaasRes.pix_qr_code_base64,
+        invoice_url: asaasRes.invoice_url,
+      }
+    }
+
+    // MODO SIMULADO OU CARTÃO/BOLETO DE TESTE
     const metadados: Record<string, unknown> = {
       modo: this.modo,
       plano_id: PLANO_CONFIG.id,
       valor_formatado: PLANO_CONFIG.precoFormatado,
       processado_em: agora.toISOString(),
       gateway_provedor:
-        this.modo === 'simulado' ? 'Simulação Homologada OrçaFácil' : 'Mercado Pago / Stripe',
+        this.modo === 'simulado' ? 'Simulação Homologada OrçaFácil' : 'Asaas Gateway (Simulado)',
     }
 
     if (formaPagamento === 'cartao' && dadosCartao) {
@@ -116,6 +227,7 @@ export const gatewayPagamentoService = {
         data_vencimento: dataVencimento.toISOString(),
         referencia_transacao: referencia,
         plano_nome: PLANO_CONFIG.nome,
+        pago_em: agora.toISOString(),
         metadados,
       })
     } catch (err: unknown) {
@@ -148,7 +260,6 @@ export const gatewayPagamentoService = {
       }
     } catch (err: unknown) {
       console.error('Erro ao ativar plano do usuário após pagamento:', err)
-      // Não interrompe o retorno do comprovante já gerado
     }
 
     const labelForma =
@@ -250,7 +361,7 @@ export const gatewayPagamentoService = {
 
   /**
    * Altera manualmente o status de uma venda e atualiza o acesso da assinatura correspondente.
-   * Usado exclusivamente pelo dono (jaocarloss@gmail.com).
+   * Usado pelo dono (jaocarloss@gmail.com).
    */
   async alterarStatusVendaManual(
     pagamentoId: string,
@@ -258,6 +369,7 @@ export const gatewayPagamentoService = {
   ): Promise<PagamentoRegistro> {
     const atualizado = await pb.collection('pagamentos').update<PagamentoRegistro>(pagamentoId, {
       status: novoStatus,
+      pago_em: novoStatus === 'pago' ? new Date().toISOString() : undefined,
     })
 
     // Sincroniza o plano do usuário correspondente
@@ -317,7 +429,6 @@ export const gatewayPagamentoService = {
         })
       }
     } else {
-      // Se não havia registro de plano, cria com o status desejado
       const renovacao = new Date()
       renovacao.setDate(renovacao.getDate() + 30)
       await pb.collection('planos').create({

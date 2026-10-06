@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T12:02:25.993Z",
+  "generatedAt": "2026-10-06T14:10:45.857Z",
   "collections": [
     {
       "name": "users",
@@ -874,6 +874,42 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "asaas_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "asaas_customer_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pix_qr_code_url",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pix_copia_cola",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "invoice_url",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pago_em",
+          "type": "date",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -881,7 +917,8 @@
         "CREATE INDEX idx_pagamentos_status ON pagamentos (status)",
         "CREATE INDEX idx_pagamentos_forma ON pagamentos (forma_pagamento)",
         "CREATE INDEX idx_pagamentos_data_compra ON pagamentos (data_compra DESC)",
-        "CREATE INDEX idx_pagamentos_created ON pagamentos (created DESC)"
+        "CREATE INDEX idx_pagamentos_created ON pagamentos (created DESC)",
+        "CREATE INDEX `idx_pagamentos_asaas_id` ON `pagamentos` (asaas_id)"
       ]
     },
     {

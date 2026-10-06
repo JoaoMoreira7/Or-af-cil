@@ -17,6 +17,7 @@ import {
   Barcode,
   Sparkles,
   Info,
+  ExternalLink,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -65,6 +66,9 @@ export default function AdminVendas() {
   const [acaoTipo, setAcaoTipo] = useState<'cancelar' | 'reativar'>('cancelar')
   const [executandoAcao, setExecutandoAcao] = useState<boolean>(false)
 
+  // Consulta individual Asaas
+  const [consultandoAsaasId, setConsultandoAsaasId] = useState<string | null>(null)
+
   useEffect(() => {
     isMountedRef.current = true
     return () => {
@@ -108,10 +112,15 @@ export default function AdminVendas() {
       const nomeCliente = (item.expand?.user_id?.name || '').toLowerCase()
       const emailCliente = (item.expand?.user_id?.email || '').toLowerCase()
       const ref = (item.referencia_transacao || '').toLowerCase()
+      const asaasId = (item.asaas_id || '').toLowerCase()
       const term = searchTerm.toLowerCase().trim()
 
       const matchesSearch =
-        !term || nomeCliente.includes(term) || emailCliente.includes(term) || ref.includes(term)
+        !term ||
+        nomeCliente.includes(term) ||
+        emailCliente.includes(term) ||
+        ref.includes(term) ||
+        asaasId.includes(term)
 
       const matchesStatus = filtroStatus === 'todos' ? true : item.status === filtroStatus
       const matchesForma = filtroForma === 'todos' ? true : item.forma_pagamento === filtroForma
@@ -126,11 +135,54 @@ export default function AdminVendas() {
     setModalAcaoOpen(true)
   }
 
+  // Consultar status da cobrança direto na API Asaas
+  const handleConsultarAsaas = async (venda: PagamentoRegistro) => {
+    if (!venda.asaas_id) {
+      toast({
+        title: 'Sem ID Asaas',
+        description:
+          'Esta transação é anterior ou foi realizada em ambiente simulado sem ID Asaas.',
+      })
+      return
+    }
+
+    setConsultandoAsaasId(venda.id)
+    try {
+      const res = await gatewayPagamentoService.consultarCobrancaAsaas(venda.asaas_id)
+      const st = res.cobranca.status
+      toast({
+        title: `Status na Asaas: ${st}`,
+        description: `Cobrança ${venda.asaas_id} retornou valor R$ ${res.cobranca.value}. Status local sincronizado: ${res.status_local || st}.`,
+      })
+      await carregarVendas()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao consultar Asaas'
+      toast({
+        variant: 'destructive',
+        title: 'Erro na consulta Asaas',
+        description: msg,
+      })
+    } finally {
+      if (isMountedRef.current) {
+        setConsultandoAsaasId(null)
+      }
+    }
+  }
+
   const handleConfirmarAcaoManual = async () => {
     if (!vendaSelecionada) return
     setExecutandoAcao(true)
 
     try {
+      if (acaoTipo === 'cancelar' && vendaSelecionada.asaas_id) {
+        // Tenta cancelar na Asaas primeiro
+        try {
+          await gatewayPagamentoService.cancelarCobrancaAsaas(vendaSelecionada.asaas_id)
+        } catch (asaasErr) {
+          console.warn('Aviso ao cancelar na Asaas:', asaasErr)
+        }
+      }
+
       const novoStatus: PagamentoStatus = acaoTipo === 'cancelar' ? 'cancelado' : 'pago'
       await gatewayPagamentoService.alterarStatusVendaManual(vendaSelecionada.id, novoStatus)
 
@@ -167,7 +219,7 @@ export default function AdminVendas() {
     if (forma === 'pix') {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200 text-[11px] font-semibold">
-          <QrCode className="w-3 h-3 text-teal-600" /> PIX
+          <QrCode className="w-3 h-3 text-teal-600" /> PIX (Asaas)
         </span>
       )
     }
@@ -237,8 +289,8 @@ export default function AdminVendas() {
           </div>
           <p className="text-sm text-slate-500 mt-1">
             Gestão financeira de assinaturas do plano {PLANO_CONFIG.nome} (
-            {PLANO_CONFIG.precoMensalExtenso}). Controle de vendas, receita mensal acumulada e ações
-            manuais de liberação/cancelamento.
+            {PLANO_CONFIG.precoMensalExtenso}). Controle de vendas reais Asaas, receita mensal
+            acumulada e ações manuais de liberação/cancelamento.
           </p>
         </div>
 
@@ -253,45 +305,34 @@ export default function AdminVendas() {
         </Button>
       </div>
 
-      {/* CARD DE AVISO DO GATEWAY / HOMOLOGAÇÃO */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-slate-50 border border-blue-200/80 text-blue-950 text-xs sm:text-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+      {/* CARD DE STATUS DA INTEGRAÇÃO ASAAS */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50/90 via-teal-50/70 to-slate-50 border border-emerald-200/80 text-emerald-950 text-xs sm:text-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-blue-600 text-white shrink-0 mt-0.5 md:mt-0 shadow-xs">
+          <div className="p-2 rounded-xl bg-emerald-600 text-white shrink-0 mt-0.5 md:mt-0 shadow-xs">
             <Sparkles className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-bold text-slate-900">
-                Gateway de Pagamento Unificado: Modo{' '}
-                {gatewayPagamentoService.modo === 'simulado'
-                  ? 'Simulado / Homologado'
-                  : 'Real (Mercado Pago / Stripe)'}
+                Gateway de Pagamento Asaas (Produção Conectada)
               </span>
-              <Badge
-                variant="outline"
-                className="border-blue-300 bg-white text-blue-700 text-[10px]"
-              >
-                {gatewayPagamentoService.modo === 'simulado'
-                  ? 'Pronto para Produção'
-                  : 'Produção Ativa'}
+              <Badge className="bg-emerald-600 text-white text-[10px] font-bold">
+                PRODUÇÃO ATIVA
               </Badge>
             </div>
             <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-              Toda nova contratação via PIX, Cartão ou Boleto gera um registro com data de compra,
-              vencimento (+30 dias) e referência única. Quando você receber as credenciais do
-              Mercado Pago ou Stripe, a troca é pontual no service{' '}
-              <code className="font-mono bg-blue-100/70 px-1 py-0.5 rounded text-blue-900">
-                src/services/gatewayPagamento.ts
-              </code>{' '}
-              sem necessidade de refazer telas.
+              O sistema emite cobranças PIX dinâmicas reais via API da Asaas. Quando o cliente paga
+              pelo banco dele, o <strong>Webhook da Asaas</strong> recebe a confirmação bancária,
+              atualiza a venda para <strong>pago</strong>, renova a assinatura por +30 dias e
+              dispara o e-mail de comprovante fiscal automaticamente.
             </p>
           </div>
         </div>
 
-        <div className="shrink-0 flex items-center gap-2 bg-white/90 p-2.5 rounded-xl border border-blue-200">
-          <Info className="w-4 h-4 text-blue-600 shrink-0" />
+        <div className="shrink-0 flex items-center gap-2 bg-white/90 p-2.5 rounded-xl border border-emerald-200">
+          <Info className="w-4 h-4 text-emerald-600 shrink-0" />
           <div className="text-[11px] leading-tight text-slate-700">
-            <strong>Plano Único Oficial:</strong> {PLANO_CONFIG.precoFormatado}/mês
+            <strong>Plano Único Starter:</strong> {PLANO_CONFIG.precoFormatado}/mês
           </div>
         </div>
       </div>
@@ -401,8 +442,8 @@ export default function AdminVendas() {
                 </Badge>
               </CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Acompanhe compras, formas de pagamento, vencimentos e gerencie o status das
-                assinaturas individualmente.
+                Acompanhe compras, formas de pagamento, identificadores Asaas e gerencie o status
+                das assinaturas em tempo real.
               </CardDescription>
             </div>
 
@@ -412,10 +453,10 @@ export default function AdminVendas() {
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
                 <Input
-                  placeholder="Buscar cliente, e-mail ou ref..."
+                  placeholder="Buscar cliente, e-mail, ref ou Asaas ID..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 text-xs h-9 w-full sm:w-60 border-slate-200"
+                  className="pl-8 text-xs h-9 w-full sm:w-64 border-slate-200"
                 />
               </div>
 
@@ -433,7 +474,7 @@ export default function AdminVendas() {
                     }`}
                   >
                     {forma === 'todos'
-                      ? 'Todas Formas'
+                      ? 'Todas'
                       : forma === 'pix'
                         ? 'PIX'
                         : forma === 'cartao'
@@ -493,9 +534,9 @@ export default function AdminVendas() {
                     <th className="py-3 px-4">Valor</th>
                     <th className="py-3 px-4">Forma</th>
                     <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">ID Asaas / Ref</th>
                     <th className="py-3 px-4">Data Compra</th>
                     <th className="py-3 px-4">Vencimento (+30d)</th>
-                    <th className="py-3 px-4">Ref. Transação</th>
                     <th className="py-3 px-4 text-right">Ação do Dono</th>
                   </tr>
                 </thead>
@@ -503,6 +544,7 @@ export default function AdminVendas() {
                   {vendasFiltradas.map((item) => {
                     const nome = item.expand?.user_id?.name || 'Cliente Sem Nome'
                     const email = item.expand?.user_id?.email || 'Sem e-mail'
+                    const isConsultando = consultandoAsaasId === item.id
 
                     return (
                       <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
@@ -523,6 +565,29 @@ export default function AdminVendas() {
                         {/* STATUS */}
                         <td className="py-3 px-4">{renderStatusBadge(item.status)}</td>
 
+                        {/* ID ASAAS / REF */}
+                        <td className="py-3 px-4 font-mono text-[11px] text-slate-600">
+                          {item.asaas_id ? (
+                            <div className="space-y-0.5">
+                              <span className="font-bold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                {item.asaas_id}
+                              </span>
+                              {item.invoice_url && (
+                                <a
+                                  href={item.invoice_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5"
+                                >
+                                  Ver fatura <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">{item.referencia_transacao}</span>
+                          )}
+                        </td>
+
                         {/* DATA DA COMPRA */}
                         <td className="py-3 px-4 text-slate-600 font-mono text-[11px]">
                           {formatarDataHora(item.data_compra)}
@@ -533,15 +598,25 @@ export default function AdminVendas() {
                           {formatarData(item.data_vencimento)}
                         </td>
 
-                        {/* REFERÊNCIA */}
-                        <td className="py-3 px-4 font-mono text-[11px] text-slate-500">
-                          <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                            {item.referencia_transacao}
-                          </span>
-                        </td>
-
                         {/* AÇÃO DO DONO */}
-                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <td className="py-3 px-4 text-right whitespace-nowrap space-x-1.5">
+                          {item.asaas_id && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={isConsultando}
+                              onClick={() => handleConsultarAsaas(item)}
+                              className="h-7 px-2 text-[11px] text-slate-700 border-slate-300 hover:bg-slate-100"
+                              title="Consulta a cobrança na API da Asaas e sincroniza o status"
+                            >
+                              <RefreshCw
+                                className={`w-3 h-3 mr-1 ${isConsultando ? 'animate-spin' : ''}`}
+                              />
+                              Consultar Asaas
+                            </Button>
+                          )}
+
                           {item.status === 'pago' ? (
                             <Button
                               type="button"
@@ -549,10 +624,10 @@ export default function AdminVendas() {
                               size="sm"
                               onClick={() => abrirModalAcao(item, 'cancelar')}
                               className="h-7 px-2.5 text-xs text-rose-700 border-rose-200 hover:bg-rose-50 hover:border-rose-300 gap-1"
-                              title="Cancela a assinatura e bloqueia o paywall para este usuário"
+                              title="Cancela a cobrança e bloqueia o paywall para este usuário"
                             >
                               <Ban className="w-3.5 h-3.5 text-rose-600" />
-                              Cancelar Assinatura
+                              Cancelar
                             </Button>
                           ) : (
                             <Button
@@ -564,7 +639,7 @@ export default function AdminVendas() {
                               title="Reativa a assinatura e renova o acesso por 30 dias"
                             >
                               <RotateCcw className="w-3.5 h-3.5 text-emerald-600" />
-                              Reativar Assinatura
+                              Ativar / Liberar
                             </Button>
                           )}
                         </td>
@@ -614,6 +689,14 @@ export default function AdminVendas() {
                   {vendaSelecionada.expand?.user_id?.email || '—'}
                 </span>
               </div>
+              {vendaSelecionada.asaas_id && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">ID Asaas:</span>
+                  <span className="font-mono text-slate-900 font-bold">
+                    {vendaSelecionada.asaas_id}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-500">Transação:</span>
                 <span className="font-mono text-slate-700">
@@ -637,15 +720,15 @@ export default function AdminVendas() {
                 {acaoTipo === 'cancelar' ? (
                   <p>
                     ⚠️ <strong>Atenção:</strong> Ao cancelar, o status da venda será alterado para{' '}
-                    <strong>"cancelado"</strong> e o plano do usuário será marcado como{' '}
-                    <strong>"expirado"</strong>, ativando a tela de bloqueio (paywall) na próxima
-                    navegação dele.
+                    <strong>"cancelado"</strong>, a cobrança correspondente será cancelada no
+                    gateway Asaas e o plano do usuário será marcado como <strong>"expirado"</strong>
+                    , ativando a tela de bloqueio (paywall) na próxima navegação dele.
                   </p>
                 ) : (
                   <p>
-                    ✅ Ao reativar, o status da venda será alterado para <strong>"pago"</strong> e a
+                    ✅ Ao liberar, o status da venda será alterado para <strong>"pago"</strong> e a
                     assinatura do usuário será estendida por <strong>+30 dias</strong> de acesso
-                    total e ilimitado.
+                    total e irrestrito.
                   </p>
                 )}
               </div>
@@ -679,7 +762,7 @@ export default function AdminVendas() {
               ) : acaoTipo === 'cancelar' ? (
                 'Sim, Cancelar Assinatura'
               ) : (
-                'Sim, Reativar Assinatura'
+                'Sim, Liberar Acesso'
               )}
             </Button>
           </DialogFooter>

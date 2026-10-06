@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   CreditCard,
   QrCode,
@@ -16,6 +16,7 @@ import {
   Clock,
   RefreshCw,
   Info,
+  ExternalLink,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSubscription } from '@/contexts/SubscriptionContext'
@@ -33,6 +34,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { gatewayPagamentoService, ResultadoCriacaoPixAsaas } from '@/services/gatewayPagamento'
+import { COMPANY_LEGAL } from '@/config/company'
 
 export default function Planos() {
   const { user } = useAuth()
@@ -47,6 +50,7 @@ export default function Planos() {
     simularFimDeTeste,
     restaurarTesteDemo,
     assinarPlanoSimulado,
+    recarregarPlano,
   } = useSubscription()
 
   // Modal Assinatura / Pagamento
@@ -56,6 +60,13 @@ export default function Planos() {
   const [pixCopiado, setPixCopiado] = useState(false)
   const [boletoCopiado, setBoletoCopiado] = useState(false)
 
+  // Estado PIX REAL ASAAS
+  const [loadingPixAsaas, setLoadingPixAsaas] = useState(false)
+  const [pixData, setPixData] = useState<ResultadoCriacaoPixAsaas | null>(null)
+  const [pixStatusPago, setPixStatusPago] = useState(false)
+  const [pollingAtivo, setPollingAtivo] = useState(false)
+  const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   // Campos Cartão
   const [cardNome, setCardNome] = useState('')
   const [cardNumero, setCardNumero] = useState('')
@@ -63,11 +74,72 @@ export default function Planos() {
   const [cardCvv, setCardCvv] = useState('')
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({})
 
-  // Códigos fictícios
-  const fakePixCode =
-    '00020126580014br.gov.bcb.pix0136orcafacil-simulacao-homologacao-2026520400005303986540549.905802BR5920ORCAFACIL SAAS LTDA6009SAO PAULO62140510ORCFAC49906304F2B8'
-
+  // Códigos fictícios para fallback
   const fakeBoletoLinha = '34191.79001 01043.510047 91020.150008 5 94520000004990'
+
+  // Limpa timer de polling ao desmontar ou fechar modal
+  useEffect(() => {
+    return () => {
+      if (pollingTimerRef.current) {
+        clearInterval(pollingTimerRef.current)
+      }
+    }
+  }, [])
+
+  // Iniciar geração de PIX Real assim que abrir o modal na aba PIX
+  const gerarPixRealAsaas = async () => {
+    setLoadingPixAsaas(true)
+    setPixStatusPago(false)
+    try {
+      const res = await gatewayPagamentoService.criarPixAsaas()
+      setPixData(res)
+
+      // Inicia polling para detectar quando o webhook ou o banco confirmar o pagamento
+      iniciarPolling(res.asaas_id)
+    } catch (err: unknown) {
+      console.error('Erro ao gerar PIX Asaas:', err)
+      const msg = err instanceof Error ? err.message : 'Falha ao conectar com gateway Asaas'
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao gerar PIX',
+        description: msg,
+      })
+    } finally {
+      setLoadingPixAsaas(false)
+    }
+  }
+
+  // Polling a cada 4 segundos checando o status da cobrança
+  const iniciarPolling = (asaasId: string) => {
+    if (pollingTimerRef.current) {
+      clearInterval(pollingTimerRef.current)
+    }
+    setPollingAtivo(true)
+
+    pollingTimerRef.current = setInterval(async () => {
+      try {
+        const res = await gatewayPagamentoService.consultarCobrancaAsaas(asaasId)
+        const st = res.cobranca.status
+        if (st === 'RECEIVED' || st === 'CONFIRMED' || res.status_local === 'pago') {
+          if (pollingTimerRef.current) {
+            clearInterval(pollingTimerRef.current)
+          }
+          setPollingAtivo(false)
+          setPixStatusPago(true)
+
+          // Recarrega o plano do usuário no contexto
+          await recarregarPlano()
+
+          toast({
+            title: '🎉 Pagamento confirmado pela Asaas!',
+            description: 'Sua assinatura do Plano Starter foi ativada com sucesso por +30 dias!',
+          })
+        }
+      } catch (err) {
+        console.warn('Aviso no polling de verificação do PIX:', err)
+      }
+    }, 4000)
+  }
 
   const handleOpenCheckout = () => {
     setCardNome(user?.name || '')
@@ -77,7 +149,21 @@ export default function Planos() {
     setCardErrors({})
     setPixCopiado(false)
     setBoletoCopiado(false)
+    setPixStatusPago(false)
     setModalOpen(true)
+
+    // Se estiver em modo PIX, já gera ou revalida o PIX real
+    if (formaPagamento === 'pix' && !pixData) {
+      gerarPixRealAsaas()
+    }
+  }
+
+  const handleCloseModal = () => {
+    if (pollingTimerRef.current) {
+      clearInterval(pollingTimerRef.current)
+    }
+    setPollingAtivo(false)
+    setModalOpen(false)
   }
 
   // Validação Luhn simples para Cartão
@@ -96,7 +182,6 @@ export default function Planos() {
     return sum % 10 === 0
   }
 
-  // Format Card Number (XXXX XXXX XXXX XXXX)
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 16)
     const parts = raw.match(/[\s\S]{1,4}/g) || []
@@ -104,7 +189,6 @@ export default function Planos() {
     if (cardErrors.cardNumero) setCardErrors((prev) => ({ ...prev, cardNumero: '' }))
   }
 
-  // Format Expiry (MM/AA)
   const handleValidadeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 4)
     if (raw.length >= 3) {
@@ -115,7 +199,6 @@ export default function Planos() {
     if (cardErrors.cardValidade) setCardErrors((prev) => ({ ...prev, cardValidade: '' }))
   }
 
-  // Format CVV (3 ou 4 dígitos)
   const handleCvvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 4)
     setCardCvv(raw)
@@ -135,7 +218,7 @@ export default function Planos() {
     if (cardValidade.length !== 5) {
       errs.cardValidade = 'Informe a validade no formato MM/AA.'
     } else {
-      const [mesStr, anoStr] = cardValidade.split('/')
+      const [mesStr] = cardValidade.split('/')
       const mes = parseInt(mesStr, 10)
       if (mes < 1 || mes > 12) {
         errs.cardValidade = 'Mês inválido (01 a 12).'
@@ -148,15 +231,14 @@ export default function Planos() {
     return Object.keys(errs).length === 0
   }
 
-  // Confirmar pagamento simulado
-  const handleConfirmarPagamento = async (metodo: 'pix' | 'cartao' | 'boleto') => {
+  // Confirmar pagamento manual / simulado (para cartão ou boleto de teste)
+  const handleConfirmarPagamentoSimulado = async (metodo: 'cartao' | 'boleto') => {
     if (metodo === 'cartao' && !validateCardForm()) return
 
     setProcessingPayment(true)
 
     try {
-      // Simula tempo de processamento
-      await new Promise((resolve) => setTimeout(resolve, 1200))
+      await new Promise((resolve) => setTimeout(resolve, 1000))
 
       const cardDigits = cardNumero.replace(/\D/g, '')
       const numeroMascarado =
@@ -174,13 +256,12 @@ export default function Planos() {
             : undefined,
       })
 
-      setModalOpen(false)
-      const labelMetodo =
-        metodo === 'pix' ? 'via PIX' : metodo === 'cartao' ? 'no Cartão de Crédito' : 'via Boleto'
+      handleCloseModal()
+      const labelMetodo = metodo === 'cartao' ? 'no Cartão de Crédito' : 'via Boleto'
 
       toast({
-        title: 'Pagamento simulado aprovado e registrado!',
-        description: `Seu plano ${PLANO_CONFIG.nome} (${PLANO_CONFIG.precoMensalExtenso}) foi ativado ${labelMetodo}. Venda registrada e acesso 100% liberado por +30 dias!`,
+        title: 'Assinatura ativada!',
+        description: `Seu plano ${PLANO_CONFIG.nome} (${PLANO_CONFIG.precoMensalExtenso}) foi ativado ${labelMetodo}. Acesso liberado por +30 dias!`,
       })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha ao processar simulação de pagamento'
@@ -194,12 +275,49 @@ export default function Planos() {
     }
   }
 
+  // Verificar status manual do PIX
+  const handleChecarStatusPixManual = async () => {
+    if (!pixData?.asaas_id) return
+    setProcessingPayment(true)
+    try {
+      const res = await gatewayPagamentoService.consultarCobrancaAsaas(pixData.asaas_id)
+      const st = res.cobranca.status
+      if (st === 'RECEIVED' || st === 'CONFIRMED' || res.status_local === 'pago') {
+        setPixStatusPago(true)
+        if (pollingTimerRef.current) clearInterval(pollingTimerRef.current)
+        await recarregarPlano()
+        toast({
+          title: 'Pagamento confirmado com sucesso!',
+          description: 'A Asaas confirmou o recebimento do PIX. Seu plano já está ativo.',
+        })
+      } else {
+        toast({
+          title: 'Aguardando confirmação bancária...',
+          description:
+            'A cobrança ainda consta como pendente no Asaas. Assim que você pagar no app do banco, a confirmação ocorre em instantes!',
+        })
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao consultar Asaas'
+      toast({
+        variant: 'destructive',
+        title: 'Erro na consulta',
+        description: msg,
+      })
+    } finally {
+      setProcessingPayment(false)
+    }
+  }
+
   const handleCopiarPix = () => {
-    navigator.clipboard.writeText(fakePixCode)
+    const code = pixData?.pix_copia_cola || ''
+    if (!code) return
+    navigator.clipboard.writeText(code)
     setPixCopiado(true)
     toast({
       title: 'Código PIX copiado!',
-      description: 'Código copia-e-cola simulado transferido para a área de transferência.',
+      description:
+        'Código copia-e-cola transferido para a área de transferência. Cole no seu aplicativo bancário.',
     })
     setTimeout(() => setPixCopiado(false), 3000)
   }
@@ -225,21 +343,29 @@ export default function Planos() {
         </p>
       </div>
 
-      {/* AVISO DO MODO DEMONSTRAÇÃO / SIMULAÇÃO */}
-      <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-amber-900 text-xs sm:text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+      {/* AVISO DO GATEWAY REAL ASAAS */}
+      <div className="p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200/80 text-emerald-950 text-xs sm:text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
         <div className="flex items-start gap-2.5">
-          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
+          <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5 sm:mt-0" />
           <div>
-            <span className="font-bold text-amber-950">Ambiente de Demonstração & Homologação</span>
-            <p className="text-xs text-amber-800 mt-0.5">
-              Todas as formas de pagamento (PIX, Cartão e Boleto) são 100% simuladas. Nenhum valor
-              real será debitado.
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-emerald-950">
+                Gateway de Pagamento Real Asaas Ativo
+              </span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-200 text-emerald-900 uppercase">
+                Produção Oficial
+              </span>
+            </div>
+            <p className="text-xs text-emerald-800 mt-0.5">
+              Cobranças via <strong>PIX</strong> são geradas diretamente na API de produção da
+              Asaas. Confirmação automática instantânea via Webhook e envio imediato de comprovante
+              por e-mail.
             </p>
           </div>
         </div>
 
         {/* FERRAMENTAS DO AVALIADOR / SIMULADOR DE FIM DE TESTE */}
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-amber-200/60">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-emerald-200/60">
           <button
             type="button"
             disabled={loadingSub}
@@ -251,11 +377,11 @@ export default function Planos() {
                   'O status agora é "expirado". Navegue pelo menu para testar a tela de bloqueio (paywall).',
               })
             }}
-            className="text-xs bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+            className="text-xs bg-slate-800 hover:bg-slate-900 active:scale-95 text-white font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
             title="Força o status para expirado para você testar a tela de bloqueio"
           >
             <Lock className="w-3.5 h-3.5" />
-            Simular fim do período de teste
+            Simular fim do teste
           </button>
 
           <button
@@ -337,7 +463,7 @@ export default function Planos() {
               {PLANO_CONFIG.precoFormatado}
             </span>
             <span className="text-xs text-slate-400 ml-1">/mês</span>
-            <p className="text-[11px] text-blue-200 mt-1">Cobrança mensal simulada</p>
+            <p className="text-[11px] text-blue-200 mt-1">Cobrança mensal Asaas</p>
           </div>
         </div>
       </div>
@@ -385,8 +511,8 @@ export default function Planos() {
                 'Cadastro ilimitado de clientes com histórico',
                 'Exportação em PDF pronta para impressão',
                 'Envio direto do orçamento para o WhatsApp do cliente',
-                'Formas de pagamento: PIX instantâneo, Cartão e Boleto',
-                'Suporte técnico e atualizações contínuas',
+                'Pagamento via PIX Real Asaas com baixa instantânea',
+                'Comprovante oficial emitido por e-mail com CNPJ',
               ].map((feat, i) => (
                 <li key={i} className="flex items-start gap-2.5">
                   <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
@@ -407,7 +533,7 @@ export default function Planos() {
             {isAtivo ? (
               <span className="flex items-center gap-2">
                 <Check className="w-5 h-5 text-emerald-300" />
-                Renovar ou Alterar Pagamento ({PLANO_CONFIG.precoFormatado})
+                Renovar ou Pagar com PIX ({PLANO_CONFIG.precoFormatado})
               </span>
             ) : isBloqueado ? (
               <span className="flex items-center gap-2">
@@ -423,13 +549,13 @@ export default function Planos() {
           </Button>
 
           <p className="text-[11px] text-center text-slate-400 mt-3 flex items-center justify-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-            Pagamento simulado seguro com ativação imediata
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            Pagamento seguro processado via gateway Asaas
           </p>
         </div>
       </div>
 
-      {/* MODAL DE CHECKOUT COM AS 3 FORMAS DE PAGAMENTO SIMULADAS */}
+      {/* MODAL DE CHECKOUT COM PIX REAL ASAAS */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-[540px] rounded-3xl bg-white text-slate-900 p-6 sm:p-7 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -445,31 +571,39 @@ export default function Planos() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* AVISO DO AMBIENTE SIMULADO NO MODAL */}
-          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5 my-1">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          {/* BENEFICIÁRIO LEGAL */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs flex items-center justify-between gap-2 my-1">
             <div>
-              <span className="font-bold">Ambiente de Demonstração Homologado:</span>
-              <p className="mt-0.5 text-[11px] text-amber-800 leading-relaxed">
-                Nenhuma cobrança bancária real será realizada. Escolha uma forma abaixo e clique em
-                confirmar para ativar o plano imediatamente.
-              </p>
+              <span className="text-[11px] text-slate-500 block">Beneficiário / Empresa:</span>
+              <strong className="text-slate-900">{COMPANY_LEGAL.razaoSocial}</strong>
+              <span className="text-[11px] text-slate-500 block font-mono">
+                CNPJ: {COMPANY_LEGAL.cnpj}
+              </span>
             </div>
+            <span className="px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">
+              Asaas v3
+            </span>
           </div>
 
           {/* SELETOR DE FORMAS DE PAGAMENTO */}
           <Tabs
             value={formaPagamento}
-            onValueChange={(val) => setFormaPagamento(val as 'pix' | 'cartao' | 'boleto')}
+            onValueChange={(val) => {
+              const f = val as 'pix' | 'cartao' | 'boleto'
+              setFormaPagamento(f)
+              if (f === 'pix' && !pixData && !loadingPixAsaas) {
+                gerarPixRealAsaas()
+              }
+            }}
             className="w-full mt-2"
           >
             <TabsList className="grid grid-cols-3 w-full bg-slate-100 p-1 rounded-xl h-11">
               <TabsTrigger
                 value="pix"
-                className="text-xs font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm flex items-center gap-1.5"
+                className="text-xs font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm flex items-center gap-1.5"
               >
-                <QrCode className="w-4 h-4" />
-                PIX
+                <QrCode className="w-4 h-4 text-emerald-600" />
+                PIX Real
               </TabsTrigger>
               <TabsTrigger
                 value="cartao"
@@ -487,113 +621,173 @@ export default function Planos() {
               </TabsTrigger>
             </TabsList>
 
-            {/* ABA 1: PIX */}
-            <TabsContent value="pix" className="space-y-4 pt-4">
-              <div className="text-center p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col items-center">
-                <span className="text-xs font-semibold text-slate-500 mb-2">
-                  Escaneie o QR Code simulado com seu app de banco:
-                </span>
-
-                {/* QR Code SVG Fictício em Alta Fidelidade */}
-                <div className="w-48 h-48 bg-white p-3 rounded-2xl border border-slate-300 shadow-inner flex items-center justify-center my-1 relative">
-                  <svg
-                    viewBox="0 0 100 100"
-                    className="w-full h-full text-slate-900"
-                    fill="currentColor"
-                  >
-                    {/* Cantos superiores e inferior esquerdo do QR Code */}
-                    <rect x="5" y="5" width="26" height="26" rx="2" fill="#0F172A" />
-                    <rect x="9" y="9" width="18" height="18" fill="white" />
-                    <rect x="13" y="13" width="10" height="10" fill="#2563EB" />
-
-                    <rect x="69" y="5" width="26" height="26" rx="2" fill="#0F172A" />
-                    <rect x="73" y="9" width="18" height="18" fill="white" />
-                    <rect x="77" y="13" width="10" height="10" fill="#2563EB" />
-
-                    <rect x="5" y="69" width="26" height="26" rx="2" fill="#0F172A" />
-                    <rect x="9" y="73" width="18" height="18" fill="white" />
-                    <rect x="13" y="77" width="10" height="10" fill="#2563EB" />
-
-                    {/* Padrões internos do QR */}
-                    <rect x="36" y="8" width="6" height="6" fill="#0F172A" />
-                    <rect x="46" y="8" width="6" height="12" fill="#0F172A" />
-                    <rect x="56" y="14" width="8" height="6" fill="#0F172A" />
-                    <rect x="36" y="24" width="16" height="6" fill="#0F172A" />
-                    <rect x="8" y="36" width="6" height="16" fill="#0F172A" />
-                    <rect x="20" y="42" width="10" height="6" fill="#0F172A" />
-                    <rect x="36" y="36" width="8" height="8" fill="#2563EB" />
-                    <rect x="48" y="40" width="14" height="6" fill="#0F172A" />
-                    <rect x="68" y="36" width="10" height="10" fill="#0F172A" />
-                    <rect x="84" y="42" width="8" height="14" fill="#0F172A" />
-                    <rect x="36" y="52" width="12" height="6" fill="#0F172A" />
-                    <rect x="54" y="52" width="8" height="16" fill="#0F172A" />
-                    <rect x="68" y="54" width="16" height="6" fill="#0F172A" />
-                    <rect x="36" y="68" width="6" height="14" fill="#0F172A" />
-                    <rect x="48" y="74" width="14" height="6" fill="#0F172A" />
-                    <rect x="68" y="68" width="8" height="14" fill="#0F172A" />
-                    <rect x="80" y="74" width="12" height="14" fill="#0F172A" />
-                  </svg>
+            {/* ABA 1: PIX REAL VIA ASAAS */}
+            <TabsContent value="pix" className="space-y-4 pt-3">
+              {loadingPixAsaas ? (
+                <div className="py-12 text-center text-slate-500">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-emerald-600 mb-2" />
+                  <p className="text-sm font-semibold text-slate-800">
+                    Gerando cobrança PIX oficial na Asaas...
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Criando cliente e gerando QR Code dinâmico com chave de segurança.
+                  </p>
                 </div>
-
-                <span className="text-[11px] text-slate-500 mt-2 font-mono">
-                  Valor: <strong>{PLANO_CONFIG.precoFormatado}</strong> • Beneficiário: OrçaFácil
-                  Ltda
-                </span>
-              </div>
-
-              {/* Código Copia e Cola */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">
-                  Ou copie o código PIX Copia e Cola:
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    readOnly
-                    value={fakePixCode}
-                    className="text-[11px] font-mono bg-slate-50 h-9 truncate text-slate-600"
-                  />
+              ) : pixStatusPago ? (
+                <div className="p-6 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-7 h-7" />
+                  </div>
+                  <h4 className="text-lg font-bold text-emerald-950">
+                    Pagamento PIX Aprovado com Sucesso!
+                  </h4>
+                  <p className="text-xs text-emerald-800 leading-relaxed">
+                    Sua assinatura do plano <strong>Starter</strong> foi ativada por mais 30 dias. O
+                    comprovante oficial e a nota foram enviados para seu e-mail cadastrado.
+                  </p>
                   <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleCopiarPix}
-                    className="h-9 px-3 text-xs shrink-0 font-medium"
+                    onClick={handleCloseModal}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl"
                   >
-                    {pixCopiado ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5 mr-1" />
-                    )}
-                    {pixCopiado ? 'Copiado!' : 'Copiar'}
+                    Concluir e Acessar o Sistema
                   </Button>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="text-center p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col items-center">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 mb-2">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      QR Code Dinâmico Oficial Asaas (R$ 49,90):
+                    </div>
 
-              <Button
-                type="button"
-                disabled={processingPayment}
-                onClick={() => handleConfirmarPagamento('pix')}
-                className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition-all active:scale-[0.99] mt-2"
-              >
-                {processingPayment ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Verificando PIX simulado...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                    Já paguei / Confirmar pagamento
-                  </>
-                )}
-              </Button>
+                    {/* QR Code Real da Asaas */}
+                    <div className="w-52 h-52 bg-white p-2 rounded-2xl border border-slate-300 shadow-sm flex items-center justify-center my-1 relative">
+                      {pixData?.pix_qr_code_base64 ? (
+                        <img
+                          src={pixData.pix_qr_code_base64}
+                          alt="QR Code PIX Asaas"
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <div className="text-center p-3 text-xs text-slate-400">
+                          <AlertCircle className="w-6 h-6 mx-auto mb-1 text-amber-500" />
+                          QR Code indisponível no momento
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-[11px] text-slate-600 mt-2 font-mono flex items-center gap-2">
+                      <span>
+                        Valor: <strong>{PLANO_CONFIG.precoFormatado}</strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        Asaas ID: <strong>{pixData?.asaas_id || 'Gerando...'}</strong>
+                      </span>
+                    </div>
+
+                    {pollingAtivo && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 mt-2 animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin text-emerald-600" />
+                        Aguardando confirmação bancária em tempo real...
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Código Copia e Cola Real */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">
+                      PIX Copia e Cola:
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        readOnly
+                        value={pixData?.pix_copia_cola || 'Gerando código copia-e-cola...'}
+                        className="text-[11px] font-mono bg-slate-50 h-9 truncate text-slate-700 border-slate-200"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCopiarPix}
+                        disabled={!pixData?.pix_copia_cola}
+                        className="h-9 px-3 text-xs shrink-0 font-medium"
+                      >
+                        {pixCopiado ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 mr-1" />
+                        )}
+                        {pixCopiado ? 'Copiado!' : 'Copiar'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {pixData?.invoice_url && (
+                    <div className="text-right">
+                      <a
+                        href={pixData.invoice_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-1"
+                      >
+                        Visualizar fatura e recibo na Asaas
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={gerarPixRealAsaas}
+                      disabled={loadingPixAsaas}
+                      className="h-10 text-xs border-slate-300"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 mr-1 ${loadingPixAsaas ? 'animate-spin' : ''}`}
+                      />
+                      Gerar Novo PIX
+                    </Button>
+
+                    <Button
+                      type="button"
+                      disabled={processingPayment}
+                      onClick={handleChecarStatusPixManual}
+                      className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-[0.99]"
+                    >
+                      {processingPayment ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                          Verificando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                          Já paguei / Verificar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
             </TabsContent>
 
             {/* ABA 2: CARTÃO DE CRÉDITO */}
             <TabsContent value="cartao" className="space-y-3.5 pt-3">
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-start gap-2">
+                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <p>
+                  <strong>Cartão de Crédito:</strong> Para contratação imediata, utilize o{' '}
+                  <strong>PIX</strong> (aprovação instantânea). Se preferir cartão, preencha os
+                  dados abaixo para simulação homologada.
+                </p>
+              </div>
+
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
-                  handleConfirmarPagamento('cartao')
+                  handleConfirmarPagamentoSimulado('cartao')
                 }}
                 className="space-y-3"
               >
@@ -671,12 +865,12 @@ export default function Planos() {
                   {processingPayment ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Processando pagamento simulado...
+                      Processando pagamento no cartão...
                     </>
                   ) : (
-                    `Confirmar Pagamento no Cartão (${PLANO_CONFIG.precoFormatado})`
+                    `Confirmar no Cartão (${PLANO_CONFIG.precoFormatado})`
                   )}
-                </Button>{' '}
+                </Button>
               </form>
             </TabsContent>
 
@@ -687,7 +881,7 @@ export default function Planos() {
                   <div className="flex items-center gap-2">
                     <Barcode className="w-5 h-5 text-slate-700" />
                     <span className="text-xs font-bold text-slate-800">
-                      Boleto Bancário Simulado
+                      Boleto Bancário (Compensação em até 3 dias úteis)
                     </span>
                   </div>
                   <span className="text-xs font-extrabold text-slate-900">
@@ -722,9 +916,8 @@ export default function Planos() {
                 <div className="p-2.5 rounded-lg bg-blue-50/70 border border-blue-200/60 text-[11px] text-blue-900 flex items-start gap-2">
                   <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                   <p>
-                    Na prática bancária, a compensação de boletos pode levar até 3 dias úteis. No
-                    entanto, para permitir seu teste imediato na plataforma, você pode confirmar a
-                    compensação simulada agora mesmo clicando no botão abaixo!
+                    Para ativação imediata recomendada, pague via <strong>PIX</strong>. Se optar por
+                    boleto, confirme a compensação abaixo para liberar o acesso.
                   </p>
                 </div>
               </div>
@@ -732,18 +925,18 @@ export default function Planos() {
               <Button
                 type="button"
                 disabled={processingPayment}
-                onClick={() => handleConfirmarPagamento('boleto')}
+                onClick={() => handleConfirmarPagamentoSimulado('boleto')}
                 className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-md transition-all active:scale-[0.99]"
               >
                 {processingPayment ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Confirmando boleto simulado...
+                    Processando compensação...
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-400" />
-                    Confirmar Compensação Imediata do Boleto
+                    Confirmar Compensação do Boleto
                   </>
                 )}
               </Button>

@@ -84,6 +84,12 @@ export interface PagamentoRegistro {
   data_vencimento: string
   referencia_transacao: string
   plano_nome?: string
+  asaas_id?: string
+  asaas_customer_id?: string
+  pix_qr_code_url?: string
+  pix_copia_cola?: string
+  invoice_url?: string
+  pago_em?: string
   metadados?: Record<string, unknown>
   created: string
   updated: string
