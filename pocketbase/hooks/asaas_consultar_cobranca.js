@@ -95,26 +95,39 @@ routerAdd(
         const renovacao = new Date(pagoEmData)
         renovacao.setDate(renovacao.getDate() + 30)
 
+        const metaPag = pagamentoRecord.get('metadados') || {}
+        const isTeste =
+          Boolean(metaPag.is_teste) ||
+          pagamentoRecord.getString('plano_nome') === 'Teste de Validação' ||
+          (pagamentoRecord.getString('referencia_transacao') || '').indexOf('OF-TESTE-PIX') !== -1
+
         pagamentoRecord.set('status', 'pago')
         pagamentoRecord.set('pago_em', new Date(pagoEmData).toISOString())
         pagamentoRecord.set('data_vencimento', renovacao.toISOString())
+        if (isTeste) {
+          metaPag.sincronizado_consulta_em = agora.toISOString()
+          pagamentoRecord.set('metadados', metaPag)
+        }
         $app.save(pagamentoRecord)
 
-        try {
-          const planos = $app.findRecordsByFilter(
-            'planos',
-            "user_id = '" + pagamentoRecord.getString('user_id') + "'",
-            '-created',
-            1,
-            0,
-          )
-          if (planos.length > 0) {
-            const p = planos[0]
-            p.set('status', 'ativo')
-            p.set('renovacao_em', renovacao.toISOString())
-            $app.save(p)
-          }
-        } catch (_) {}
+        // Se for cobrança de teste de validação, NUNCA ativa ou altera plano de assinatura
+        if (!isTeste) {
+          try {
+            const planos = $app.findRecordsByFilter(
+              'planos',
+              "user_id = '" + pagamentoRecord.getString('user_id') + "'",
+              '-created',
+              1,
+              0,
+            )
+            if (planos.length > 0) {
+              const p = planos[0]
+              p.set('status', 'ativo')
+              p.set('renovacao_em', renovacao.toISOString())
+              $app.save(p)
+            }
+          } catch (_) {}
+        }
       }
 
       return e.json(200, {

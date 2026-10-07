@@ -135,6 +135,83 @@ routerAdd('POST', '/backend/v1/asaas/webhook', (e) => {
       }
     }
 
+    // =======================================================================
+    // DETECÇÃO DE COBRANÇA DE TESTE DE VALIDAÇÃO (R$ 5,00)
+    // =======================================================================
+    const metaPagInicial = pagamentoRecord.get('metadados') || {}
+    const isTesteValidacao =
+      Boolean(metaPagInicial.is_teste) ||
+      pagamentoRecord.getString('plano_nome') === 'Teste de Validação' ||
+      (pagamentoRecord.getString('referencia_transacao') || '').indexOf('OF-TESTE-PIX') !== -1
+
+    if (isTesteValidacao) {
+      console.log(
+        `[asaas_webhook] Cobrança de TESTE identificada: ${asaasPaymentId}. Evento: ${eventName}`,
+      )
+
+      if (eventName === 'PAYMENT_RECEIVED' || eventName === 'PAYMENT_CONFIRMED') {
+        const pagoEmData = payment.paymentDate || payment.clientPaymentDate || agora.toISOString()
+        pagamentoRecord.set('status', 'pago')
+        pagamentoRecord.set('pago_em', new Date(pagoEmData).toISOString())
+
+        const metaAtual = pagamentoRecord.get('metadados') || {}
+        metaAtual.webhook_evento_pago = eventName
+        metaAtual.webhook_processado_em = agora.toISOString()
+        metaAtual.teste_validado = true
+        metaAtual.asaas_payment_data = {
+          status: payment.status,
+          netValue: payment.netValue,
+          value: payment.value,
+          billingType: payment.billingType,
+          paymentDate: payment.paymentDate,
+          confirmedDate: payment.confirmedDate,
+          transactionReceiptUrl: payment.transactionReceiptUrl,
+        }
+        pagamentoRecord.set('metadados', metaAtual)
+        $app.save(pagamentoRecord)
+
+        console.log(
+          `[asaas_webhook] TESTE DE VALIDAÇÃO CONCLUÍDO COM SUCESSO! Pagamento R$ 5,00 confirmado para Asaas ID: ${asaasPaymentId}.`,
+        )
+
+        return e.json(200, {
+          sucesso: true,
+          teste: true,
+          evento: eventName,
+          status: 'pago',
+          mensagem:
+            'Cobrança de teste confirmada com sucesso via webhook! Ciclo ponta-a-ponta validado.',
+        })
+      }
+
+      if (
+        eventName === 'PAYMENT_DELETED' ||
+        eventName === 'PAYMENT_REFUNDED' ||
+        eventName === 'PAYMENT_OVERDUE'
+      ) {
+        pagamentoRecord.set('status', 'cancelado')
+        const metaAtual = pagamentoRecord.get('metadados') || {}
+        metaAtual.webhook_evento_cancelado = eventName
+        pagamentoRecord.set('metadados', metaAtual)
+        $app.save(pagamentoRecord)
+
+        return e.json(200, {
+          sucesso: true,
+          teste: true,
+          evento: eventName,
+          status: 'cancelado',
+          mensagem: 'Cobrança de teste cancelada/estornada/vencida.',
+        })
+      }
+
+      return e.json(200, {
+        sucesso: true,
+        teste: true,
+        evento: eventName,
+        mensagem: 'Evento de cobrança de teste processado.',
+      })
+    }
+
     // Tratar eventos de confirmação / recebimento de pagamento
     const isPagoEvent = eventName === 'PAYMENT_RECEIVED' || eventName === 'PAYMENT_CONFIRMED'
 

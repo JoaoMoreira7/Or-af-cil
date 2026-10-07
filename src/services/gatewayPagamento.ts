@@ -312,8 +312,9 @@ export const gatewayPagamentoService = {
     vendas: PagamentoRegistro[]
   }> {
     try {
-      // 1. Busca todos os pagamentos
+      // 1. Busca todos os pagamentos (excluindo cobranças de teste de validação para não poluir relatórios)
       const pagamentosRes = await pb.collection('pagamentos').getList<PagamentoRegistro>(1, 500, {
+        filter: 'plano_nome != "Teste de Validação"',
         sort: '-data_compra',
         expand: 'user_id',
       })
@@ -601,5 +602,46 @@ export const gatewayPagamentoService = {
     return await pb.send('/backend/v1/admin/gateway/reativar-webhook', {
       method: 'POST',
     })
+  },
+
+  /**
+   * Gera uma cobrança PIX real de teste de R$ 5,00 diretamente na API da Asaas
+   * Exclusivo para o Administrador (jaocarloss@gmail.com).
+   */
+  async gerarCobrancaTestePix(): Promise<{
+    sucesso: boolean
+    reaproveitado?: boolean
+    pagamento_id: string
+    asaas_id: string
+    asaas_customer_id?: string
+    referencia: string
+    valor: number
+    status: string
+    pix_copia_cola: string
+    pix_qr_code_base64: string
+    invoice_url: string
+    vencimento_pix: string
+    expiracao_qr: string
+    mensagem: string
+  }> {
+    return await pb.send('/backend/v1/admin/gateway/teste-cobranca-pix', {
+      method: 'POST',
+    })
+  },
+
+  /**
+   * Busca o último teste de validação realizado pelo admin.
+   */
+  async obterUltimoTesteValidacao(userId: string): Promise<PagamentoRegistro | null> {
+    try {
+      const res = await pb.collection('pagamentos').getList<PagamentoRegistro>(1, 1, {
+        filter: `user_id = "${userId}" && plano_nome = "Teste de Validação"`,
+        sort: '-created',
+      })
+      return res.items[0] || null
+    } catch (err) {
+      console.warn('Erro ao obter último teste de validação:', err)
+      return null
+    }
   },
 }

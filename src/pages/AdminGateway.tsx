@@ -17,6 +17,9 @@ import {
   ExternalLink,
   Info,
   PlayCircle,
+  QrCode,
+  Clock,
+  Sparkles,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -119,9 +122,42 @@ export default function AdminGateway() {
   const [copiadoUrl, setCopiadoUrl] = useState<boolean>(false)
   const [copiadoNovoToken, setCopiadoNovoToken] = useState<boolean>(false)
   const [copiadoTokenCard, setCopiadoTokenCard] = useState<boolean>(false)
+  const [copiadoPixTeste, setCopiadoPixTeste] = useState<boolean>(false)
   const timerCopiadoUrlRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const timerCopiadoTokenRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const timerCopiadoTokenCardRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timerCopiadoPixTesteRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Teste de Validação Real (R$ 5,00 via PIX)
+  const [gerandoTestePix, setGerandoTestePix] = useState<boolean>(false)
+  const [modalTestePixOpen, setModalTestePixOpen] = useState<boolean>(false)
+  const [testePixData, setTestePixData] = useState<{
+    pagamento_id: string
+    asaas_id: string
+    referencia: string
+    valor: number
+    status: string
+    pix_copia_cola: string
+    pix_qr_code_base64: string
+    invoice_url: string
+    vencimento_pix: string
+    expiracao_qr: string
+    criadoEm?: string
+    pagoEm?: string
+    webhookProcessadoEm?: string
+  } | null>(null)
+  const [pollingTesteAtivo, setPollingTesteAtivo] = useState<boolean>(false)
+  const [testeConfirmado, setTesteConfirmado] = useState<boolean>(false)
+  const [historicoUltimoTeste, setHistoricoUltimoTeste] = useState<{
+    id: string
+    asaas_id: string
+    referencia: string
+    status: string
+    criadoEm: string
+    pagoEm?: string
+    webhookProcessadoEm?: string
+  } | null>(null)
+  const pollingTesteTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     isMountedRef.current = true
@@ -135,6 +171,13 @@ export default function AdminGateway() {
       }
       if (timerCopiadoTokenCardRef.current) {
         clearTimeout(timerCopiadoTokenCardRef.current)
+      }
+      if (timerCopiadoPixTesteRef.current) {
+        clearTimeout(timerCopiadoPixTesteRef.current)
+      }
+      if (pollingTesteTimerRef.current) {
+        clearInterval(pollingTesteTimerRef.current)
+        pollingTesteTimerRef.current = null
       }
     }
   }, [])
@@ -162,9 +205,172 @@ export default function AdminGateway() {
     }
   }
 
+  const carregarUltimoTeste = async () => {
+    if (!user?.id) return
+    try {
+      const ult = await gatewayPagamentoService.obterUltimoTesteValidacao(user.id)
+      if (isMountedRef.current && ult) {
+        const meta = (ult.metadados as Record<string, unknown>) || {}
+        setHistoricoUltimoTeste({
+          id: ult.id,
+          asaas_id: ult.asaas_id || (meta.asaas_payment_id as string) || '',
+          referencia: ult.referencia_transacao,
+          status: ult.status,
+          criadoEm: ult.created,
+          pagoEm: ult.pago_em,
+          webhookProcessadoEm: (meta.webhook_processado_em as string) || undefined,
+        })
+      }
+    } catch (err) {
+      console.warn('Aviso ao carregar histórico de testes:', err)
+    }
+  }
+
   useEffect(() => {
     carregarStatus()
-  }, [])
+    carregarUltimoTeste()
+  }, [user?.id])
+
+  // Limpa o polling de teste ao fechar o modal
+  const handleFecharModalTeste = () => {
+    if (pollingTesteTimerRef.current) {
+      clearInterval(pollingTesteTimerRef.current)
+      pollingTesteTimerRef.current = null
+    }
+    setPollingTesteAtivo(false)
+    setModalTestePixOpen(false)
+    carregarUltimoTeste()
+  }
+
+  // Polling para checar status do pagamento de teste a cada 5s
+  const iniciarPollingTeste = (pagamentoId: string, asaasId: string) => {
+    if (pollingTesteTimerRef.current) {
+      clearInterval(pollingTesteTimerRef.current)
+    }
+    setPollingTesteAtivo(true)
+
+    const checarStatus = async () => {
+      if (!isMountedRef.current) return
+      try {
+        const consulta = await gatewayPagamentoService.consultarCobrancaAsaas(asaasId)
+        const statusAsaas = consulta.cobranca?.status
+        const statusLocal = consulta.status_local
+
+        if (
+          isMountedRef.current &&
+          (statusAsaas === 'RECEIVED' || statusAsaas === 'CONFIRMED' || statusLocal === 'pago')
+        ) {
+          setTesteConfirmado(true)
+          setPollingTesteAtivo(false)
+          if (pollingTesteTimerRef.current) {
+            clearInterval(pollingTesteTimerRef.current)
+            pollingTesteTimerRef.current = null
+          }
+
+          setTestePixData((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: 'pago',
+                  pagoEm: new Date().toISOString(),
+                  webhookProcessadoEm: new Date().toISOString(),
+                }
+              : null,
+          )
+
+          toast({
+            title: '🎉 PAGAMENTO CONFIRMADO! ✅',
+            description:
+              'O PIX de R$ 5,00 foi recebido e o webhook da Asaas foi validado com sucesso!',
+          })
+
+          carregarUltimoTeste()
+          carregarStatus()
+        }
+      } catch (err) {
+        console.warn('[AdminGateway] Aviso no polling de teste PIX:', err)
+      }
+    }
+
+    // Executa a primeira checagem após 4 segundos e segue a cada 5 segundos
+    pollingTesteTimerRef.current = setInterval(checarStatus, 5000)
+  }
+
+  // Ação: Gerar Cobrança de Teste R$ 5,00 (PIX)
+  const handleGerarCobrancaTestePix = async () => {
+    setGerandoTestePix(true)
+    setTesteConfirmado(false)
+    try {
+      const res = await gatewayPagamentoService.gerarCobrancaTestePix()
+      if (isMountedRef.current) {
+        setTestePixData({
+          pagamento_id: res.pagamento_id,
+          asaas_id: res.asaas_id,
+          referencia: res.referencia,
+          valor: res.valor,
+          status: res.status,
+          pix_copia_cola: res.pix_copia_cola,
+          pix_qr_code_base64: res.pix_qr_code_base64,
+          invoice_url: res.invoice_url,
+          vencimento_pix: res.vencimento_pix,
+          expiracao_qr: res.expiracao_qr,
+          criadoEm: new Date().toISOString(),
+        })
+
+        setModalTestePixOpen(true)
+
+        toast({
+          title: 'Cobrança de Teste Gerada!',
+          description:
+            res.mensagem || 'QR Code PIX de R$ 5,00 gerado. Pague para validar o webhook.',
+        })
+
+        // Inicia monitoramento em tempo real
+        iniciarPollingTeste(res.pagamento_id, res.asaas_id)
+      }
+    } catch (err: unknown) {
+      if (isMountedRef.current) {
+        const msg = err instanceof Error ? err.message : 'Falha ao gerar cobrança PIX de teste'
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao gerar cobrança de teste',
+          description: msg,
+        })
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setGerandoTestePix(false)
+      }
+    }
+  }
+
+  // Ação: Copiar Código Copia e Cola do Teste PIX
+  const handleCopiarPixTeste = async () => {
+    if (!testePixData?.pix_copia_cola) return
+
+    const sucesso = await copiarTextoRobusto(testePixData.pix_copia_cola)
+    if (!isMountedRef.current) return
+
+    if (sucesso) {
+      setCopiadoPixTeste(true)
+      toast({
+        title: 'Código PIX copiado!',
+        description: 'Abra o app do seu banco e escolha "Pix Copia e Cola" para pagar R$ 5,00.',
+      })
+      if (timerCopiadoPixTesteRef.current) clearTimeout(timerCopiadoPixTesteRef.current)
+      timerCopiadoPixTesteRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          setCopiadoPixTeste(false)
+        }
+      }, 3000)
+    } else {
+      toast({
+        title: 'Não foi possível copiar automaticamente',
+        description: 'Selecione o código PIX na caixa de texto e copie.',
+        variant: 'destructive',
+      })
+    }
+  }
 
   // Proteção em nível de renderização além da rota: apenas jaocarloss@gmail.com
   const isDono = user?.email?.toLowerCase().trim() === 'jaocarloss@gmail.com'
@@ -897,6 +1103,218 @@ export default function AdminGateway() {
         </CardContent>
       </Card>
 
+      {/* SEÇÃO: TESTE DE VALIDAÇÃO COM COBRANÇA REAL (R$ 5,00 VIA PIX) */}
+      <Card className="border-emerald-200 shadow-sm bg-gradient-to-b from-white via-emerald-50/20 to-white overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
+        <CardHeader className="border-b border-emerald-100/80 bg-emerald-500/5 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="p-2 rounded-xl bg-emerald-600 text-white shadow-xs">
+                  <QrCode className="w-5 h-5" />
+                </span>
+                <CardTitle className="text-base font-bold text-slate-900">
+                  Teste de Validação com Cobrança Real (R$ 5,00 via PIX)
+                </CardTitle>
+                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] font-bold">
+                  ⚡ Validação do Ciclo Completo
+                </Badge>
+              </div>
+              <CardDescription className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                Gere uma cobrança PIX real de <strong>R$ 5,00</strong> diretamente na API do Asaas
+                para validar a confirmação automática via webhook ponta-a-ponta antes de ligar o
+                gateway aos clientes.
+              </CardDescription>
+            </div>
+
+            <Button
+              type="button"
+              onClick={handleGerarCobrancaTestePix}
+              disabled={gerandoTestePix || loading}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-10 px-4 shadow-sm gap-2 shrink-0 self-start sm:self-auto"
+            >
+              {gerandoTestePix ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Gerando Cobrança no Asaas...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-emerald-200" />
+                  Gerar Cobrança de Teste R$ 5,00 (PIX)
+                </>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-6 space-y-4 text-xs">
+          {/* INSTRUÇÕES EM PT-BR */}
+          <div className="p-4 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-emerald-600 text-white shrink-0 mt-0.5 sm:mt-0">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="font-bold text-emerald-900 text-sm">
+                  Instruções para o Teste Real:
+                </div>
+                <p className="text-emerald-800 text-xs leading-relaxed">
+                  Pague o PIX de R$ 5,00 com outro aparelho/conta para validar o ciclo real. Ao
+                  pagar, a confirmação automática aparece aqui em segundos.
+                </p>
+              </div>
+            </div>
+
+            <div className="shrink-0 flex items-center gap-1.5 text-[11px] text-emerald-700 font-medium bg-white/80 px-3 py-1.5 rounded-lg border border-emerald-300/60">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>Isolado de relatórios de vendas</span>
+            </div>
+          </div>
+
+          {/* PAINEL DE RESULTADO / LINHA DO TEMPO DO ÚLTIMO TESTE */}
+          {historicoUltimoTeste ? (
+            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-500" />
+                  <span className="font-bold text-slate-900 text-xs">
+                    Último Ciclo de Teste Registrado
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-bold ${
+                      historicoUltimoTeste.status === 'pago'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                        : 'bg-amber-50 text-amber-700 border-amber-300'
+                    }`}
+                  >
+                    {historicoUltimoTeste.status === 'pago'
+                      ? 'PAGAMENTO CONFIRMADO ✅'
+                      : 'Aguardando Pagamento'}
+                  </Badge>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {historicoUltimoTeste.status !== 'pago' && testePixData && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setModalTestePixOpen(true)}
+                      className="h-7 text-[11px] font-semibold text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                    >
+                      Ver QR Code Pendente
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleGerarCobrancaTestePix}
+                    disabled={gerandoTestePix}
+                    className="h-7 text-[11px] font-semibold text-slate-700 border-slate-300 hover:bg-slate-100"
+                  >
+                    Novo teste
+                  </Button>
+                </div>
+              </div>
+
+              {/* LINHA DO TEMPO SIMPLES DO CICLO */}
+              <div className="pt-2 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                  <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                    1
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-800 block text-xs">Cobrança criada</span>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      {formatarDataIso(historicoUltimoTeste.criadoEm)}
+                    </span>
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                      ID: {historicoUltimoTeste.asaas_id || 'Asaas v3'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+                      historicoUltimoTeste.status === 'pago'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-amber-400 text-amber-950'
+                    }`}
+                  >
+                    2
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-800 block text-xs">
+                      Pagamento detectado
+                    </span>
+                    <span className="text-[11px] font-mono">
+                      {historicoUltimoTeste.status === 'pago' ? (
+                        <strong className="text-emerald-700">
+                          {formatarDataIso(
+                            historicoUltimoTeste.pagoEm || historicoUltimoTeste.webhookProcessadoEm,
+                          )}
+                        </strong>
+                      ) : (
+                        <span className="text-amber-600">Pendente no banco</span>
+                      )}
+                    </span>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {historicoUltimoTeste.status === 'pago'
+                        ? 'PIX R$ 5,00 recebido'
+                        : 'Aguardando PIX'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+                      historicoUltimoTeste.status === 'pago'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-300 text-slate-700'
+                    }`}
+                  >
+                    3
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-800 block text-xs">
+                      Webhook processado
+                    </span>
+                    <span className="text-[11px] font-mono">
+                      {historicoUltimoTeste.status === 'pago' ? (
+                        <strong className="text-emerald-700">
+                          {formatarDataIso(
+                            historicoUltimoTeste.webhookProcessadoEm || historicoUltimoTeste.pagoEm,
+                          )}
+                        </strong>
+                      ) : (
+                        <span className="text-slate-400">Aguardando disparo</span>
+                      )}
+                    </span>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {historicoUltimoTeste.status === 'pago'
+                        ? 'Token validado / 200 OK'
+                        : 'Sem ativação de plano'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 flex items-center justify-between">
+              <span>
+                Nenhum teste de validação executado ainda nesta conta. Clique no botão acima para
+                iniciar seu primeiro ciclo real.
+              </span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* SEÇÃO DO WEBHOOK */}
       <Card className="border-slate-200 shadow-sm bg-white">
         <CardHeader className="border-b border-slate-100">
@@ -1416,6 +1834,188 @@ export default function AdminGateway() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL 3: COBRANÇA PIX DE TESTE REAL (R$ 5,00) */}
+      <Dialog
+        open={modalTestePixOpen}
+        onOpenChange={(open) => {
+          if (!open) handleFecharModalTeste()
+          else setModalTestePixOpen(true)
+        }}
+      >
+        <DialogContent className="max-w-[480px] rounded-3xl bg-white p-6 max-h-[92vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="p-2 rounded-xl bg-emerald-600 text-white shadow-xs">
+                <QrCode className="w-5 h-5" />
+              </span>
+              <div>
+                <DialogTitle className="text-lg font-bold text-slate-900">
+                  Cobrança PIX de Teste (R$ 5,00)
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500">
+                  Gerada diretamente na API Asaas para homologação do webhook
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {testePixData && (
+            <div className="space-y-4 my-2 text-xs">
+              {/* STATUS DINÂMICO DO PAGAMENTO */}
+              {testeConfirmado || testePixData.status === 'pago' ? (
+                <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-500 text-emerald-950 flex flex-col items-center text-center gap-2 animate-bounce-short">
+                  <div className="w-12 h-12 rounded-full bg-emerald-600 text-white flex items-center justify-center text-2xl shadow-sm">
+                    ✅
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base text-emerald-900 uppercase tracking-wide">
+                      PAGAMENTO CONFIRMADO ✅
+                    </h3>
+                    <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                      O webhook da Asaas foi recebido e validado com sucesso pelo servidor! O ciclo
+                      ponta-a-ponta está 100% aprovado.
+                    </p>
+                  </div>
+                  <Badge className="bg-emerald-600 text-white border-none font-bold text-xs py-1 px-3">
+                    Ciclo Real Validado
+                  </Badge>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw
+                      className={`w-4 h-4 text-amber-600 ${pollingTesteAtivo ? 'animate-spin' : ''}`}
+                    />
+                    <div>
+                      <span className="font-bold block">Aguardando pagamento...</span>
+                      <span className="text-[11px] text-amber-800">
+                        Checando confirmação bancária automaticamente a cada 5s
+                      </span>
+                    </div>
+                  </div>
+                  <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] uppercase font-bold shrink-0">
+                    Pendente
+                  </Badge>
+                </div>
+              )}
+
+              {/* CARD DE VALOR E DESCRIÇÃO */}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] text-slate-500 block">
+                    Valor da cobrança de teste:
+                  </span>
+                  <span className="text-xl font-black text-slate-900">
+                    R${' '}
+                    {Number(testePixData.valor || 5)
+                      .toFixed(2)
+                      .replace('.', ',')}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-400 block font-mono">
+                    Ref: {testePixData.referencia || 'OF-TESTE'}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    ID: {testePixData.asaas_id}
+                  </span>
+                </div>
+              </div>
+
+              {/* EXIBIÇÃO DO QR CODE PIX */}
+              {!(testeConfirmado || testePixData.status === 'pago') && (
+                <>
+                  {testePixData.pix_qr_code_base64 ? (
+                    <div className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border-2 border-dashed border-emerald-300">
+                      <img
+                        src={testePixData.pix_qr_code_base64}
+                        alt="QR Code PIX R$ 5,00"
+                        className="w-48 h-48 object-contain rounded-lg"
+                      />
+                      <span className="text-[11px] text-slate-500 mt-2 font-medium">
+                        Escaneie com o app de qualquer banco
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-slate-100 text-center text-slate-600">
+                      QR Code não disponível em imagem. Utilize o código copia-e-cola abaixo.
+                    </div>
+                  )}
+
+                  {/* CÓDIGO PIX COPIA E COLA */}
+                  {testePixData.pix_copia_cola && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold text-slate-700">
+                        Código PIX Copia e Cola:
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          readOnly
+                          value={testePixData.pix_copia_cola}
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
+                          onFocus={(e) => (e.target as HTMLInputElement).select()}
+                          className="font-mono text-[11px] bg-slate-50 text-slate-900 select-all cursor-text"
+                        />
+                        <Button
+                          type="button"
+                          onClick={handleCopiarPixTeste}
+                          className={`font-bold shrink-0 text-xs transition-all ${
+                            copiadoPixTeste
+                              ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          }`}
+                        >
+                          {copiadoPixTeste ? (
+                            <CheckCircle2 className="w-4 h-4 mr-1 text-white" />
+                          ) : (
+                            <Copy className="w-4 h-4 mr-1" />
+                          )}
+                          {copiadoPixTeste ? 'Copiado!' : 'Copiar código PIX'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* LINK EXTERNO DA FATURA ASAAS */}
+                  {testePixData.invoice_url && (
+                    <div className="text-center pt-1">
+                      <a
+                        href={testePixData.invoice_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-blue-600 hover:underline inline-flex items-center gap-1 font-semibold"
+                      >
+                        Abrir fatura oficial no Asaas
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* INSTRUÇÃO FINAL */}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-[11px] leading-relaxed">
+                ℹ️ Esta cobrança de teste de R$ 5,00 não ativa planos de clientes e não envia
+                recibos de venda por e-mail. Ela é tratada de forma segura para validar apenas o
+                canal de webhooks.
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-2">
+            <Button
+              type="button"
+              onClick={handleFecharModalTeste}
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold"
+            >
+              {testeConfirmado || testePixData?.status === 'pago'
+                ? 'Fechar e Concluir'
+                : 'Fechar Janela'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
