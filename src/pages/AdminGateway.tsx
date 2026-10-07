@@ -292,7 +292,7 @@ export default function AdminGateway() {
       }
     }
 
-    // Executa a primeira checagem após 4 segundos e segue a cada 5 segundos
+    // Executa a primeira checagem após 5 segundos e segue a cada 5 segundos
     pollingTesteTimerRef.current = setInterval(checarStatus, 5000)
   }
 
@@ -1171,16 +1171,13 @@ export default function AdminGateway() {
               <span>Isolado de relatórios de vendas</span>
             </div>
           </div>
-
           {/* PAINEL DE RESULTADO / LINHA DO TEMPO DO ÚLTIMO TESTE */}
           {historicoUltimoTeste ? (
             <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-slate-500" />
-                  <span className="font-bold text-slate-900 text-xs">
-                    Último Ciclo de Teste Registrado
-                  </span>
+                  <span className="font-bold text-slate-900 text-xs">Linha do Tempo do Ciclo</span>
                   <Badge
                     variant="outline"
                     className={`text-[10px] font-bold ${
@@ -1191,7 +1188,7 @@ export default function AdminGateway() {
                   >
                     {historicoUltimoTeste.status === 'pago'
                       ? 'PAGAMENTO CONFIRMADO ✅'
-                      : 'Aguardando Pagamento'}
+                      : 'Aguardando pagamento'}
                   </Badge>
                 </div>
 
@@ -1220,18 +1217,20 @@ export default function AdminGateway() {
                 </div>
               </div>
 
-              {/* LINHA DO TEMPO SIMPLES DO CICLO */}
+              {/* LINHA DO TEMPO DO CICLO: 1. Cobrança criada (hora/ID) → 2. Pagamento detectado (hora) → 3. Webhook processado (hora) */}
               <div className="pt-2 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                   <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
                     1
                   </div>
                   <div>
-                    <span className="font-bold text-slate-800 block text-xs">Cobrança criada</span>
+                    <span className="font-bold text-slate-800 block text-xs">
+                      1. Cobrança criada
+                    </span>
                     <span className="text-[11px] text-slate-500 font-mono">
                       {formatarDataIso(historicoUltimoTeste.criadoEm)}
                     </span>
-                    <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                    <div className="text-[10px] text-slate-600 font-mono mt-0.5 truncate font-semibold">
                       ID: {historicoUltimoTeste.asaas_id || 'Asaas v3'}
                     </div>
                   </div>
@@ -1249,7 +1248,7 @@ export default function AdminGateway() {
                   </div>
                   <div>
                     <span className="font-bold text-slate-800 block text-xs">
-                      Pagamento detectado
+                      2. Pagamento detectado
                     </span>
                     <span className="text-[11px] font-mono">
                       {historicoUltimoTeste.status === 'pago' ? (
@@ -1259,7 +1258,7 @@ export default function AdminGateway() {
                           )}
                         </strong>
                       ) : (
-                        <span className="text-amber-600">Pendente no banco</span>
+                        <span className="text-amber-600">Aguardando pagamento</span>
                       )}
                     </span>
                     <div className="text-[10px] text-slate-400 mt-0.5">
@@ -1282,7 +1281,7 @@ export default function AdminGateway() {
                   </div>
                   <div>
                     <span className="font-bold text-slate-800 block text-xs">
-                      Webhook processado
+                      3. Webhook processado
                     </span>
                     <span className="text-[11px] font-mono">
                       {historicoUltimoTeste.status === 'pago' ? (
@@ -1311,7 +1310,7 @@ export default function AdminGateway() {
                 iniciar seu primeiro ciclo real.
               </span>
             </div>
-          )}
+          )}{' '}
         </CardContent>
       </Card>
 
@@ -1890,14 +1889,14 @@ export default function AdminGateway() {
                       className={`w-4 h-4 text-amber-600 ${pollingTesteAtivo ? 'animate-spin' : ''}`}
                     />
                     <div>
-                      <span className="font-bold block">Aguardando pagamento...</span>
+                      <span className="font-bold block">Aguardando pagamento</span>
                       <span className="text-[11px] text-amber-800">
                         Checando confirmação bancária automaticamente a cada 5s
                       </span>
                     </div>
                   </div>
                   <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] uppercase font-bold shrink-0">
-                    Pendente
+                    Aguardando pagamento
                   </Badge>
                 </div>
               )}
