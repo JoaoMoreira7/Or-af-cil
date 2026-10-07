@@ -9,7 +9,8 @@ routerAdd(
         return e.json(401, { error: 'Autenticação necessária' })
       }
 
-      const asaasPaymentId = e.requestInfo().pathParams.id
+      const pathParams = e.requestInfo().pathParams || {}
+      const asaasPaymentId = pathParams.id || (e.request ? e.request.pathParam('id') : '')
       if (!asaasPaymentId) {
         return e.json(400, { error: 'ID da cobrança Asaas não informado' })
       }

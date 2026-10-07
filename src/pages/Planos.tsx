@@ -37,6 +37,12 @@ import { useToast } from '@/hooks/use-toast'
 import { COMPANY_LEGAL } from '@/config/company'
 import { PLANOS_LISTA, PlanoId, obterConfigPlano } from '@/config/plans'
 import { gatewayPagamentoService, ResultadoCriacaoPixAsaas } from '@/services/gatewayPagamento'
+import {
+  sanitizarPixPayload,
+  validarPixPayload,
+  normalizarOuRepararPixPayload,
+} from '@/lib/pixUtils'
+import { Badge } from '@/components/ui/badge'
 
 export const Planos: React.FC = () => {
   const { user } = useAuth()
@@ -333,17 +339,44 @@ export const Planos: React.FC = () => {
     }
   }
 
-  const handleCopiarPix = () => {
-    const code = pixData?.pix_copia_cola || ''
-    if (!code) return
-    navigator.clipboard.writeText(code)
-    setPixCopiado(true)
-    toast({
-      title: 'Código PIX copiado!',
-      description:
-        'Código copia-e-cola transferido para a área de transferência. Cole no seu aplicativo bancário.',
-    })
-    setTimeout(() => setPixCopiado(false), 3000)
+  const handleCopiarPix = async () => {
+    const rawCode = pixData?.pix_copia_cola || ''
+    if (!rawCode) return
+
+    // Sanitiza e garante CRC16 íntegro
+    const normalizado = normalizarOuRepararPixPayload(rawCode)
+    const limpo = normalizado.payload || sanitizarPixPayload(rawCode)
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(limpo)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = limpo
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+
+      setPixCopiado(true)
+      toast({
+        title: 'Código PIX copiado!',
+        description:
+          'Código copia-e-cola transferido para a área de transferência (CRC16 verificado). Cole no seu aplicativo bancário.',
+      })
+      setTimeout(() => setPixCopiado(false), 3000)
+    } catch (err) {
+      console.warn('Erro ao copiar PIX:', err)
+      toast({
+        title: 'Erro ao copiar',
+        description: 'Selecione o código no campo e copie manualmente.',
+        variant: 'destructive',
+      })
+    }
   }
 
   const handleCopiarBoleto = () => {
@@ -955,32 +988,54 @@ export const Planos: React.FC = () => {
                   </div>
 
                   {/* Código Copia e Cola Real */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-slate-700">
-                      PIX Copia e Cola:
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        readOnly
-                        value={pixData?.pix_copia_cola || 'Gerando código copia-e-cola...'}
-                        className="text-[11px] font-mono bg-slate-50 h-9 truncate text-slate-700 border-slate-200"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleCopiarPix}
-                        disabled={!pixData?.pix_copia_cola}
-                        className="h-9 px-3 text-xs shrink-0 font-medium"
-                      >
-                        {pixCopiado ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5 mr-1" />
-                        )}
-                        {pixCopiado ? 'Copiado!' : 'Copiar'}
-                      </Button>
-                    </div>
-                  </div>
+                  {pixData?.pix_copia_cola &&
+                    (() => {
+                      const validacao = validarPixPayload(pixData.pix_copia_cola)
+                      const limpo =
+                        validacao.payloadSanitizado || sanitizarPixPayload(pixData.pix_copia_cola)
+
+                      return (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-semibold text-slate-700">
+                              PIX Copia e Cola (BR Code Oficial):
+                            </Label>
+                            {validacao.valido ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] font-bold">
+                                ✓ CRC16 Válido ({validacao.crcAtual})
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] font-bold">
+                                ⚠️ Checksum Corrigido
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <Input
+                              readOnly
+                              value={limpo}
+                              onClick={(e) => (e.target as HTMLInputElement).select()}
+                              onFocus={(e) => (e.target as HTMLInputElement).select()}
+                              className="text-[11px] font-mono bg-slate-50 h-9 text-slate-700 border-slate-200 select-all cursor-text"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={handleCopiarPix}
+                              disabled={!pixData?.pix_copia_cola}
+                              className="h-9 px-3 text-xs shrink-0 font-medium"
+                            >
+                              {pixCopiado ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5 mr-1" />
+                              )}
+                              {pixCopiado ? 'Copiado!' : 'Copiar'}
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                   {pixData?.invoice_url && (
                     <div className="text-right">

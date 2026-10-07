@@ -34,10 +34,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import pb from '@/lib/pocketbase/client'
 import { gatewayPagamentoService } from '@/services/gatewayPagamento'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import { COMPANY_LEGAL } from '@/config/company'
+import {
+  sanitizarPixPayload,
+  validarPixPayload,
+  normalizarOuRepararPixPayload,
+} from '@/lib/pixUtils'
 
 interface GatewayStatusData {
   sucesso: boolean
@@ -252,40 +258,78 @@ export default function AdminGateway() {
     const checarStatus = async () => {
       if (!isMountedRef.current) return
       try {
-        const consulta = await gatewayPagamentoService.consultarCobrancaAsaas(asaasId)
-        const statusAsaas = consulta.cobranca?.status
-        const statusLocal = consulta.status_local
-
-        if (
-          isMountedRef.current &&
-          (statusAsaas === 'RECEIVED' || statusAsaas === 'CONFIRMED' || statusLocal === 'pago')
-        ) {
-          setTesteConfirmado(true)
-          setPollingTesteAtivo(false)
-          if (pollingTesteTimerRef.current) {
-            clearInterval(pollingTesteTimerRef.current)
-            pollingTesteTimerRef.current = null
+        // 1. Tenta checar primeiro no banco local (rápido e direto)
+        if (pagamentoId) {
+          try {
+            const pagLocal = await pb.collection('pagamentos').getOne(pagamentoId)
+            if (isMountedRef.current && pagLocal && pagLocal.status === 'pago') {
+              setTesteConfirmado(true)
+              setPollingTesteAtivo(false)
+              if (pollingTesteTimerRef.current) {
+                clearInterval(pollingTesteTimerRef.current)
+                pollingTesteTimerRef.current = null
+              }
+              setTestePixData((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      status: 'pago',
+                      pagoEm: pagLocal.pago_em || new Date().toISOString(),
+                      webhookProcessadoEm: new Date().toISOString(),
+                    }
+                  : null,
+              )
+              toast({
+                title: '🎉 PAGAMENTO CONFIRMADO! ✅',
+                description:
+                  'O PIX de R$ 5,00 foi recebido e o webhook da Asaas foi validado com sucesso!',
+              })
+              carregarUltimoTeste()
+              carregarStatus()
+              return
+            }
+          } catch {
+            /* intentionally ignored */
           }
+        }
 
-          setTestePixData((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  status: 'pago',
-                  pagoEm: new Date().toISOString(),
-                  webhookProcessadoEm: new Date().toISOString(),
-                }
-              : null,
-          )
+        // 2. Consulta via endpoint Asaas se asaasId estiver presente
+        if (asaasId) {
+          const consulta = await gatewayPagamentoService.consultarCobrancaAsaas(asaasId)
+          const statusAsaas = consulta.cobranca?.status
+          const statusLocal = consulta.status_local
 
-          toast({
-            title: '🎉 PAGAMENTO CONFIRMADO! ✅',
-            description:
-              'O PIX de R$ 5,00 foi recebido e o webhook da Asaas foi validado com sucesso!',
-          })
+          if (
+            isMountedRef.current &&
+            (statusAsaas === 'RECEIVED' || statusAsaas === 'CONFIRMED' || statusLocal === 'pago')
+          ) {
+            setTesteConfirmado(true)
+            setPollingTesteAtivo(false)
+            if (pollingTesteTimerRef.current) {
+              clearInterval(pollingTesteTimerRef.current)
+              pollingTesteTimerRef.current = null
+            }
 
-          carregarUltimoTeste()
-          carregarStatus()
+            setTestePixData((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    status: 'pago',
+                    pagoEm: new Date().toISOString(),
+                    webhookProcessadoEm: new Date().toISOString(),
+                  }
+                : null,
+            )
+
+            toast({
+              title: '🎉 PAGAMENTO CONFIRMADO! ✅',
+              description:
+                'O PIX de R$ 5,00 foi recebido e o webhook da Asaas foi validado com sucesso!',
+            })
+
+            carregarUltimoTeste()
+            carregarStatus()
+          }
         }
       } catch (err) {
         console.warn('[AdminGateway] Aviso no polling de teste PIX:', err)
@@ -303,13 +347,16 @@ export default function AdminGateway() {
     try {
       const res = await gatewayPagamentoService.gerarCobrancaTestePix()
       if (isMountedRef.current) {
+        const payloadNormalizado = normalizarOuRepararPixPayload(res.pix_copia_cola)
+        const pixLimpo = payloadNormalizado.payload || sanitizarPixPayload(res.pix_copia_cola)
+
         setTestePixData({
           pagamento_id: res.pagamento_id,
           asaas_id: res.asaas_id,
           referencia: res.referencia,
           valor: res.valor,
           status: res.status,
-          pix_copia_cola: res.pix_copia_cola,
+          pix_copia_cola: pixLimpo,
           pix_qr_code_base64: res.pix_qr_code_base64,
           invoice_url: res.invoice_url,
           vencimento_pix: res.vencimento_pix,
@@ -348,14 +395,24 @@ export default function AdminGateway() {
   const handleCopiarPixTeste = async () => {
     if (!testePixData?.pix_copia_cola) return
 
-    const sucesso = await copiarTextoRobusto(testePixData.pix_copia_cola)
+    // Normaliza/repara o payload garantindo CRC16 perfeito e sem caracteres acidentais
+    const normalizado = normalizarOuRepararPixPayload(testePixData.pix_copia_cola)
+    const textoLimpo = normalizado.payload || sanitizarPixPayload(testePixData.pix_copia_cola)
+
+    // Atualiza o estado caso tenha sofrido reparo/sanitização
+    if (textoLimpo !== testePixData.pix_copia_cola && isMountedRef.current) {
+      setTestePixData((prev) => (prev ? { ...prev, pix_copia_cola: textoLimpo } : null))
+    }
+
+    const sucesso = await copiarTextoRobusto(textoLimpo)
     if (!isMountedRef.current) return
 
     if (sucesso) {
       setCopiadoPixTeste(true)
       toast({
         title: 'Código PIX copiado!',
-        description: 'Abra o app do seu banco e escolha "Pix Copia e Cola" para pagar R$ 5,00.',
+        description:
+          'Código BR Code verificado (CRC16 intacto). Abra o app do seu banco e escolha "Pix Copia e Cola" para pagar R$ 5,00.',
       })
       if (timerCopiadoPixTesteRef.current) clearTimeout(timerCopiadoPixTesteRef.current)
       timerCopiadoPixTesteRef.current = setTimeout(() => {
@@ -1945,38 +2002,91 @@ export default function AdminGateway() {
                   )}
 
                   {/* CÓDIGO PIX COPIA E COLA */}
-                  {testePixData.pix_copia_cola && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-slate-700">
-                        Código PIX Copia e Cola:
-                      </Label>
-                      <div className="flex gap-2">
-                        <Input
-                          readOnly
-                          value={testePixData.pix_copia_cola}
-                          onClick={(e) => (e.target as HTMLInputElement).select()}
-                          onFocus={(e) => (e.target as HTMLInputElement).select()}
-                          className="font-mono text-[11px] bg-slate-50 text-slate-900 select-all cursor-text"
-                        />
-                        <Button
-                          type="button"
-                          onClick={handleCopiarPixTeste}
-                          className={`font-bold shrink-0 text-xs transition-all ${
-                            copiadoPixTeste
-                              ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
-                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          }`}
-                        >
-                          {copiadoPixTeste ? (
-                            <CheckCircle2 className="w-4 h-4 mr-1 text-white" />
-                          ) : (
-                            <Copy className="w-4 h-4 mr-1" />
+                  {testePixData.pix_copia_cola &&
+                    (() => {
+                      const validacao = validarPixPayload(testePixData.pix_copia_cola)
+                      const payloadLimpo =
+                        validacao.payloadSanitizado ||
+                        sanitizarPixPayload(testePixData.pix_copia_cola)
+
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-bold text-slate-700">
+                              Código PIX Copia e Cola (BR Code Oficial):
+                            </Label>
+                            {validacao.valido ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] font-bold">
+                                ✓ CRC16 Válido ({validacao.crcAtual})
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] font-bold">
+                                ⚠️ Requer Reparo
+                              </Badge>
+                            )}
+                          </div>
+
+                          {!validacao.valido && (
+                            <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex items-start justify-between gap-2">
+                              <div>
+                                <p className="font-bold">Aviso sobre o código recebido:</p>
+                                <p className="text-[10px] mt-0.5">{validacao.motivo}</p>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const reparado = normalizarOuRepararPixPayload(
+                                    testePixData.pix_copia_cola,
+                                  )
+                                  setTestePixData((prev) =>
+                                    prev ? { ...prev, pix_copia_cola: reparado.payload } : null,
+                                  )
+                                  toast({
+                                    title: 'Checksum CRC16 corrigido!',
+                                    description: `Código recalculado com sucesso (CRC: ${reparado.crc}).`,
+                                  })
+                                }}
+                                className="text-[10px] h-7 px-2 shrink-0 border-amber-300 hover:bg-amber-100 text-amber-950 font-bold"
+                              >
+                                Corrigir CRC16
+                              </Button>
+                            </div>
                           )}
-                          {copiadoPixTeste ? 'Copiado!' : 'Copiar código PIX'}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+
+                          <div className="flex gap-2">
+                            <Input
+                              readOnly
+                              value={payloadLimpo}
+                              onClick={(e) => (e.target as HTMLInputElement).select()}
+                              onFocus={(e) => (e.target as HTMLInputElement).select()}
+                              className="font-mono text-[11px] bg-slate-50 text-slate-900 select-all cursor-text"
+                            />
+                            <Button
+                              type="button"
+                              onClick={handleCopiarPixTeste}
+                              className={`font-bold shrink-0 text-xs transition-all ${
+                                copiadoPixTeste
+                                  ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                              }`}
+                            >
+                              {copiadoPixTeste ? (
+                                <CheckCircle2 className="w-4 h-4 mr-1 text-white" />
+                              ) : (
+                                <Copy className="w-4 h-4 mr-1" />
+                              )}
+                              {copiadoPixTeste ? 'Copiado!' : 'Copiar código PIX'}
+                            </Button>
+                          </div>
+                          <p className="text-[10px] text-slate-500">
+                            Toque no campo para selecionar tudo ou clique em &quot;Copiar código
+                            PIX&quot; para transferir sem espaços ou quebras.
+                          </p>
+                        </div>
+                      )
+                    })()}
 
                   {/* LINK EXTERNO DA FATURA ASAAS */}
                   {testePixData.invoice_url && (

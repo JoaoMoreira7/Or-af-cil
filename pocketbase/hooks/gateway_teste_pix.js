@@ -34,6 +34,19 @@ routerAdd(
 
         if (testesPendentes.length > 0) {
           const pendenteRec = testesPendentes[0]
+          let pixCopia = pendenteRec.getString('pix_copia_cola') || ''
+          if (pixCopia) {
+            pixCopia = pixCopia
+              .replace(/[\r\n\t]+/g, '')
+              .trim()
+              .replace(/[\s.]+$/, '')
+              .trim()
+            const idx6304 = pixCopia.lastIndexOf('6304')
+            if (idx6304 !== -1 && pixCopia.length >= idx6304 + 8) {
+              pixCopia = pixCopia.slice(0, idx6304 + 8)
+            }
+          }
+
           // Retorna a cobrança existente para evitar duplicidade de cobrança pendente
           const meta = pendenteRec.get('metadados') || {}
           return e.json(200, {
@@ -44,7 +57,7 @@ routerAdd(
             referencia: pendenteRec.getString('referencia_transacao'),
             valor: 5.0,
             status: pendenteRec.getString('status'),
-            pix_copia_cola: pendenteRec.getString('pix_copia_cola'),
+            pix_copia_cola: pixCopia,
             pix_qr_code_base64: pendenteRec.getString('pix_qr_code_url'),
             invoice_url: pendenteRec.getString('invoice_url'),
             vencimento_pix: meta.due_date || '',
@@ -205,6 +218,20 @@ routerAdd(
         encodedImage = qrRes.json.encodedImage || ''
         payloadPix = qrRes.json.payload || ''
         expirationDate = qrRes.json.expirationDate || ''
+
+        // Sanitização e validação estrita do payload PIX BR Code
+        if (payloadPix) {
+          payloadPix = String(payloadPix)
+            .replace(/[\r\n\t]+/g, '')
+            .trim()
+          payloadPix = payloadPix.replace(/[\s.]+$/, '').trim()
+
+          // Se tiver "6304" seguido de 4 hex chars, garante que corte exatamente após o CRC
+          const idx6304 = payloadPix.lastIndexOf('6304')
+          if (idx6304 !== -1 && payloadPix.length >= idx6304 + 8) {
+            payloadPix = payloadPix.slice(0, idx6304 + 8)
+          }
+        }
       } else {
         console.warn('[gateway_teste_pix] Aviso ao obter QR Code do Pix:', qrRes.raw)
       }

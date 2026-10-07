@@ -17,6 +17,7 @@
 import pb from '@/lib/pocketbase/client'
 import { PlanoId, obterConfigPlano, normalizarPlanoId } from '@/config/plans'
 import { planosService } from './planos'
+import { sanitizarPixPayload, normalizarOuRepararPixPayload } from '@/lib/pixUtils'
 import {
   FormaPagamentoAssinatura,
   PagamentoRegistro,
@@ -123,6 +124,10 @@ export const gatewayPagamentoService = {
           telefone: params?.telefone,
         },
       })
+      if (res && res.pix_copia_cola) {
+        const reparado = normalizarOuRepararPixPayload(res.pix_copia_cola)
+        res.pix_copia_cola = reparado.payload || sanitizarPixPayload(res.pix_copia_cola)
+      }
       return res
     } catch (err: unknown) {
       console.error('[gatewayPagamentoService] Erro ao criar cobrança PIX no Asaas:', err)
@@ -206,6 +211,10 @@ export const gatewayPagamentoService = {
         .collection('pagamentos')
         .getOne<PagamentoRegistro>(asaasRes.pagamento_id)
 
+      const limpo =
+        normalizarOuRepararPixPayload(asaasRes.pix_copia_cola).payload ||
+        sanitizarPixPayload(asaasRes.pix_copia_cola)
+
       return {
         sucesso: true,
         pagamento: pagRecord,
@@ -214,7 +223,7 @@ export const gatewayPagamentoService = {
         plano_id: planoId,
         plano_nome: configPlano.nome,
         asaas_id: asaasRes.asaas_id,
-        pix_copia_cola: asaasRes.pix_copia_cola,
+        pix_copia_cola: limpo,
         pix_qr_code_base64: asaasRes.pix_qr_code_base64,
         invoice_url: asaasRes.invoice_url,
       }
@@ -610,10 +619,10 @@ export const gatewayPagamentoService = {
    */
   async gerarCobrancaTestePix(): Promise<{
     sucesso: boolean
-    reaproveitado?: boolean
     pagamento_id: string
+    plano_nome: string
     asaas_id: string
-    asaas_customer_id?: string
+    asaas_customer_id: string
     referencia: string
     valor: number
     status: string
@@ -624,11 +633,32 @@ export const gatewayPagamentoService = {
     expiracao_qr: string
     mensagem: string
   }> {
-    return await pb.send('/backend/v1/admin/gateway/teste-cobranca-pix', {
+    const res = await pb.send<{
+      sucesso: boolean
+      pagamento_id: string
+      plano_nome: string
+      asaas_id: string
+      asaas_customer_id: string
+      referencia: string
+      valor: number
+      status: string
+      pix_copia_cola: string
+      pix_qr_code_base64: string
+      invoice_url: string
+      vencimento_pix: string
+      expiracao_qr: string
+      mensagem: string
+    }>('/backend/v1/admin/gateway/teste-cobranca-pix', {
       method: 'POST',
     })
-  },
 
+    if (res && res.pix_copia_cola) {
+      const reparado = normalizarOuRepararPixPayload(res.pix_copia_cola)
+      res.pix_copia_cola = reparado.payload || sanitizarPixPayload(res.pix_copia_cola)
+    }
+
+    return res
+  },
   /**
    * Busca o último teste de validação realizado pelo admin.
    */

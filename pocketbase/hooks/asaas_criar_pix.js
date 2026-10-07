@@ -187,6 +187,20 @@ routerAdd(
         encodedImage = qrRes.json.encodedImage || ''
         payloadPix = qrRes.json.payload || ''
         expirationDate = qrRes.json.expirationDate || ''
+
+        // Sanitização e validação estrita do payload PIX BR Code
+        if (payloadPix) {
+          payloadPix = String(payloadPix)
+            .replace(/[\r\n\t]+/g, '')
+            .trim()
+          payloadPix = payloadPix.replace(/[\s.]+$/, '').trim()
+
+          // Se tiver "6304" seguido de 4 hex chars, garante que corte exatamente após o CRC
+          const idx6304 = payloadPix.lastIndexOf('6304')
+          if (idx6304 !== -1 && payloadPix.length >= idx6304 + 8) {
+            payloadPix = payloadPix.slice(0, idx6304 + 8)
+          }
+        }
       } else {
         console.warn('[asaas_criar_pix] Aviso ao obter QR Code do Pix:', qrRes.raw)
       }
