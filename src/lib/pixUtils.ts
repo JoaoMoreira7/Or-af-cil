@@ -43,13 +43,23 @@ export function sanitizarPixPayload(payload: string): string {
   // 2. Remove pontuações acidentais no fim (ex: " .", ".", etc.)
   limpo = limpo.replace(/[\s.]+$/, '').trim()
 
-  // 3. Localiza se existe o padrão "6304" seguido de 4 caracteres hexadecimais
-  // Se houver lixo depois do CRC (ex: "6304B788 ."), corta exatamente no fim do CRC de 4 chars
-  const matchCrc = limpo.match(/6304[0-9A-Fa-f]{4}/)
-  if (matchCrc && matchCrc.index !== undefined) {
-    const fimCrc = matchCrc.index + 8 // "6304" (4) + CRC (4)
-    if (limpo.length > fimCrc) {
-      limpo = limpo.slice(0, fimCrc)
+  // 3. Localiza a ÚLTIMA ocorrência de "6304" no payload
+  // e se houver caracteres após o CRC de 4 chars (ex: "6304B788 .", pontuação, quebras, espaços),
+  // corta estritamente após os 4 caracteres hexadecimais do checksum.
+  const idx6304 = limpo.lastIndexOf('6304')
+  if (idx6304 !== -1) {
+    const trechoApos6304 = limpo.slice(idx6304 + 4)
+    const matchHex = trechoApos6304.match(/^[0-9A-Fa-f]{4}/)
+    if (matchHex) {
+      // Temos exatamente 4 caracteres hex logo após o 6304
+      const fimCrc = idx6304 + 8
+      if (limpo.length > fimCrc) {
+        limpo = limpo.slice(0, fimCrc)
+      }
+    } else {
+      // Caso haja lixo ou espaços imediatos após o 6304 antes do hex (ex: 6304 B788),
+      // ou se o CRC estiver incompleto, podemos limpar pontuações/espaços no fim
+      limpo = limpo.replace(/[\s.]+$/, '').trim()
     }
   }
 

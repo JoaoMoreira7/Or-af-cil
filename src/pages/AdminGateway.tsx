@@ -412,7 +412,7 @@ export default function AdminGateway() {
       toast({
         title: 'Código PIX copiado!',
         description:
-          'Código BR Code verificado (CRC16 intacto). Abra o app do seu banco e escolha "Pix Copia e Cola" para pagar R$ 5,00.',
+          'Código BR Code verificado (CRC16 intacto, sem quebras nem espaços). Abra o app do seu banco e escolha "Pix Copia e Cola" para pagar R$ 5,00.',
       })
       if (timerCopiadoPixTesteRef.current) clearTimeout(timerCopiadoPixTesteRef.current)
       timerCopiadoPixTesteRef.current = setTimeout(() => {
@@ -2004,10 +2004,13 @@ export default function AdminGateway() {
                   {/* CÓDIGO PIX COPIA E COLA */}
                   {testePixData.pix_copia_cola &&
                     (() => {
-                      const validacao = validarPixPayload(testePixData.pix_copia_cola)
-                      const payloadLimpo =
-                        validacao.payloadSanitizado ||
+                      const payloadNormalizado = normalizarOuRepararPixPayload(
+                        testePixData.pix_copia_cola,
+                      )
+                      const payloadParaUso =
+                        payloadNormalizado.payload ||
                         sanitizarPixPayload(testePixData.pix_copia_cola)
+                      const validacao = validarPixPayload(payloadParaUso)
 
                       return (
                         <div className="space-y-2">
@@ -2055,34 +2058,37 @@ export default function AdminGateway() {
                             </div>
                           )}
 
-                          <div className="flex gap-2">
-                            <Input
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <textarea
                               readOnly
-                              value={payloadLimpo}
-                              onClick={(e) => (e.target as HTMLInputElement).select()}
-                              onFocus={(e) => (e.target as HTMLInputElement).select()}
-                              className="font-mono text-[11px] bg-slate-50 text-slate-900 select-all cursor-text"
+                              rows={3}
+                              value={payloadParaUso}
+                              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                              onFocus={(e) => (e.target as HTMLTextAreaElement).select()}
+                              className="w-full p-2.5 rounded-lg font-mono text-[11px] leading-relaxed bg-slate-50 border border-slate-200 text-slate-900 select-all cursor-text resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 break-all font-semibold"
+                              style={{ wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}
+                              aria-label="Código PIX Copia e Cola"
                             />
                             <Button
                               type="button"
                               onClick={handleCopiarPixTeste}
-                              className={`font-bold shrink-0 text-xs transition-all ${
+                              className={`font-bold shrink-0 text-xs transition-all self-stretch sm:self-auto sm:h-auto py-2.5 px-4 ${
                                 copiadoPixTeste
                                   ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
                                   : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                               }`}
                             >
                               {copiadoPixTeste ? (
-                                <CheckCircle2 className="w-4 h-4 mr-1 text-white" />
+                                <CheckCircle2 className="w-4 h-4 mr-1.5 text-white shrink-0" />
                               ) : (
-                                <Copy className="w-4 h-4 mr-1" />
+                                <Copy className="w-4 h-4 mr-1.5 shrink-0" />
                               )}
                               {copiadoPixTeste ? 'Copiado!' : 'Copiar código PIX'}
                             </Button>
                           </div>
                           <p className="text-[10px] text-slate-500">
-                            Toque no campo para selecionar tudo ou clique em &quot;Copiar código
-                            PIX&quot; para transferir sem espaços ou quebras.
+                            Código completo sem truncamento. Toque na caixa para selecionar tudo ou
+                            use &quot;Copiar código PIX&quot;.
                           </p>
                         </div>
                       )

@@ -197,8 +197,14 @@ routerAdd(
 
           // Se tiver "6304" seguido de 4 hex chars, garante que corte exatamente após o CRC
           const idx6304 = payloadPix.lastIndexOf('6304')
-          if (idx6304 !== -1 && payloadPix.length >= idx6304 + 8) {
-            payloadPix = payloadPix.slice(0, idx6304 + 8)
+          if (idx6304 !== -1) {
+            const trechoApos = payloadPix.slice(idx6304 + 4)
+            const matchHex = trechoApos.match(/^[0-9A-Fa-f]{4}/)
+            if (matchHex) {
+              payloadPix = payloadPix.slice(0, idx6304 + 8)
+            } else {
+              payloadPix = payloadPix.replace(/[\s.]+$/, '').trim()
+            }
           }
         }
       } else {

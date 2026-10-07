@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   QrCode,
   Copy,
@@ -25,6 +25,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  sanitizarPixPayload,
+  normalizarOuRepararPixPayload,
+  validarPixPayload,
+} from '@/lib/pixUtils'
 
 export interface ModalCobrancaSimuladaProps {
   open: boolean
@@ -44,21 +49,85 @@ export function ModalCobrancaSimulada({
   const { toast } = useToast()
   const [copiado, setCopiado] = useState(false)
   const [atualizandoStatus, setAtualizandoStatus] = useState(false)
+  const isMountedRef = useRef(true)
+  const timerCopiadoRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      if (timerCopiadoRef.current) {
+        clearTimeout(timerCopiadoRef.current)
+      }
+    }
+  }, [])
 
   if (!cobranca) return null
 
   const isPago = cobranca.status === 'pago'
-  const codigoPix = cobranca.codigo_pix || ''
+  const rawCodigoPix = cobranca.codigo_pix || ''
+  const normalizado = normalizarOuRepararPixPayload(rawCodigoPix)
+  const codigoPix = normalizado.payload || sanitizarPixPayload(rawCodigoPix)
+  const validacao = validarPixPayload(codigoPix)
 
-  const handleCopiarPix = () => {
+  const handleCopiarPix = async () => {
     if (!codigoPix) return
-    navigator.clipboard.writeText(codigoPix)
-    setCopiado(true)
-    toast({
-      title: 'PIX Copia e Cola copiado!',
-      description: 'Código de pagamento simulado transferido para a área de transferência.',
-    })
-    setTimeout(() => setCopiado(false), 3000)
+
+    let copiou = false
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(codigoPix)
+          copiou = true
+        } catch {
+          /* intentionally ignored */
+        }
+      }
+
+      if (!copiou) {
+        const textarea = document.createElement('textarea')
+        textarea.value = codigoPix
+        textarea.setAttribute('readonly', '')
+        textarea.style.position = 'fixed'
+        textarea.style.top = '0'
+        textarea.style.left = '0'
+        textarea.style.width = '2em'
+        textarea.style.height = '2em'
+        textarea.style.padding = '0'
+        textarea.style.border = 'none'
+        textarea.style.outline = 'none'
+        textarea.style.boxShadow = 'none'
+        textarea.style.background = 'transparent'
+        textarea.style.opacity = '0'
+        textarea.style.zIndex = '-9999'
+
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        textarea.setSelectionRange(0, textarea.value.length)
+        copiou = document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+
+      if (isMountedRef.current && copiou) {
+        setCopiado(true)
+        toast({
+          title: 'PIX Copia e Cola copiado!',
+          description:
+            'Código de pagamento simulado transferido para a área de transferência (sem espaços ou quebras).',
+        })
+        if (timerCopiadoRef.current) clearTimeout(timerCopiadoRef.current)
+        timerCopiadoRef.current = setTimeout(() => {
+          if (isMountedRef.current) setCopiado(false)
+        }, 3000)
+      }
+    } catch (_) {
+      toast({
+        title: 'Erro ao copiar',
+        description: 'Selecione o código no campo e copie manualmente.',
+        variant: 'destructive',
+      })
+    }
   }
 
   const handleEnviarWhatsApp = () => {
@@ -172,21 +241,33 @@ export function ModalCobrancaSimulada({
 
           {/* Copia e Cola Input */}
           <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-slate-600">
-              PIX Copia e Cola (Simulado)
-            </label>
-            <div className="flex gap-2">
-              <input
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-semibold text-slate-600">
+                PIX Copia e Cola (Simulado)
+              </label>
+              {validacao.valido && (
+                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[9px] font-bold py-0 h-4">
+                  ✓ CRC16 ({validacao.crcAtual})
+                </Badge>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <textarea
                 readOnly
+                rows={2}
                 value={codigoPix}
-                className="flex-1 h-9 px-3 text-xs bg-slate-100 rounded-lg border border-slate-200 text-slate-700 font-mono select-all truncate"
+                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                onFocus={(e) => (e.target as HTMLTextAreaElement).select()}
+                className="w-full p-2 text-xs bg-slate-100 rounded-lg border border-slate-200 text-slate-700 font-mono select-all resize-none cursor-text focus:outline-none focus:ring-1 focus:ring-emerald-500 break-all leading-tight"
+                style={{ wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}
+                aria-label="PIX Copia e Cola Simulado"
               />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleCopiarPix}
-                className="h-9 px-3 shrink-0 text-xs font-semibold"
+                className="self-stretch sm:self-auto sm:h-auto py-2 px-3 shrink-0 text-xs font-semibold"
               >
                 {copiado ? (
                   <>

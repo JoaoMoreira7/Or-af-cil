@@ -343,32 +343,62 @@ export const Planos: React.FC = () => {
     const rawCode = pixData?.pix_copia_cola || ''
     if (!rawCode) return
 
-    // Sanitiza e garante CRC16 íntegro
+    // Sanitiza e garante CRC16 íntegro em memória
     const normalizado = normalizarOuRepararPixPayload(rawCode)
     const limpo = normalizado.payload || sanitizarPixPayload(rawCode)
 
+    // Atualiza estado se reparado
+    if (limpo !== rawCode) {
+      setPixData((prev) => (prev ? { ...prev, pix_copia_cola: limpo } : null))
+    }
+
     try {
+      let copiou = false
       if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(limpo)
-      } else {
+        try {
+          await navigator.clipboard.writeText(limpo)
+          copiou = true
+        } catch (clipErr) {
+          console.warn('[Planos] Clipboard API falhou, tentando fallback:', clipErr)
+        }
+      }
+
+      if (!copiou) {
         const textarea = document.createElement('textarea')
         textarea.value = limpo
+        textarea.setAttribute('readonly', '')
         textarea.style.position = 'fixed'
+        textarea.style.top = '0'
+        textarea.style.left = '0'
+        textarea.style.width = '2em'
+        textarea.style.height = '2em'
+        textarea.style.padding = '0'
+        textarea.style.border = 'none'
+        textarea.style.outline = 'none'
+        textarea.style.boxShadow = 'none'
+        textarea.style.background = 'transparent'
         textarea.style.opacity = '0'
+        textarea.style.zIndex = '-9999'
+
         document.body.appendChild(textarea)
         textarea.focus()
         textarea.select()
-        document.execCommand('copy')
+        textarea.setSelectionRange(0, textarea.value.length)
+        copiou = document.execCommand('copy')
         document.body.removeChild(textarea)
       }
 
-      setPixCopiado(true)
-      toast({
-        title: 'Código PIX copiado!',
-        description:
-          'Código copia-e-cola transferido para a área de transferência (CRC16 verificado). Cole no seu aplicativo bancário.',
-      })
-      setTimeout(() => setPixCopiado(false), 3000)
+      if (copiou) {
+        setPixCopiado(true)
+        toast({
+          title: 'Código PIX copiado!',
+          description:
+            'Código copia-e-cola transferido para a área de transferência (CRC16 verificado). Cole no seu aplicativo bancário.',
+        })
+        setTimeout(() => setPixCopiado(false), 3000)
+      } else {
+        throw new Error('Falha no comando de cópia')
+      }
     } catch (err) {
       console.warn('Erro ao copiar PIX:', err)
       toast({
@@ -990,9 +1020,12 @@ export const Planos: React.FC = () => {
                   {/* Código Copia e Cola Real */}
                   {pixData?.pix_copia_cola &&
                     (() => {
-                      const validacao = validarPixPayload(pixData.pix_copia_cola)
+                      const payloadNormalizado = normalizarOuRepararPixPayload(
+                        pixData.pix_copia_cola,
+                      )
                       const limpo =
-                        validacao.payloadSanitizado || sanitizarPixPayload(pixData.pix_copia_cola)
+                        payloadNormalizado.payload || sanitizarPixPayload(pixData.pix_copia_cola)
+                      const validacao = validarPixPayload(limpo)
 
                       return (
                         <div className="space-y-1.5">
@@ -1006,27 +1039,30 @@ export const Planos: React.FC = () => {
                               </Badge>
                             ) : (
                               <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] font-bold">
-                                ⚠️ Checksum Corrigido
+                                ⚠️ Checksum Corrigido ({payloadNormalizado.crc})
                               </Badge>
                             )}
                           </div>
-                          <div className="flex gap-2">
-                            <Input
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <textarea
                               readOnly
+                              rows={2}
                               value={limpo}
-                              onClick={(e) => (e.target as HTMLInputElement).select()}
-                              onFocus={(e) => (e.target as HTMLInputElement).select()}
-                              className="text-[11px] font-mono bg-slate-50 h-9 text-slate-700 border-slate-200 select-all cursor-text"
+                              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                              onFocus={(e) => (e.target as HTMLTextAreaElement).select()}
+                              className="w-full p-2 rounded-lg text-[11px] font-mono bg-slate-50 text-slate-700 border border-slate-200 select-all cursor-text resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500 break-all leading-tight"
+                              style={{ wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}
+                              aria-label="PIX Copia e Cola"
                             />
                             <Button
                               type="button"
                               variant="outline"
                               onClick={handleCopiarPix}
                               disabled={!pixData?.pix_copia_cola}
-                              className="h-9 px-3 text-xs shrink-0 font-medium"
+                              className="self-stretch sm:self-auto sm:h-auto py-2 px-3 text-xs shrink-0 font-medium"
                             >
                               {pixCopiado ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <Check className="w-3.5 h-3.5 text-emerald-600 mr-1" />
                               ) : (
                                 <Copy className="w-3.5 h-3.5 mr-1" />
                               )}

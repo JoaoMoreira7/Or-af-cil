@@ -20,7 +20,23 @@ export function gerarCodigoPixSimulado(params: {
 }): string {
   const numLimpo = params.orcamentoNumero.replace(/\D/g, '') || '001'
   const valCentavos = Math.round(params.valor * 100)
-  return `00020126580014br.gov.bcb.pix0136orcafacil-simulacao-cobranca-orc${numLimpo}520400005303986540${params.valor.toFixed(2)}5802BR5920ORCAFACIL SAAS LTDA6009SAO PAULO62140510ORC${numLimpo}${valCentavos}6304E8A2`
+  const basePayload = `00020126580014br.gov.bcb.pix0136orcafacil-simulacao-cobranca-orc${numLimpo}520400005303986540${params.valor.toFixed(2)}5802BR5920ORCAFACIL SAAS LTDA6009SAO PAULO62140510ORC${numLimpo}${valCentavos}6304`
+
+  // Calcula CRC16 matematicamente correto para o payload simulado
+  let crc = 0xffff
+  for (let i = 0; i < basePayload.length; i++) {
+    const c = basePayload.charCodeAt(i)
+    crc ^= (c & 0xff) << 8
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = ((crc << 1) ^ 0x1021) & 0xffff
+      } else {
+        crc = (crc << 1) & 0xffff
+      }
+    }
+  }
+  const crcHex = crc.toString(16).toUpperCase().padStart(4, '0')
+  return basePayload + crcHex
 }
 
 export const cobrancasService = {
