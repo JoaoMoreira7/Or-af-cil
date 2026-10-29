@@ -31,19 +31,20 @@ export default function Login() {
   const isMountedRef = useRef(true)
   const forgotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const { login, requestPasswordReset } = useAuth()
+  const navigate = useNavigate()
+  const { toast } = useToast()
+
   useEffect(() => {
     isMountedRef.current = true
     return () => {
       isMountedRef.current = false
       if (forgotTimerRef.current) {
         clearTimeout(forgotTimerRef.current)
+        forgotTimerRef.current = null
       }
     }
   }, [])
-
-  const { login, requestPasswordReset } = useAuth()
-  const navigate = useNavigate()
-  const { toast } = useToast()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()

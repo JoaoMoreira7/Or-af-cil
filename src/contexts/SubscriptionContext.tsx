@@ -70,20 +70,45 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const carregadoParaUserIdRef = React.useRef<string | null>(null)
 
   useEffect(() => {
+    let ativo = true
+
     if (!user?.id) {
       carregadoParaUserIdRef.current = null
       setAssinatura(null)
       setLoading(false)
-      return
+      return () => {
+        ativo = false
+      }
     }
 
     // Evita chamada redundante em re-renderizações rápidas do mesmo usuário
     if (carregadoParaUserIdRef.current === user.id) {
-      return
+      return () => {
+        ativo = false
+      }
     }
     carregadoParaUserIdRef.current = user.id
-    carregarAssinatura()
-  }, [user?.id, carregarAssinatura])
+
+    ;(async () => {
+      try {
+        setLoading(true)
+        const plano = await planosService.iniciarOuVerificarTrial(user.id, false)
+        if (ativo) {
+          setAssinatura(plano)
+        }
+      } catch (err) {
+        console.error('Erro ao verificar status do plano:', err)
+      } finally {
+        if (ativo) {
+          setLoading(false)
+        }
+      }
+    })()
+
+    return () => {
+      ativo = false
+    }
+  }, [user?.id])
 
   // Identificação do dono do produto (jaocarloss@gmail.com)
   const isDono = user?.email?.toLowerCase().trim() === 'jaocarloss@gmail.com'

@@ -66,14 +66,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   useEffect(() => {
-    syncAuth()
-    setIsLoading(false)
+    let ativo = true
+
+    try {
+      syncAuth()
+    } catch (err) {
+      console.warn('[AuthContext] Erro ao sincronizar estado de autenticação:', err)
+    } finally {
+      if (ativo) {
+        setIsLoading(false)
+      }
+    }
 
     const unsubscribe = pb.authStore.onChange(() => {
-      syncAuth()
+      if (ativo) {
+        try {
+          syncAuth()
+        } catch (err) {
+          console.warn('[AuthContext] Erro no listener de authStore:', err)
+        }
+      }
     })
 
     return () => {
+      ativo = false
       unsubscribe()
     }
   }, [])

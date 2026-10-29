@@ -58,7 +58,11 @@ export class ErrorBoundary extends Component<Props, State> {
 
   private handleGoLogin = () => {
     this.setState({ hasError: false, error: null })
-    window.location.href = '/login'
+    if (window.location.pathname === '/login') {
+      window.location.reload()
+    } else {
+      window.location.href = '/login'
+    }
   }
 
   public render() {
