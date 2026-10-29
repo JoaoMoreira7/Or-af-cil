@@ -240,6 +240,7 @@ export function GlobalVoiceFAB() {
 
   // Parar de falar e interpretar com a IA
   const stopAndProcess = async () => {
+    if (isProcessing) return // Trava contra cliques repetidos
     const fullText = `${finalTranscript} ${liveTranscript}`.trim()
     stopAllMedia()
 
@@ -273,6 +274,7 @@ export function GlobalVoiceFAB() {
       if (!isMountedRef.current) return
       setResultado(resp.interpretacao)
     } catch (err: unknown) {
+      if (!isMountedRef.current) return
       const msg = err instanceof Error ? err.message : 'Falha ao processar com IA'
       toast({
         variant: 'destructive',

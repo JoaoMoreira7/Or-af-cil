@@ -296,6 +296,7 @@ export default function ModoVoz() {
       return
     }
 
+    if (isProcessing) return
     setIsProcessing(true)
     try {
       const resp = await aiInterpretarService.interpretar({
@@ -312,12 +313,15 @@ export default function ModoVoz() {
           : undefined,
       })
 
+      if (!isMountedRef.current) return
+
       // Caso especial: Comando falado para Desfazer a última ação ("desfaz aquilo", "desfaz o último")
       if (
         resp.interpretacao?.comando_desfazer ||
         resp.interpretacao?.intencao_detectada === 'desfazer'
       ) {
         const ultimaAcao = await acoesVozService.obterUltimaAcaoAtiva24h(user?.id)
+        if (!isMountedRef.current) return
         if (ultimaAcao) {
           setConfirmarDesfazerVozAcao(ultimaAcao)
           toast({
@@ -336,6 +340,7 @@ export default function ModoVoz() {
 
       setResultado(resp.interpretacao)
     } catch (err: unknown) {
+      if (!isMountedRef.current) return
       const msg = err instanceof Error ? err.message : 'Falha na inteligência artificial'
       toast({
         variant: 'destructive',
@@ -343,7 +348,9 @@ export default function ModoVoz() {
         description: msg,
       })
     } finally {
-      setIsProcessing(false)
+      if (isMountedRef.current) {
+        setIsProcessing(false)
+      }
     }
   }
 

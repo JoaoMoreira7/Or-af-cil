@@ -91,23 +91,20 @@ export const orcamentosService = {
   },
 
   async gerarComIA(descricao: string, userId: string): Promise<IAOrcamentoResultado> {
-    const res = await fetch(`${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/orcamento/gerar`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: pb.authStore.token,
-      },
-      body: JSON.stringify({
-        descricao,
-        userId,
-      }),
+    // Redireciona de forma centralizada pelo aiInterpretarService usando modo orcamento_itens
+    const { aiInterpretarService } = await import('@/services/aiInterpretar')
+    const resposta = await aiInterpretarService.interpretar({
+      transcricao: descricao,
+      contexto: 'orcamento',
+      modo: 'orcamento_itens',
+      userId,
     })
 
-    const data = await res.json()
-    if (!res.ok) {
-      throw new Error(data?.error || 'Erro ao gerar orçamento com IA')
+    return {
+      itens: (resposta as any).itens || resposta.interpretacao?.itens || [],
+      cliente_sugerido:
+        (resposta as any).cliente_sugerido || resposta.interpretacao?.cliente_sugerido_id || null,
+      citations: resposta.citations || [],
     }
-
-    return data
   },
 }

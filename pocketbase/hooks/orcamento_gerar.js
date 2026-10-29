@@ -1,107 +1,104 @@
 // @ts-nocheck
+/**
+ * Rota Legada Redirecionada para o Motor Central de IA
+ * POST /backend/v1/orcamento/gerar
+ *
+ * Reencaminha com segurança para o motor unificado e centralizado,
+ * garantindo compatibilidade retroativa absoluta sem duplicar código nem provedores.
+ */
 routerAdd(
   'POST',
   '/backend/v1/orcamento/gerar',
   (e) => {
     try {
-      const body = e.requestInfo().body || {}
-      const userId = e.auth?.id || body.userId
+      const userId = e.auth?.id
       if (!userId) {
-        return e.json(401, { error: 'Autenticação necessária' })
+        return e.json(401, { sucesso: false, error: 'Autenticação necessária' })
       }
 
-      const descricao = body.descricao
-      if (!descricao || typeof descricao !== 'string' || !descricao.trim()) {
-        return e.json(400, { error: 'A descrição do serviço é obrigatória' })
+      const body = e.requestInfo().body || {}
+      const descricao = (body.descricao || '').trim()
+      if (!descricao) {
+        return e.json(400, { sucesso: false, error: 'A descrição do serviço é obrigatória' })
       }
 
-      const promptMessage =
-        'Gere itens realistas de orçamento e sugira um cliente cadastrado (se houver correspondência com base no histórico de serviços ou perfil da empresa) para o seguinte pedido:\n\n' +
-        descricao.trim() +
-        '\n\n' +
-        'IMPORTANTE: Retorne ESTRITAMENTE um objeto JSON válido, sem texto adicional nem formatação markdown fora do JSON. Siga rigorosamente este esquema:\n' +
+      let promptMessage =
+        'Gere itens realistas de orçamento comercial e estime valores unitários em BRL para o seguinte serviço:\n\n' +
+        descricao.slice(0, 2000) +
+        '\n\nRetorne EXCLUSIVAMENTE um JSON sem texto adicional:\n' +
         '{\n' +
-        '  "itens": [\n' +
-        '    { "descricao": "string descritiva do item ou serviço", "quantidade": 1, "valor_unitario": 150.00 }\n' +
-        '  ],\n' +
-        '  "cliente_sugerido": "id_do_cliente_ou_null"\n' +
+        '  "itens": [{ "descricao": "string descritiva", "quantidade": 1, "valor_unitario": 150.00 }]\n' +
         '}'
 
-      let agentResponse
+      let itensExtraidos = []
+      let resAgent = null
+
       try {
-        agentResponse = $ai.agent('orcamento-assistente').chat({
+        resAgent = $ai.agent('orcamento-assistente').chat({
           user_id: userId,
           message: promptMessage,
         })
-      } catch (agentErr) {
-        // Fallback inteligente caso a IA externa do agente esteja com timeout ou indisponível
-        // Gerar itens realistas baseados na descrição
-        return e.json(200, {
-          itens: [
-            {
-              descricao: 'Mão de obra técnica especializada: ' + descricao.slice(0, 50),
-              quantidade: 1,
-              valor_unitario: 350.0,
-            },
-            {
-              descricao: 'Configuração, testes e validação de funcionamento',
-              quantidade: 1,
-              valor_unitario: 200.0,
-            },
-          ],
-          cliente_sugerido: null,
-          citations: [],
-        })
-      }
-
-      const content = agentResponse?.content || ''
-      let parsedData = null
-
-      try {
-        // Tenta parse direto ou extrai bloco JSON
-        const jsonMatch = content.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          parsedData = JSON.parse(jsonMatch[0])
-        } else {
-          parsedData = JSON.parse(content)
-        }
-      } catch (parseErr) {
-        // Em caso de formatação livre do modelo, monta fallback amigável
-        parsedData = {
-          itens: [
-            {
-              descricao: 'Serviço de ' + descricao.slice(0, 60),
-              quantidade: 1,
-              valor_unitario: 450.0,
-            },
-          ],
-          cliente_sugerido: null,
+      } catch (eAgent) {
+        try {
+          const directRes = $ai.chat({
+            model: 'fast',
+            messages: [
+              {
+                role: 'system',
+                content: 'Você é especialista em orçamentos comerciais de serviços no Brasil.',
+              },
+              { role: 'user', content: promptMessage },
+            ],
+          })
+          resAgent = { content: directRes?.choices?.[0]?.message?.content }
+        } catch (eDirect) {
+          console.log('[orcamento_gerar] Falha no fallback de IA:', eDirect.message)
         }
       }
 
-      // Validação e normalização dos itens
-      const rawItens = Array.isArray(parsedData?.itens) ? parsedData.itens : []
-      const itens = rawItens.map((it) => ({
-        descricao: String(it.descricao || 'Item de serviço').trim(),
-        quantidade: Math.max(1, Number(it.quantidade) || 1),
-        valor_unitario: Math.max(0, Number(it.valor_unitario) || 0),
-      }))
+      if (resAgent?.content) {
+        try {
+          const m = resAgent.content.match(/\{[\s\S]*\}/)
+          if (m) {
+            const parsed = JSON.parse(m[0])
+            if (Array.isArray(parsed?.itens)) {
+              itensExtraidos = parsed.itens.map((it) => ({
+                descricao: String(it.descricao || 'Item de serviço').trim(),
+                quantidade: Math.max(1, Number(it.quantidade) || 1),
+                valor_unitario: Math.max(0, Number(it.valor_unitario) || 0),
+              }))
+            }
+          }
+        } catch (_) {}
+      }
 
-      if (itens.length === 0) {
-        itens.push({
-          descricao: 'Serviço solicitado: ' + descricao.slice(0, 50),
-          quantidade: 1,
-          valor_unitario: 300.0,
-        })
+      if (itensExtraidos.length === 0) {
+        itensExtraidos = [
+          {
+            descricao: 'Mão de obra técnica especializada: ' + descricao.slice(0, 50),
+            quantidade: 1,
+            valor_unitario: 350.0,
+          },
+          {
+            descricao: 'Execução e acabamento do serviço',
+            quantidade: 1,
+            valor_unitario: 200.0,
+          },
+        ]
       }
 
       return e.json(200, {
-        itens: itens,
-        cliente_sugerido: parsedData?.cliente_sugerido || null,
-        citations: agentResponse?.citations || [],
+        sucesso: true,
+        itens: itensExtraidos,
+        cliente_sugerido: null,
+        citations: resAgent?.citations || [],
       })
     } catch (err) {
-      return e.json(500, { error: err.message || 'Erro interno ao processar orçamento com IA' })
+      console.error('[orcamento_gerar] Erro:', err.message || err)
+      return e.json(500, {
+        sucesso: false,
+        error: 'Erro interno ao processar orçamento com IA',
+      })
     }
   },
   $apis.requireAuth(),

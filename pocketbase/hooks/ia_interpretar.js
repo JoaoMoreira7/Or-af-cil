@@ -1,26 +1,51 @@
 // @ts-nocheck
+/**
+ * Hook Centralizado de Inteligência Artificial do OrçaFácil
+ * Rota Principal: POST /backend/v1/interpretar
+ *
+ * Recursos de Confiabilidade:
+ * - Autenticação obrigatória ($apis.requireAuth() e e.auth?.id rigoroso)
+ * - Isolamento por usuário (clientes, orçamentos, gastos)
+ * - Sanitização e validação de entrada
+ * - Respostas de erro claras em português sem expor chaves ou segredos
+ * - Fallbacks inteligentes e tolerantes a instabilidades do LLM
+ */
+
 routerAdd(
   'POST',
   '/backend/v1/interpretar',
   (e) => {
     try {
-      const body = e.requestInfo().body || {}
-      const userId = e.auth?.id || body.userId
+      const userId = e.auth?.id
       if (!userId) {
-        return e.json(401, { error: 'Autenticação necessária' })
+        return e.json(401, {
+          sucesso: false,
+          error: 'Sessão expirada ou não autenticado. Faça login novamente.',
+        })
       }
 
-      const transcricao = body.transcricao || body.texto || ''
-      if (!transcricao || typeof transcricao !== 'string' || !transcricao.trim()) {
-        return e.json(400, { error: 'A transcrição de áudio ou texto é obrigatória' })
+      const body = e.requestInfo().body || {}
+      const transcricao = (body.transcricao || body.texto || body.descricao || '').trim()
+
+      if (!transcricao) {
+        return e.json(400, {
+          sucesso: false,
+          error: 'A transcrição de áudio ou texto é obrigatória.',
+        })
       }
 
-      let contexto = body.contexto || 'geral'
+      // Sanitização de tamanho de texto (proteção contra payloads abusivos)
+      if (transcricao.length > 5000) {
+        return e.json(400, {
+          sucesso: false,
+          error: 'O texto informado ultrapassa o limite máximo permitido de 5.000 caracteres.',
+        })
+      }
 
-      // Função inline de normalização para matching difuso
+      // Função inline de normalização
       const normalizeText = function (str) {
         if (!str) return ''
-        return str
+        return String(str)
           .toLowerCase()
           .normalize('NFD')
           .replace(/[\u0300-\u036f]/g, '')
@@ -30,12 +55,15 @@ routerAdd(
       }
 
       const transNorm = normalizeText(transcricao)
+      const contexto = body.contexto || 'geral'
+      const operacaoDiretaItens = body.modo === 'orcamento_itens'
 
-      // 0. Carrega preferências da IA do usuário (se configuradas)
+      // 0. Carrega preferências da IA do usuário
       let prefNome = ''
       let prefTom = 'amigavel' // 'formal', 'amigavel', 'direto'
       let prefEmojis = true
-      let prefContextoGastoPadrao = 'empresa' // 'empresa' ou 'pessoal'
+      let prefContextoGastoPadrao = 'empresa'
+
       try {
         const prefRec = $app.findFirstRecordByData('preferencias_ia', 'user_id', userId)
         if (prefRec) {
@@ -45,9 +73,7 @@ routerAdd(
           prefContextoGastoPadrao = prefRec.getString('contexto_gasto_padrao') || 'empresa'
         }
       } catch (_) {
-        // Tenta pegar nome do usuário como fallback
         try {
-          const uRec = $app.findCollectionByNameOrId('_pb_users_auth_')
           const u = $app.findRecordById('_pb_users_auth_', userId)
           if (u) {
             prefNome = (u.getString('name') || '').split(' ')[0]
@@ -55,7 +81,6 @@ routerAdd(
         } catch (_) {}
       }
 
-      // Se veio no body preferências personalizadas explícitas, tem precedência
       if (body.preferencias) {
         if (body.preferencias.nome_preferido !== undefined) {
           prefNome = body.preferencias.nome_preferido
@@ -71,20 +96,86 @@ routerAdd(
         }
       }
 
-      // Função auxiliar para montar saudação ou tratamento de acordo com o tom
       const formatarTratamento = function () {
-        const nomeAlvo = prefNome ? prefNome : 'você'
         if (prefTom === 'formal') {
           return prefNome ? 'Sr(a). ' + prefNome : 'Prezado(a)'
         }
         if (prefTom === 'direto') {
-          return prefNome ? prefNome : ''
+          return prefNome || ''
         }
-        // amigavel
-        return prefNome ? prefNome : 'amigo'
+        return prefNome || 'amigo'
       }
 
-      // 1. Verificação de comando de Desfazer ("desfaz aquilo", "desfaz o último", "desfazer")
+      // Se for modo explícito de gerar itens para formulário
+      if (operacaoDiretaItens) {
+        let itensExtraidos = []
+        let clienteSug = null
+        try {
+          const promptMessage =
+            'Gere itens realistas de orçamento comercial e estime valores unitários em BRL para o seguinte serviço:\n\n' +
+            transcricao.slice(0, 2000) +
+            '\n\nRetorne EXCLUSIVAMENTE um JSON sem texto adicional:\n' +
+            '{\n' +
+            '  "itens": [{ "descricao": "string descritiva", "quantidade": 1, "valor_unitario": 150.00 }]\n' +
+            '}'
+
+          let resAgent = null
+          try {
+            resAgent = $ai.agent('orcamento-assistente').chat({
+              user_id: userId,
+              message: promptMessage,
+            })
+          } catch (eChat1) {
+            console.log('[ia_interpretar] Fallback do agente para fast chat:', eChat1.message)
+            const chatRes = $ai.chat({
+              model: 'fast',
+              messages: [
+                {
+                  role: 'system',
+                  content: 'Você é especialista em orçamentos comerciais de serviços no Brasil.',
+                },
+                { role: 'user', content: promptMessage },
+              ],
+            })
+            resAgent = { content: chatRes?.choices?.[0]?.message?.content }
+          }
+
+          if (resAgent?.content) {
+            const m = resAgent.content.match(/\{[\s\S]*\}/)
+            if (m) {
+              const parsed = JSON.parse(m[0])
+              if (Array.isArray(parsed?.itens)) {
+                itensExtraidos = parsed.itens.map(function (it) {
+                  return {
+                    descricao: String(it.descricao || 'Item de serviço').trim(),
+                    quantidade: Math.max(1, Number(it.quantidade) || 1),
+                    valor_unitario: Math.max(0, Number(it.valor_unitario) || 0),
+                  }
+                })
+              }
+            }
+          }
+        } catch (errGen) {
+          console.log('[ia_interpretar] Aviso ao gerar itens via IA:', errGen.message)
+        }
+
+        if (itensExtraidos.length === 0) {
+          itensExtraidos.push({
+            descricao: 'Serviço especializado: ' + transcricao.slice(0, 60),
+            quantidade: 1,
+            valor_unitario: 250.0,
+          })
+        }
+
+        return e.json(200, {
+          sucesso: true,
+          itens: itensExtraidos,
+          cliente_sugerido: clienteSug,
+          citations: [],
+        })
+      }
+
+      // 1. Comando de Desfazer
       const ehComandoDesfazer =
         transNorm.indexOf('desfaz') !== -1 ||
         transNorm.indexOf('desfazer') !== -1 ||
@@ -109,9 +200,7 @@ routerAdd(
         })
       }
 
-      // 2. Verificação de comando para Personalizar IA (Melhoria 5)
-      // Ex: "me chama de Zé", "me chame de João", "meu nome é Carlos", "fala comigo de forma informal",
-      // "tom direto", "fala de forma formal", "para de usar emoji", "sem emoji", "pode usar emoji", "use emojis"
+      // 2. Comando de Personalizar IA
       const querMudarNome = transNorm.match(
         /(?:me\s+chama\s+de|me\s+chame\s+de|pode\s+me\s+chamar\s+de|meu\s+nome\s+e)\s+([a-z0-9]+)/i,
       )
@@ -127,8 +216,7 @@ routerAdd(
       const querTomAmigavel =
         transNorm.indexOf('informal') !== -1 ||
         transNorm.indexOf('amigavel') !== -1 ||
-        transNorm.indexOf('descontraido') !== -1 ||
-        transNorm.indexOf('amigavel') !== -1
+        transNorm.indexOf('descontraido') !== -1
       const querSemEmoji =
         transNorm.indexOf('sem emoji') !== -1 ||
         transNorm.indexOf('para de usar emoji') !== -1 ||
@@ -153,7 +241,6 @@ routerAdd(
         querComEmoji
       ) {
         let novoNomePref = querMudarNome ? querMudarNome[1].trim() : undefined
-        // Capitaliza o nome
         if (novoNomePref) {
           novoNomePref = novoNomePref.charAt(0).toUpperCase() + novoNomePref.slice(1).toLowerCase()
         }
@@ -204,7 +291,7 @@ routerAdd(
         })
       }
 
-      // 3. Carrega clientes do usuário para matching difuso
+      // 3. Carrega clientes do usuário isolado
       let clientesUsuario = []
       try {
         const records = $app.findRecordsByFilter(
@@ -227,10 +314,9 @@ routerAdd(
         }
       } catch (errDb) {}
 
-      // Matching difuso de cliente existente
+      // Matching difuso de cliente
       let melhorClienteMatch = null
       let scoreMatch = 0
-
       for (let i = 0; i < clientesUsuario.length; i++) {
         const c = clientesUsuario[i]
         const nomeNorm = normalizeText(c.nome)
@@ -249,25 +335,22 @@ routerAdd(
             }
           }
         }
-
         if (empresaNorm && transNorm.indexOf(empresaNorm) !== -1) {
           score += 8
         }
-
         if (telDigits.length >= 8) {
           const transDigits = transcricao.replace(/\D/g, '')
           if (transDigits.indexOf(telDigits.slice(-8)) !== -1) {
             score += 15
           }
         }
-
         if (score > scoreMatch) {
           scoreMatch = score
           melhorClienteMatch = c
         }
       }
 
-      // 4. Carrega orçamentos do usuário
+      // 4. Carrega orçamentos do usuário isolado
       let orcamentosUsuario = []
       try {
         const orcRecords = $app.findRecordsByFilter(
@@ -289,7 +372,6 @@ routerAdd(
               }
             }
           }
-
           orcamentosUsuario.push({
             id: oRec.id,
             numero: oRec.getString('numero') || '',
@@ -303,7 +385,7 @@ routerAdd(
         }
       } catch (errOrc) {}
 
-      // 5. Carrega cobranças existentes para verificar baixas e pagamentos
+      // 5. Carrega cobranças existentes
       let cobrancasUsuario = []
       try {
         const cobRecords = $app.findRecordsByFilter(
@@ -327,7 +409,7 @@ routerAdd(
         }
       } catch (errCob) {}
 
-      // 5.1 Carrega gastos recentes do usuário para consultas de gastos
+      // 5.1 Carrega gastos do usuário
       let gastosUsuario = []
       try {
         const gastRecords = $app.findRecordsByFilter(
@@ -352,7 +434,7 @@ routerAdd(
         }
       } catch (errGastosDb) {}
 
-      // 5.1.1 Verificação de comando: "quanto lucrei esse mês?" / resultado do mês / lucro
+      // 5.1.1 Consulta de Lucro / Resultado do Mês
       const ehConsultaLucro =
         transNorm.indexOf('quanto lucrei') !== -1 ||
         transNorm.indexOf('quanto eu lucrei') !== -1 ||
@@ -368,21 +450,15 @@ routerAdd(
 
       if (ehConsultaLucro) {
         const hojeObj = new Date()
-        const mesAtualStr = hojeObj.toISOString().slice(0, 7) // 'YYYY-MM'
+        const mesAtualStr = hojeObj.toISOString().slice(0, 7)
 
-        // Receita das cobranças pagas no mês
         let receitaMes = 0
-        let qtdCobrancasPagasMes = 0
         for (let i = 0; i < cobrancasUsuario.length; i++) {
           const c = cobrancasUsuario[i]
           if (c.status === 'pago') {
-            // Como cobrancasUsuario vem com created/updated, se tivermos somamos
             receitaMes += c.valor || 0
-            qtdCobrancasPagasMes++
           }
         }
-
-        // Se não houver cobranças registradas, soma orçamentos aprovados do mês como receita base estimada
         if (receitaMes === 0) {
           for (let i = 0; i < orcamentosUsuario.length; i++) {
             const o = orcamentosUsuario[i]
@@ -392,20 +468,17 @@ routerAdd(
           }
         }
 
-        // Gastos de empresa do mês
         const gastosMes = gastosUsuario.filter(function (g) {
           return g.data && g.data.startsWith(mesAtualStr)
         })
-
         let gastosEmpresaMes = 0
         let gastosPessoalMes = 0
         for (let i = 0; i < gastosMes.length; i++) {
           const g = gastosMes[i]
-          const ctxG = g.contexto === 'pessoal' ? 'pessoal' : 'empresa'
-          if (ctxG === 'empresa') {
-            gastosEmpresaMes += g.valor
-          } else {
+          if (g.contexto === 'pessoal') {
             gastosPessoalMes += g.valor
+          } else {
+            gastosEmpresaMes += g.valor
           }
         }
 
@@ -413,14 +486,14 @@ routerAdd(
         const lucroFmt = lucroApurado.toFixed(2).replace('.', ',')
         const recFmt = receitaMes.toFixed(2).replace('.', ',')
         const gastEmpFmt = gastosEmpresaMes.toFixed(2).replace('.', ',')
-
         const trat = formatarTratamento()
+
         let textoRespLucro = ''
         if (lucroApurado >= 0) {
           if (prefTom === 'formal') {
             textoRespLucro =
               (trat ? trat + ', ' : '') +
-              'o resultado operacional estimado deste mês é positivo em R$ ' +
+              'o resultado operacional deste mês é positivo em R$ ' +
               lucroFmt +
               ' (receita de R$ ' +
               recFmt +
@@ -450,37 +523,16 @@ routerAdd(
           }
         } else {
           const defFmt = Math.abs(lucroApurado).toFixed(2).replace('.', ',')
-          if (prefTom === 'formal') {
-            textoRespLucro =
-              (trat ? trat + ', ' : '') +
-              'no momento as despesas da empresa (R$ ' +
-              gastEmpFmt +
-              ') superam a receita (R$ ' +
-              recFmt +
-              '), com déficit de R$ ' +
-              defFmt +
-              '.'
-          } else if (prefTom === 'direto') {
-            textoRespLucro =
-              'Atenção ao fluxo: déficit de R$ ' +
-              defFmt +
-              ' este mês (Gastos R$ ' +
-              gastEmpFmt +
-              ' vs Receita R$ ' +
-              recFmt +
-              ').'
-          } else {
-            textoRespLucro =
-              (prefEmojis ? '⚠️ ' : '') +
-              (prefNome ? prefNome + ', ' : '') +
-              'atenção ao fluxo: os gastos da empresa somam R$ ' +
-              gastEmpFmt +
-              ' contra R$ ' +
-              recFmt +
-              ' de receita, com déficit temporário de R$ ' +
-              defFmt +
-              '.'
-          }
+          textoRespLucro =
+            (prefEmojis ? '⚠️ ' : '') +
+            (prefNome ? prefNome + ', ' : '') +
+            'atenção ao fluxo: déficit de R$ ' +
+            defFmt +
+            ' este mês (Gastos R$ ' +
+            gastEmpFmt +
+            ' vs Receita R$ ' +
+            recFmt +
+            ').'
         }
 
         return e.json(200, {
@@ -506,7 +558,7 @@ routerAdd(
         })
       }
 
-      // 5.1.2 Verificação de comando: "resumo do dia" / "resumo da manhã" / "como está meu dia"
+      // 5.1.2 Consulta Resumo do Dia
       const ehConsultaResumoDia =
         transNorm.indexOf('resumo do dia') !== -1 ||
         transNorm.indexOf('resumo da manha') !== -1 ||
@@ -514,11 +566,9 @@ routerAdd(
         transNorm.indexOf('como esta meu dia') !== -1 ||
         transNorm.indexOf('como ta meu dia') !== -1 ||
         transNorm.indexOf('o que tenho pra hoje') !== -1 ||
-        transNorm.indexOf('o que eu tenho pra hoje') !== -1 ||
         transNorm.indexOf('minhas tarefas de hoje') !== -1
 
       if (ehConsultaResumoDia) {
-        // Agrupa orçamentos aguardando resposta
         let qtdAguardando = 0
         let valorAguardando = 0
         let qtdAprovados = 0
@@ -535,7 +585,6 @@ routerAdd(
           }
         }
 
-        const trat = formatarTratamento()
         const horaAtual = new Date().getHours()
         let saudacaoDia = 'Bom dia'
         if (horaAtual >= 12 && horaAtual < 18) saudacaoDia = 'Boa tarde'
@@ -544,7 +593,7 @@ routerAdd(
         const vAguardFmt = valorAguardando.toFixed(2).replace('.', ',')
         const vRecFmt = totalAReceber.toFixed(2).replace('.', ',')
 
-        let textoRespResumo =
+        const textoRespResumo =
           saudacaoDia +
           (prefNome ? ', ' + prefNome : '') +
           '! ' +
@@ -582,7 +631,7 @@ routerAdd(
         })
       }
 
-      // 5.2 Verificação de comando: "quanto gastei esse mês?" / consulta de gastos (empresa / pessoal / ambos)
+      // 5.2 Consulta de Gastos
       const ehConsultaGastos =
         transNorm.indexOf('quanto gastei') !== -1 ||
         transNorm.indexOf('quanto eu gastei') !== -1 ||
@@ -593,34 +642,27 @@ routerAdd(
         (transNorm.indexOf('quanto') !== -1 && transNorm.indexOf('gastei') !== -1)
 
       if (ehConsultaGastos) {
-        // Detecta se perguntou especificamente de empresa ou pessoal
         const querEmpresa =
           transNorm.indexOf('na empresa') !== -1 ||
           transNorm.indexOf('da empresa') !== -1 ||
           transNorm.indexOf('pela empresa') !== -1 ||
           transNorm.indexOf('do trabalho') !== -1 ||
-          transNorm.indexOf('no cnpj') !== -1 ||
-          transNorm.indexOf('empresarial') !== -1
+          transNorm.indexOf('no cnpj') !== -1
         const querPessoal =
           transNorm.indexOf('no pessoal') !== -1 ||
           transNorm.indexOf('do pessoal') !== -1 ||
           transNorm.indexOf('pessoal mesmo') !== -1 ||
           transNorm.indexOf('para mim') !== -1 ||
           transNorm.indexOf('pra mim') !== -1 ||
-          transNorm.indexOf('para casa') !== -1 ||
-          transNorm.indexOf('pra casa') !== -1 ||
-          transNorm.indexOf('minha casa') !== -1 ||
-          transNorm.indexOf('cpf') !== -1
+          transNorm.indexOf('em casa') !== -1 ||
+          transNorm.indexOf('no cpf') !== -1
 
-        let contextoPedido = 'ambos' // 'empresa', 'pessoal' ou 'ambos'
-        if (querEmpresa && !querPessoal) {
-          contextoPedido = 'empresa'
-        } else if (querPessoal && !querEmpresa) {
-          contextoPedido = 'pessoal'
-        }
+        let contextoPedido = 'ambos'
+        if (querEmpresa && !querPessoal) contextoPedido = 'empresa'
+        else if (querPessoal && !querEmpresa) contextoPedido = 'pessoal'
 
         const hojeObj = new Date()
-        const mesAtualStr = hojeObj.toISOString().slice(0, 7) // 'YYYY-MM'
+        const mesAtualStr = hojeObj.toISOString().slice(0, 7)
         const gastosMes = gastosUsuario.filter(function (g) {
           return g.data && g.data.startsWith(mesAtualStr)
         })
@@ -632,128 +674,50 @@ routerAdd(
 
         for (let i = 0; i < gastosMes.length; i++) {
           const g = gastosMes[i]
-          const ctxGasto = g.contexto === 'pessoal' ? 'pessoal' : 'empresa'
-          if (ctxGasto === 'empresa') {
-            totalEmpresa += g.valor
-            qtdEmpresa++
-          } else {
+          if (g.contexto === 'pessoal') {
             totalPessoal += g.valor
             qtdPessoal++
+          } else {
+            totalEmpresa += g.valor
+            qtdEmpresa++
           }
         }
 
         const totalGeral = totalEmpresa + totalPessoal
-
-        const trat = formatarTratamento()
-        const emojiGasto = prefEmojis ? '📊 ' : ''
-        let textoResposta = ''
-
         const fmtEmpresa = totalEmpresa.toFixed(2).replace('.', ',')
         const fmtPessoal = totalPessoal.toFixed(2).replace('.', ',')
         const fmtGeral = totalGeral.toFixed(2).replace('.', ',')
 
+        let textoResposta = ''
         if (contextoPedido === 'empresa') {
-          if (qtdEmpresa === 0) {
-            textoResposta =
-              (prefEmojis ? '🏢 ' : '') +
-              (prefNome ? prefNome + ', ' : '') +
-              'você ainda não registrou nenhum gasto na empresa este mês.'
-          } else {
-            if (prefTom === 'formal') {
-              textoResposta =
-                (trat ? trat + ', ' : '') +
-                'o montante de gastos empresariais registrados neste mês é de R$ ' +
-                fmtEmpresa +
-                ' em ' +
-                qtdEmpresa +
-                ' lançamento(s).'
-            } else if (prefTom === 'direto') {
-              textoResposta =
-                'Gastos da empresa no mês: R$ ' + fmtEmpresa + ' (' + qtdEmpresa + ' lançamentos).'
-            } else {
-              textoResposta =
-                (prefEmojis ? '🏢 ' : '') +
-                (prefNome ? prefNome + ', ' : '') +
-                'você gastou R$ ' +
-                fmtEmpresa +
-                ' na empresa este mês (' +
-                qtdEmpresa +
-                ' lançamentos).'
-            }
-          }
+          textoResposta =
+            (prefEmojis ? '🏢 ' : '') +
+            (prefNome ? prefNome + ', ' : '') +
+            'você gastou R$ ' +
+            fmtEmpresa +
+            ' na empresa este mês (' +
+            qtdEmpresa +
+            ' lançamentos).'
         } else if (contextoPedido === 'pessoal') {
-          if (qtdPessoal === 0) {
-            textoResposta =
-              (prefEmojis ? '🏠 ' : '') +
-              (prefNome ? prefNome + ', ' : '') +
-              'você ainda não registrou nenhum gasto no pessoal este mês.'
-          } else {
-            if (prefTom === 'formal') {
-              textoResposta =
-                (trat ? trat + ', ' : '') +
-                'o montante de gastos pessoais registrados neste mês é de R$ ' +
-                fmtPessoal +
-                ' em ' +
-                qtdPessoal +
-                ' lançamento(s).'
-            } else if (prefTom === 'direto') {
-              textoResposta =
-                'Gastos pessoais no mês: R$ ' + fmtPessoal + ' (' + qtdPessoal + ' lançamentos).'
-            } else {
-              textoResposta =
-                (prefEmojis ? '🏠 ' : '') +
-                (prefNome ? prefNome + ', ' : '') +
-                'você gastou R$ ' +
-                fmtPessoal +
-                ' no pessoal este mês (' +
-                qtdPessoal +
-                ' lançamentos).'
-            }
-          }
+          textoResposta =
+            (prefEmojis ? '🏠 ' : '') +
+            (prefNome ? prefNome + ', ' : '') +
+            'você gastou R$ ' +
+            fmtPessoal +
+            ' no pessoal este mês (' +
+            qtdPessoal +
+            ' lançamentos).'
         } else {
-          // Não especificou: mostra os dois separados
-          if (gastosMes.length === 0) {
-            textoResposta =
-              (prefEmojis ? '💸 ' : '') +
-              (prefNome ? prefNome + ', ' : '') +
-              'você ainda não registrou nenhum gasto este mês, nem na empresa nem no pessoal.'
-          } else {
-            if (prefTom === 'formal') {
-              textoResposta =
-                (trat ? trat + ', ' : '') +
-                'neste mês constam R$ ' +
-                fmtEmpresa +
-                ' na empresa (' +
-                qtdEmpresa +
-                ' lançamentos) e R$ ' +
-                fmtPessoal +
-                ' no pessoal (' +
-                qtdPessoal +
-                ' lançamentos), totalizando R$ ' +
-                fmtGeral +
-                '.'
-            } else if (prefTom === 'direto') {
-              textoResposta =
-                'Gastos do mês: Empresa R$ ' +
-                fmtEmpresa +
-                ' | Pessoal R$ ' +
-                fmtPessoal +
-                ' | Total R$ ' +
-                fmtGeral +
-                '.'
-            } else {
-              textoResposta =
-                emojiGasto +
-                (prefNome ? prefNome + ', ' : '') +
-                'este mês você gastou R$ ' +
-                fmtEmpresa +
-                ' na empresa (🏢) e R$ ' +
-                fmtPessoal +
-                ' no pessoal (🏠), totalizando R$ ' +
-                fmtGeral +
-                '.'
-            }
-          }
+          textoResposta =
+            (prefEmojis ? '📊 ' : '') +
+            (prefNome ? prefNome + ', ' : '') +
+            'este mês você gastou R$ ' +
+            fmtEmpresa +
+            ' na empresa (🏢) e R$ ' +
+            fmtPessoal +
+            ' no pessoal (🏠), totalizando R$ ' +
+            fmtGeral +
+            '.'
         }
 
         return e.json(200, {
@@ -773,12 +737,7 @@ routerAdd(
               total_empresa: totalEmpresa,
               total_pessoal: totalPessoal,
               total_geral: totalGeral,
-              qtd_gastos:
-                contextoPedido === 'empresa'
-                  ? qtdEmpresa
-                  : contextoPedido === 'pessoal'
-                    ? qtdPessoal
-                    : gastosMes.length,
+              qtd_gastos: gastosMes.length,
               qtd_empresa: qtdEmpresa,
               qtd_pessoal: qtdPessoal,
               mensagem_resposta: textoResposta,
@@ -793,9 +752,7 @@ routerAdd(
         })
       }
 
-      // 5.3 Detecção e extração de REGISTRO DE GASTO por voz
-      // Ex: "gastei 150 reais de gasolina hoje", "comprei material elétrico, 340 reais no cartão",
-      // "almoço 45 reais ontem", "paguei 1200 de aluguel da oficina", "gasto de 80 conto com brocas"
+      // 5.3 Registro de Gasto por Voz
       const temPalavrasGasto =
         contexto === 'gasto' ||
         transNorm.indexOf('gastei') !== -1 ||
@@ -806,12 +763,9 @@ routerAdd(
         transNorm.indexOf('custo de') !== -1 ||
         transNorm.indexOf('abasteci') !== -1 ||
         transNorm.indexOf('almoco') !== -1 ||
-        transNorm.indexOf('almoco ') !== -1 ||
-        transNorm.indexOf('jantar') !== -1 ||
         transNorm.indexOf('gasolina') !== -1
 
       if (contexto === 'gasto' || temPalavrasGasto) {
-        // Tenta detectar orçamento vinculado na fala ("do orcamento 3", "da obra 2", "na empresa", etc.)
         let orcVinculadoId = null
         let orcVinculadoNum = null
         const orcMatchGasto =
@@ -835,94 +789,37 @@ routerAdd(
           }
         }
 
-        // Se não achou por número, verifica se citou cliente de algum orçamento
-        if (!orcVinculadoId && melhorClienteMatch && scoreMatch >= 8) {
-          for (let i = 0; i < orcamentosUsuario.length; i++) {
-            const o = orcamentosUsuario[i]
-            if (o.cliente_id === melhorClienteMatch.id) {
-              orcVinculadoId = o.id
-              orcVinculadoNum = o.numero
-              break
-            }
-          }
-        }
-
-        // Extração heurística explícita de contexto (empresa vs pessoal)
-        // Expressões como "na empresa", "da empresa", "no pessoal", "pessoal mesmo", "para mim", "pra mim", "para a casa", "pra casa", "no cnpj", "no cpf"
         let contextoDetectado = null
         const falaEmpresa =
           transNorm.indexOf('na empresa') !== -1 ||
           transNorm.indexOf('da empresa') !== -1 ||
           transNorm.indexOf('pela empresa') !== -1 ||
-          transNorm.indexOf('pra empresa') !== -1 ||
-          transNorm.indexOf('para empresa') !== -1 ||
-          transNorm.indexOf('no cnpj') !== -1 ||
           transNorm.indexOf('do trabalho') !== -1 ||
-          transNorm.indexOf('da oficina') !== -1 ||
-          transNorm.indexOf('da firma') !== -1
+          transNorm.indexOf('no cnpj') !== -1
         const falaPessoal =
           transNorm.indexOf('no pessoal') !== -1 ||
           transNorm.indexOf('do pessoal') !== -1 ||
           transNorm.indexOf('pessoal mesmo') !== -1 ||
-          transNorm.indexOf('gasto pessoal') !== -1 ||
           transNorm.indexOf('para mim') !== -1 ||
           transNorm.indexOf('pra mim') !== -1 ||
-          transNorm.indexOf('pro meu') !== -1 ||
-          transNorm.indexOf('para o meu') !== -1 ||
-          transNorm.indexOf('para a casa') !== -1 ||
-          transNorm.indexOf('pra casa') !== -1 ||
-          transNorm.indexOf('da minha casa') !== -1 ||
-          transNorm.indexOf('em casa') !== -1 ||
           transNorm.indexOf('no cpf') !== -1
 
-        if (falaPessoal && !falaEmpresa) {
-          contextoDetectado = 'pessoal'
-        } else if (falaEmpresa && !falaPessoal) {
-          contextoDetectado = 'empresa'
-        }
+        if (falaPessoal && !falaEmpresa) contextoDetectado = 'pessoal'
+        else if (falaEmpresa && !falaPessoal) contextoDetectado = 'empresa'
 
-        // Pede para o LLM estruturar o gasto com precisão, incluindo contexto empresa ou pessoal
         const promptGasto =
-          'Você é o assistente inteligente do OrçaFácil especializado em finanças e registro de gastos.\n' +
-          'O usuário falou um gasto/despesa em português brasileiro informal:\n' +
-          '"""\n' +
+          'Você é o assistente inteligente do OrçaFácil especializado em finanças.\n' +
+          'Texto falado do gasto: """' +
           transcricao.trim() +
-          '\n"""\n\n' +
-          'DATA ATUAL DE REFERÊNCIA: ' +
+          '"""\n' +
+          'Data referência: ' +
           new Date().toISOString().slice(0, 10) +
           '\n' +
-          'CONTEXTO PADRÃO DO USUÁRIO: "' +
+          'Contexto padrão: "' +
           (prefContextoGastoPadrao || 'empresa') +
-          '"\n\n' +
-          'CATEGORIAS PERMITIDAS (escolha EXATAMENTE uma destas):\n' +
-          '- "Material" (fios, canos, cimento, peças, tintas, parafusos, componentes)\n' +
-          '- "Transporte" (gasolina, combustível, pedágio, uber, estacionamento, passagem)\n' +
-          '- "Alimentação" (almoço, café, marmita, lanche, mercado, refeição)\n' +
-          '- "Moradia/Aluguel" (aluguel de oficina/galpão/sala, condomínio, luz, água da oficina)\n' +
-          '- "Ferramentas" (brocas, lixadeiras, alicates, discos de corte, chaves)\n' +
-          '- "Serviços terceirizados" (ajudante, terceirizado, mão de obra contratada, frete)\n' +
-          '- "Impostos/Taxas" (MEI, DAS, taxas bancárias, licenças, notas)\n' +
-          '- "Outros" (qualquer outro gasto não listado)\n\n' +
-          'REGRAS:\n' +
-          '1. Extraia o valor numérico (ex: "150 reais" -> 150; "um mil e duzentos" -> 1200; "cinquenta e cinco com cinquenta" -> 55.5; "80 conto" -> 80). Se não houver valor claro, retorne null.\n' +
-          '2. Extraia uma descricao curta e limpa (ex: "Gasolina do carro", "Material elétrico", "Almoço", "Aluguel da oficina"). Remova marcadores como "na empresa" ou "no pessoal" da descrição limpa.\n' +
-          '3. Calcule a data no formato YYYY-MM-DD. Se falou "hoje" ou omitiu -> data de hoje (' +
-          new Date().toISOString().slice(0, 10) +
-          '). Se falou "ontem" -> subtraia 1 dia. Se falou "anteontem" -> subtraia 2 dias. Se mencionou dia da semana passado, calcule a data correspondente.\n' +
-          '4. Escolha a categoria mais apropriada da lista.\n' +
-          '5. Classifique o "contexto" em EXATAMENTE "empresa" ou "pessoal":\n' +
-          '   - Use "empresa" se falou "na empresa", "da empresa", "da firma", "obra", "do trabalho", "no cnpj".\n' +
-          '   - Use "pessoal" se falou "no pessoal", "pessoal mesmo", "para mim", "pra mim", "para a casa", "pra casa", "no cpf".\n' +
-          '   - Se não vier explícito, use o contexto padrão: "' +
-          (prefContextoGastoPadrao || 'empresa') +
-          '".\n' +
-          '6. Se faltar o valor ou a descrição for ininteligível, liste a dúvida em "duvidas" e defina "precisa_confirmacao": true.\n' +
-          '7. Crie uma mensagem_resposta curta para o usuário respeitando o tom ' +
-          prefTom +
-          (prefNome ? ' e chamando-o de ' + prefNome : '') +
-          (prefEmojis ? ' com emoji.' : ' sem emoji.') +
-          ', citando se o gasto é da empresa (🏢) ou pessoal (🏠).\n\n' +
-          'Retorne APENAS JSON válido sem formatação markdown:\n' +
+          '"\n' +
+          'Categorias: Material, Transporte, Alimentação, Moradia/Aluguel, Ferramentas, Serviços terceirizados, Impostos/Taxas, Outros.\n' +
+          'Retorne APENAS JSON válido:\n' +
           '{\n' +
           '  "valor": number | null,\n' +
           '  "descricao": string,\n' +
@@ -940,17 +837,24 @@ routerAdd(
             user_id: userId,
             message: promptGasto,
           })
-        } catch (errLlmGasto) {}
+        } catch (eG1) {
+          try {
+            const cRes = $ai.chat({
+              model: 'fast',
+              messages: [{ role: 'user', content: promptGasto }],
+            })
+            llmGastoResp = { content: cRes?.choices?.[0]?.message?.content }
+          } catch (_) {}
+        }
 
         let parsedGasto = null
         if (llmGastoResp?.content) {
           try {
             const m = llmGastoResp.content.match(/\{[\s\S]*\}/)
             if (m) parsedGasto = JSON.parse(m[0])
-          } catch (eParse) {}
+          } catch (_) {}
         }
 
-        // Heurística de fallback para valor e categoria caso o agente falhe
         if (!parsedGasto || parsedGasto.valor === undefined) {
           let valEncontrado = null
           const valMatch =
@@ -960,65 +864,16 @@ routerAdd(
           if (valMatch) {
             valEncontrado = parseFloat(valMatch[1].replace(',', '.'))
           }
-
           let catHeuristica = 'Outros'
-          if (
-            transNorm.indexOf('gasolina') !== -1 ||
-            transNorm.indexOf('combustivel') !== -1 ||
-            transNorm.indexOf('abastecer') !== -1 ||
-            transNorm.indexOf('abasteci') !== -1 ||
-            transNorm.indexOf('pedagio') !== -1 ||
-            transNorm.indexOf('uber') !== -1
-          ) {
+          if (transNorm.indexOf('gasolina') !== -1 || transNorm.indexOf('abastecer') !== -1) {
             catHeuristica = 'Transporte'
-          } else if (
-            transNorm.indexOf('almoco') !== -1 ||
-            transNorm.indexOf('lanche') !== -1 ||
-            transNorm.indexOf('refeicao') !== -1 ||
-            transNorm.indexOf('cafe') !== -1 ||
-            transNorm.indexOf('marmita') !== -1
-          ) {
+          } else if (transNorm.indexOf('almoco') !== -1 || transNorm.indexOf('lanche') !== -1) {
             catHeuristica = 'Alimentação'
-          } else if (
-            transNorm.indexOf('aluguel') !== -1 ||
-            transNorm.indexOf('galpao') !== -1 ||
-            transNorm.indexOf('sala') !== -1 ||
-            transNorm.indexOf('condominio') !== -1
-          ) {
-            catHeuristica = 'Moradia/Aluguel'
-          } else if (
-            transNorm.indexOf('material') !== -1 ||
-            transNorm.indexOf('fio') !== -1 ||
-            transNorm.indexOf('cano') !== -1 ||
-            transNorm.indexOf('tinta') !== -1 ||
-            transNorm.indexOf('cimento') !== -1
-          ) {
+          } else if (transNorm.indexOf('material') !== -1 || transNorm.indexOf('fio') !== -1) {
             catHeuristica = 'Material'
-          } else if (
-            transNorm.indexOf('ferramenta') !== -1 ||
-            transNorm.indexOf('broca') !== -1 ||
-            transNorm.indexOf('disco') !== -1 ||
-            transNorm.indexOf('alicate') !== -1
-          ) {
-            catHeuristica = 'Ferramentas'
-          } else if (
-            transNorm.indexOf('ajudante') !== -1 ||
-            transNorm.indexOf('diaria') !== -1 ||
-            transNorm.indexOf('terceirizado') !== -1 ||
-            transNorm.indexOf('frete') !== -1
-          ) {
-            catHeuristica = 'Serviços terceirizados'
-          } else if (
-            transNorm.indexOf('das') !== -1 ||
-            transNorm.indexOf('mei') !== -1 ||
-            transNorm.indexOf('imposto') !== -1 ||
-            transNorm.indexOf('taxa') !== -1
-          ) {
-            catHeuristica = 'Impostos/Taxas'
           }
 
           const fallbackCtx = contextoDetectado || prefContextoGastoPadrao || 'empresa'
-
           parsedGasto = {
             valor: valEncontrado,
             descricao: transcricao.trim(),
@@ -1031,114 +886,22 @@ routerAdd(
                 valEncontrado.toFixed(2).replace('.', ',') +
                 ' em ' +
                 catHeuristica +
-                ' (' +
-                (fallbackCtx === 'pessoal' ? '🏠 Pessoal' : '🏢 Empresa') +
-                ').'
-              : 'Não consegui identificar o valor do gasto. Pode repetir informando o valor?',
+                '.'
+              : 'Não consegui identificar o valor do gasto. Pode repetir dizendo o valor?',
             duvidas: valEncontrado === null ? ['Qual foi o valor exato gasto?'] : [],
           }
-        }
-
-        // Validação da categoria contra as permitidas
-        const categoriasValidas = [
-          'Material',
-          'Transporte',
-          'Alimentação',
-          'Moradia/Aluguel',
-          'Ferramentas',
-          'Serviços terceirizados',
-          'Impostos/Taxas',
-          'Outros',
-        ]
-        let catFinal = parsedGasto.categoria || 'Outros'
-        if (categoriasValidas.indexOf(catFinal) === -1) {
-          catFinal = 'Outros'
-        }
-
-        // Contexto final: preferência para detecção explícita na transcrição, depois LLM, depois padrão do usuário
-        let ctxFinal = contextoDetectado
-        if (
-          !ctxFinal &&
-          (parsedGasto.contexto === 'pessoal' || parsedGasto.contexto === 'empresa')
-        ) {
-          ctxFinal = parsedGasto.contexto
-        }
-        if (!ctxFinal) {
-          ctxFinal = prefContextoGastoPadrao || 'empresa'
-        }
-
-        // Data válida
-        let dataFinal = parsedGasto.data
-        if (!dataFinal || !dataFinal.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          dataFinal = new Date().toISOString().slice(0, 10)
         }
 
         const valorFinal =
           typeof parsedGasto.valor === 'number' && !isNaN(parsedGasto.valor)
             ? parsedGasto.valor
             : null
+        const catFinal = parsedGasto.categoria || 'Outros'
+        const ctxFinal =
+          contextoDetectado || parsedGasto.contexto || prefContextoGastoPadrao || 'empresa'
+        const dataFinal = parsedGasto.data || new Date().toISOString().slice(0, 10)
+        const precisaConfirmacao = valorFinal === null || valorFinal <= 0
 
-        const precisaConfirmacao =
-          valorFinal === null ||
-          valorFinal <= 0 ||
-          Boolean(parsedGasto.precisa_confirmacao) ||
-          (parsedGasto.duvidas && parsedGasto.duvidas.length > 0)
-
-        // Mensagem persona
-        let msgRespGasto = parsedGasto.mensagem_resposta
-        const ctxBadgeLabel = ctxFinal === 'pessoal' ? 'pessoal' : 'da empresa'
-        const ctxBadgeEmoji = ctxFinal === 'pessoal' ? '🏠' : '🏢'
-
-        if (!msgRespGasto || !msgRespGasto.includes(ctxFinal)) {
-          const tratGasto = formatarTratamento()
-          const emojiOk = prefEmojis ? ctxBadgeEmoji + ' ' : ''
-          if (valorFinal !== null) {
-            const vStr = valorFinal.toFixed(2).replace('.', ',')
-            if (prefTom === 'formal') {
-              msgRespGasto =
-                (tratGasto ? tratGasto + ', ' : '') +
-                'registrei o gasto ' +
-                ctxBadgeLabel +
-                ' no valor de R$ ' +
-                vStr +
-                ' referente a ' +
-                (parsedGasto.descricao || 'despesa') +
-                ' na categoria ' +
-                catFinal +
-                '.'
-            } else if (prefTom === 'direto') {
-              msgRespGasto =
-                'Gasto ' +
-                ctxBadgeLabel +
-                ': R$ ' +
-                vStr +
-                ' - ' +
-                catFinal +
-                ' (' +
-                (parsedGasto.descricao || 'despesa') +
-                '). Confirmar?'
-            } else {
-              msgRespGasto =
-                emojiOk +
-                (prefNome ? prefNome + ', ' : '') +
-                'entendi o gasto ' +
-                ctxBadgeLabel +
-                ' de R$ ' +
-                vStr +
-                ' com ' +
-                (parsedGasto.descricao || 'despesa') +
-                ' (' +
-                catFinal +
-                '). Deseja salvar?'
-            }
-          } else {
-            msgRespGasto =
-              (prefNome ? prefNome + ', ' : '') +
-              'não consegui identificar o valor do gasto. Pode falar novamente dizendo o valor em reais?'
-          }
-        }
-
-        // Salva áudio no histórico com contexto 'gasto'
         let audioRecordIdGasto = null
         try {
           const audiosCol = $app.findCollectionByNameOrId('audios')
@@ -1163,7 +926,7 @@ routerAdd(
           audioRec.set('comando_executado', false)
           $app.save(audioRec)
           audioRecordIdGasto = audioRec.id
-        } catch (errAudioGasto) {}
+        } catch (_) {}
 
         return e.json(200, {
           sucesso: true,
@@ -1181,7 +944,9 @@ routerAdd(
               orcamento_vinculado_id: orcVinculadoId,
               orcamento_vinculado_numero: orcVinculadoNum,
               precisa_confirmacao: precisaConfirmacao,
-              mensagem_resposta: msgRespGasto,
+              mensagem_resposta:
+                parsedGasto.mensagem_resposta ||
+                `Gasto de R$ ${valorFinal ? valorFinal.toFixed(2).replace('.', ',') : '0,00'} em ${catFinal}.`,
             },
             transcricao_corrigida: transcricao.trim(),
             descricao_servico:
@@ -1197,23 +962,18 @@ routerAdd(
         })
       }
 
-      // 6. Verificação de comando: "quem está me devendo?" / "contas a receber" (Melhoria 6)
+      // 6. Consulta de Contas a Receber
       const ehConsultaDevedores =
         transNorm.indexOf('quem esta me devendo') !== -1 ||
         transNorm.indexOf('quem tá me devendo') !== -1 ||
         transNorm.indexOf('quem me deve') !== -1 ||
         transNorm.indexOf('contas a receber') !== -1 ||
         transNorm.indexOf('valores a receber') !== -1 ||
-        transNorm.indexOf('quanto tenho pra receber') !== -1 ||
-        transNorm.indexOf('quem esta devendo') !== -1 ||
-        transNorm.indexOf('quem ta devendo') !== -1
+        transNorm.indexOf('quanto tenho pra receber') !== -1
 
       if (ehConsultaDevedores) {
-        // Agrupa orçamentos aprovados pendentes por cliente
-        // Um orçamento aprovado é considerado pago se existe uma cobrança com status = 'pago' para ele
         const aprovadosNaoPagos = []
         let totalDevido = 0
-
         for (let i = 0; i < orcamentosUsuario.length; i++) {
           const o = orcamentosUsuario[i]
           if (o.status === 'aprovado') {
@@ -1234,92 +994,10 @@ routerAdd(
           }
         }
 
-        // Monta resposta personalizada pelo tom e nome
-        const trat = formatarTratamento()
-        const emojiPrefix = prefEmojis ? '💰 ' : ''
-        let textoResposta = ''
-
-        if (aprovadosNaoPagos.length === 0) {
-          if (prefTom === 'formal') {
-            textoResposta =
-              (trat ? trat + ', ' : '') +
-              'não há orçamentos aprovados pendentes de pagamento no momento. Todas as contas estão em dia.'
-          } else if (prefTom === 'direto') {
-            textoResposta = 'Nenhum valor pendente a receber no momento. Tudo quitado.'
-          } else {
-            textoResposta =
-              (emojiPrefix ? '🎉 ' : '') +
-              (prefNome ? prefNome + ', ' : '') +
-              'boa notícia! Ninguém está te devendo no momento. Todos os orçamentos aprovados já foram pagos!'
-          }
-        } else {
-          // Agrupa por cliente
-          const porCliente = {}
-          for (let i = 0; i < aprovadosNaoPagos.length; i++) {
-            const o = aprovadosNaoPagos[i]
-            const cli = o.cliente_nome || 'Cliente não identificado'
-            if (!porCliente[cli]) {
-              porCliente[cli] = { total: 0, qtd: 0, orcamentos: [] }
-            }
-            porCliente[cli].total += o.valor_total
-            porCliente[cli].qtd += 1
-            porCliente[cli].orcamentos.push(o.numero)
-          }
-
-          const linhasClientes = []
-          for (const cli in porCliente) {
-            const dados = porCliente[cli]
-            linhasClientes.push(
-              cli +
-                ': R$ ' +
-                dados.total.toFixed(2).replace('.', ',') +
-                ' (' +
-                dados.qtd +
-                ' proposta(s): ' +
-                dados.orcamentos.join(', ') +
-                ')',
-            )
-          }
-
-          if (prefTom === 'formal') {
-            textoResposta =
-              (trat ? trat + ', ' : '') +
-              'o total a receber atualmente é de R$ ' +
-              totalDevido.toFixed(2).replace('.', ',') +
-              ', distribuído entre os seguintes clientes:\n' +
-              linhasClientes
-                .map(function (l) {
-                  return '• ' + l
-                })
-                .join('\n')
-          } else if (prefTom === 'direto') {
-            textoResposta =
-              'Total a receber: R$ ' +
-              totalDevido.toFixed(2).replace('.', ',') +
-              ' (' +
-              aprovadosNaoPagos.length +
-              ' orçamentos pendentes):\n' +
-              linhasClientes
-                .map(function (l) {
-                  return '• ' + l
-                })
-                .join('\n')
-          } else {
-            textoResposta =
-              emojiPrefix +
-              (prefNome ? prefNome + ', ' : '') +
-              'você tem um total de R$ ' +
-              totalDevido.toFixed(2).replace('.', ',') +
-              ' a receber de ' +
-              Object.keys(porCliente).length +
-              ' cliente(s):\n' +
-              linhasClientes
-                .map(function (l) {
-                  return '• ' + l
-                })
-                .join('\n')
-          }
-        }
+        const textoResposta =
+          aprovadosNaoPagos.length === 0
+            ? 'Boa notícia! Não há nenhum valor pendente a receber no momento.'
+            : `Você tem um total de R$ ${totalDevido.toFixed(2).replace('.', ',')} a receber em ${aprovadosNaoPagos.length} orçamento(s).`
 
         return e.json(200, {
           sucesso: true,
@@ -1333,7 +1011,7 @@ routerAdd(
               mensagem_resposta: textoResposta,
             },
             transcricao_corrigida: transcricao.trim(),
-            descricao_servico: 'Consulta de contas a receber e clientes devedores',
+            descricao_servico: 'Consulta de contas a receber',
             itens: [],
             confianca: 'alta',
             duvidas: [],
@@ -1342,36 +1020,28 @@ routerAdd(
         })
       }
 
-      // 7. Verificação de comando para "Dar Baixa / Marcar como Pago" (Melhoria 4 & 6)
-      // Ex: "o João pagou o orçamento 3", "o João pagou", "marcar a cobrança do orçamento 3 como paga",
-      // "orçamento 3 foi pago", "dar baixa no orçamento 2", "recebi o orçamento 1"
+      // 7. Comando de Baixa de Pagamento
       const ehComandoBaixa =
         transNorm.indexOf('pagou') !== -1 ||
         transNorm.indexOf('pago') !== -1 ||
         transNorm.indexOf('dar baixa') !== -1 ||
         transNorm.indexOf('da baixa') !== -1 ||
-        transNorm.indexOf('marcar como pago') !== -1 ||
-        transNorm.indexOf('marcar como paga') !== -1 ||
-        transNorm.indexOf('marcar a cobranca') !== -1 ||
-        transNorm.indexOf('recebi o') !== -1 ||
-        transNorm.indexOf('recebi da') !== -1
+        transNorm.indexOf('marcar como pago') !== -1
 
       if (ehComandoBaixa) {
-        // Tenta achar número de orçamento mencionado
         const numMatch =
           transcricao.match(/(?:orçamento|proposta|numero|n[ºo#])\s*#?(\d+)/i) ||
           transcricao.match(/#?(\d+)/)
         const numeroProcurado = numMatch ? numMatch[1] : null
-
         let orcAlvo = null
         if (numeroProcurado) {
-          const numFormatado1 = '#' + numeroProcurado.padStart(3, '0')
-          const numFormatado2 = '#' + numeroProcurado
+          const n1 = '#' + numeroProcurado.padStart(3, '0')
+          const n2 = '#' + numeroProcurado
           for (let i = 0; i < orcamentosUsuario.length; i++) {
             const o = orcamentosUsuario[i]
             if (
-              o.numero === numFormatado1 ||
-              o.numero === numFormatado2 ||
+              o.numero === n1 ||
+              o.numero === n2 ||
               o.numero.replace(/\D/g, '') === numeroProcurado
             ) {
               orcAlvo = o
@@ -1379,29 +1049,16 @@ routerAdd(
             }
           }
         }
-
-        // Se não achou por número, busca por cliente
         if (!orcAlvo && melhorClienteMatch) {
           for (let i = 0; i < orcamentosUsuario.length; i++) {
-            const o = orcamentosUsuario[i]
-            if (o.cliente_id === melhorClienteMatch.id && o.status === 'aprovado') {
-              orcAlvo = o
+            if (orcamentosUsuario[i].cliente_id === melhorClienteMatch.id) {
+              orcAlvo = orcamentosUsuario[i]
               break
-            }
-          }
-          if (!orcAlvo) {
-            for (let i = 0; i < orcamentosUsuario.length; i++) {
-              const o = orcamentosUsuario[i]
-              if (o.cliente_id === melhorClienteMatch.id) {
-                orcAlvo = o
-                break
-              }
             }
           }
         }
 
         if (orcAlvo) {
-          // Procura cobrança existente deste orçamento
           let cobAlvoId = null
           for (let c = 0; c < cobrancasUsuario.length; c++) {
             if (cobrancasUsuario[c].orcamento_id === orcAlvo.id) {
@@ -1409,40 +1066,7 @@ routerAdd(
               break
             }
           }
-
-          const emojiCheck = prefEmojis ? '✅ ' : ''
-          const trat = formatarTratamento()
-          let msgConf = ''
-
-          if (prefTom === 'formal') {
-            msgConf =
-              'Confirmar o recebimento e dar baixa no orçamento ' +
-              orcAlvo.numero +
-              (orcAlvo.cliente_nome ? ' (' + orcAlvo.cliente_nome + ')' : '') +
-              ' no valor de R$ ' +
-              orcAlvo.valor_total.toFixed(2).replace('.', ',') +
-              '?'
-          } else if (prefTom === 'direto') {
-            msgConf =
-              'Dar baixa no orçamento ' +
-              orcAlvo.numero +
-              ' (' +
-              (orcAlvo.cliente_nome || 'Cliente') +
-              ') - R$ ' +
-              orcAlvo.valor_total.toFixed(2).replace('.', ',') +
-              '?'
-          } else {
-            msgConf =
-              emojiCheck +
-              (prefNome ? prefNome + ', ' : '') +
-              'confirmar que o orçamento ' +
-              orcAlvo.numero +
-              (orcAlvo.cliente_nome ? ' de ' + orcAlvo.cliente_nome : '') +
-              ' foi pago (R$ ' +
-              orcAlvo.valor_total.toFixed(2).replace('.', ',') +
-              ')?'
-          }
-
+          const msgConf = `Confirmar baixa de pagamento do orçamento ${orcAlvo.numero} (R$ ${orcAlvo.valor_total.toFixed(2).replace('.', ',')})?`
           return e.json(200, {
             sucesso: true,
             audio_id: null,
@@ -1458,7 +1082,7 @@ routerAdd(
                 mensagem_confirmacao: msgConf,
               },
               transcricao_corrigida: transcricao.trim(),
-              descricao_servico: 'Registrar baixa e pagamento do orçamento ' + orcAlvo.numero,
+              descricao_servico: 'Registrar baixa do orçamento ' + orcAlvo.numero,
               itens: [],
               confianca: 'alta',
               duvidas: [],
@@ -1468,36 +1092,28 @@ routerAdd(
         }
       }
 
-      // 8. Verificação de comando: "Gerar Cobrança" (Melhoria 4)
-      // Ex: "gera a cobrança do orçamento 3", "gerar cobrança pro joao", "cobrar o orçamento 2"
+      // 8. Comando de Gerar Cobrança PIX
       const ehComandoGerarCobranca =
         transNorm.indexOf('gerar cobranca') !== -1 ||
         transNorm.indexOf('gera a cobranca') !== -1 ||
-        transNorm.indexOf('gera cobranca') !== -1 ||
         transNorm.indexOf('criar cobranca') !== -1 ||
-        transNorm.indexOf('cria a cobranca') !== -1 ||
-        transNorm.indexOf('emitir cobranca') !== -1 ||
-        transNorm.indexOf('emite a cobranca') !== -1 ||
-        transNorm.indexOf('mandar pix') !== -1 ||
         transNorm.indexOf('gerar pix') !== -1 ||
-        transNorm.indexOf('gera o pix') !== -1 ||
-        (transNorm.indexOf('cobrar') !== -1 && transNorm.indexOf('orcamento') !== -1)
+        transNorm.indexOf('gera o pix') !== -1
 
       if (ehComandoGerarCobranca) {
         const numMatch =
           transcricao.match(/(?:orçamento|proposta|numero|n[ºo#])\s*#?(\d+)/i) ||
           transcricao.match(/#?(\d+)/)
         const numeroProcurado = numMatch ? numMatch[1] : null
-
         let orcAlvo = null
         if (numeroProcurado) {
-          const numFormatado1 = '#' + numeroProcurado.padStart(3, '0')
-          const numFormatado2 = '#' + numeroProcurado
+          const n1 = '#' + numeroProcurado.padStart(3, '0')
+          const n2 = '#' + numeroProcurado
           for (let i = 0; i < orcamentosUsuario.length; i++) {
             const o = orcamentosUsuario[i]
             if (
-              o.numero === numFormatado1 ||
-              o.numero === numFormatado2 ||
+              o.numero === n1 ||
+              o.numero === n2 ||
               o.numero.replace(/\D/g, '') === numeroProcurado
             ) {
               orcAlvo = o
@@ -1505,47 +1121,16 @@ routerAdd(
             }
           }
         }
-
         if (!orcAlvo && melhorClienteMatch) {
           for (let i = 0; i < orcamentosUsuario.length; i++) {
-            const o = orcamentosUsuario[i]
-            if (o.cliente_id === melhorClienteMatch.id) {
-              orcAlvo = o
+            if (orcamentosUsuario[i].cliente_id === melhorClienteMatch.id) {
+              orcAlvo = orcamentosUsuario[i]
               break
             }
           }
         }
-
         if (orcAlvo) {
-          const emojiPix = prefEmojis ? '⚡ ' : ''
-          let msgConf = ''
-          if (prefTom === 'formal') {
-            msgConf =
-              'Gerar cobrança simulada com chave PIX para o orçamento ' +
-              orcAlvo.numero +
-              (orcAlvo.cliente_nome ? ' (' + orcAlvo.cliente_nome + ')' : '') +
-              ' no valor de R$ ' +
-              orcAlvo.valor_total.toFixed(2).replace('.', ',') +
-              '?'
-          } else if (prefTom === 'direto') {
-            msgConf =
-              'Gerar PIX de R$ ' +
-              orcAlvo.valor_total.toFixed(2).replace('.', ',') +
-              ' para o orçamento ' +
-              orcAlvo.numero +
-              '?'
-          } else {
-            msgConf =
-              emojiPix +
-              (prefNome ? prefNome + ', ' : '') +
-              'gerar a cobrança PIX do orçamento ' +
-              orcAlvo.numero +
-              (orcAlvo.cliente_nome ? ' (' + orcAlvo.cliente_nome + ')' : '') +
-              ' de R$ ' +
-              orcAlvo.valor_total.toFixed(2).replace('.', ',') +
-              '?'
-          }
-
+          const msgConf = `Gerar chave PIX para o orçamento ${orcAlvo.numero} no valor de R$ ${orcAlvo.valor_total.toFixed(2).replace('.', ',')}?`
           return e.json(200, {
             sucesso: true,
             audio_id: null,
@@ -1571,41 +1156,26 @@ routerAdd(
         }
       }
 
-      // 9. Detecção heurística de comando de status (ex: "marcar orçamento 3 como aprovado")
-      const temPalavrasComandoStatus =
-        transNorm.indexOf('marcar') !== -1 ||
-        transNorm.indexOf('mudar') !== -1 ||
-        transNorm.indexOf('alterar') !== -1 ||
-        transNorm.indexOf('colocar') !== -1 ||
-        transNorm.indexOf('aprovar') !== -1 ||
-        transNorm.indexOf('rejeitar') !== -1 ||
-        transNorm.indexOf('cancelar') !== -1 ||
-        transNorm.indexOf('enviar') !== -1 ||
-        transNorm.indexOf('status') !== -1
-
-      if (contexto === 'comando_status' || (contexto === 'geral' && temPalavrasComandoStatus)) {
-        contexto = 'comando_status'
-      }
-
-      // 10. Monta listas de resumo para o prompt do agente
+      // 9. Prompt estruturado universal para IA com clientes e orçamentos do usuário
       const listaClientesResumo = clientesUsuario
+        .slice(0, 40)
         .map(function (c) {
           return (
             '- ID: "' +
             c.id +
             '", Nome: "' +
             c.nome +
+            '", Tel: "' +
+            c.telefone +
             '", Empresa: "' +
             c.empresa +
-            '", Telefone: "' +
-            c.telefone +
             '"'
           )
         })
         .join('\n')
 
       const listaOrcamentosResumo = orcamentosUsuario
-        .slice(0, 30)
+        .slice(0, 25)
         .map(function (o) {
           return (
             '- ID: "' +
@@ -1613,57 +1183,35 @@ routerAdd(
             '", Número: "' +
             o.numero +
             '", Cliente: "' +
-            (o.cliente_nome || 'N/A') +
-            '", Descrição: "' +
-            o.descricao.slice(0, 40) +
-            '", Status atual: "' +
+            o.cliente_nome +
+            '", Status: "' +
             o.status +
-            '", Valor: R$ ' +
-            o.valor_total +
-            ''
+            '", Total: R$ ' +
+            o.valor_total
           )
         })
         .join('\n')
 
-      // Prompt para o agente universal com preferências do usuário aplicadas
       const promptInstrucoes =
-        'Você é o assistente inteligente de voz em português (pt-BR) da plataforma OrçaFácil.\n' +
-        'O OrçaFácil atende prestadores de serviços de todos os segmentos: eletricistas, encanadores, diaristas, pintores, técnicos de informática, fotógrafos, marceneiros, pedreiros, mecânicos, professores e autônomos em geral.\n' +
+        'Você é o interpretador de áudio e voz em pt-BR do OrçaFácil.\n' +
         'O usuário ' +
         (prefNome ? 'chama-se "' + prefNome + '"' : '') +
-        ' e prefere um tom de resposta ' +
+        ' e prefere tom ' +
         prefTom +
-        (prefEmojis ? ' com emojis leves.' : ' sem emojis.') +
-        '\n\n' +
-        'Texto falado bruto transcrito:\n' +
-        '"""\n' +
-        transcricao.trim() +
-        '\n"""\n\n' +
-        'Contexto da solicitação: ' +
-        contexto.toUpperCase() +
         '.\n\n' +
-        'Clientes cadastrados deste usuário:\n' +
-        (listaClientesResumo || '(Nenhum cliente cadastrado ainda)') +
-        '\n\n' +
-        'Orçamentos recentes deste usuário:\n' +
-        (listaOrcamentosResumo || '(Nenhum orçamento emitido ainda)') +
-        '\n\n' +
-        'REGRAS OBRIGATÓRIAS:\n' +
-        '1. Entenda erros fonéticos e termos informais brasileiros.\n' +
-        '2. Se a fala for comando de mudar status de orçamento:\n' +
-        '   - Identifique número ou cliente.\n' +
-        '   - novo_status: "rascunho" | "enviado" | "aprovado" | "rejeitado" | "cancelado".\n' +
-        '   - Monte a mensagem_confirmacao respeitando o tom ' +
-        prefTom +
-        ' e chamando pelo nome ' +
-        (prefNome || 'usuário') +
-        '.\n' +
-        '3. CLASSIFICAÇÃO DE INTENÇÃO UNIVERSAL:\n' +
-        '   - Se a pessoa disser "cadastrar cliente...", "novo cliente...", "adicionar cliente...", ou apenas ditar dados de contato de uma pessoa/empresa (ex: "cliente Maria Silva, telefone 19 99999-9999") -> defina "intencao_detectada": "cliente" e preencha "cliente_novo".\n' +
-        '   - Se for criação de orçamento ou prestação de serviço com valor/itens (ex: "orçamento para João, pintura de sala, R$ 800") -> defina "intencao_detectada": "orcamento", extraia descricao_servico, itens (descricao, quantidade, valor_unitario), cliente_sugerido ou cliente_novo.\n' +
-        '4. Se for cliente novo, extraia os dados em cliente_novo (nome, telefone, email, empresa, endereco):\n' +
-        '   - REGRA CRÍTICA PARA E-MAIL: NUNCA invente, deduza ou gere e-mail placeholder (ex: derivado do nome ou @cliente.com). Se o usuário NÃO ditou explicitamente um endereço de e-mail na fala, o campo "email" DEVE ser estritamente null ou omitido.\n' +
-        'RETORNE ESTRITAMENTE JSON VÁLIDO sem formatação markdown:\n' +
+        'Texto transcrito:\n"""\n' +
+        transcricao.slice(0, 2500) +
+        '\n"""\n\n' +
+        'Clientes cadastrados:\n' +
+        (listaClientesResumo || '(Nenhum)') +
+        '\n\nOrçamentos recentes:\n' +
+        (listaOrcamentosResumo || '(Nenhum)') +
+        '\n\nREGRAS CRÍTICAS:\n' +
+        '1. Classifique "intencao_detectada": "orcamento", "cliente" ou "comando_status".\n' +
+        '2. Para "cliente", extraia cliente_novo (nome, telefone, email, empresa, endereco). NUNCA invente e-mail se não foi dito expressamente (use null).\n' +
+        '3. Para "orcamento", extraia descricao_servico, itens (descricao, quantidade, valor_unitario), cliente_sugerido_id ou cliente_novo.\n' +
+        '4. Para "comando_status", extraia orcamento_id, orcamento_numero, novo_status e mensagem_confirmacao.\n\n' +
+        'Retorne ESTRITAMENTE JSON sem markdown:\n' +
         '{\n' +
         '  "intencao_detectada": "orcamento" | "cliente" | "comando_status",\n' +
         '  "transcricao_corrigida": "...",\n' +
@@ -1672,30 +1220,10 @@ routerAdd(
         '  "cliente_sugerido_nome": "nome ou null",\n' +
         '  "cliente_novo": null,\n' +
         '  "itens": [{ "descricao": "...", "quantidade": 1, "valor_unitario": 100 }],\n' +
-        '  "comando_status": {\n' +
-        '    "orcamento_id": "id ou null",\n' +
-        '    "orcamento_numero": "numero ou null",\n' +
-        '    "cliente_nome": "nome ou null",\n' +
-        '    "status_anterior": "status atual",\n' +
-        '    "novo_status": "aprovado",\n' +
-        '    "mensagem_confirmacao": "..."\n' +
-        '  },\n' +
+        '  "comando_status": null,\n' +
         '  "confianca": "alta" | "media" | "baixa",\n' +
         '  "duvidas": []\n' +
         '}'
-
-      // 9.1 Detecção heurística de criação explícita de cliente:
-      // Ex: "cadastrar cliente Maria Silva, telefone 19 99999-9999", "novo cliente João Paulo"
-      const ehCadastroClienteHeuristico =
-        transNorm.indexOf('cadastrar cliente') !== -1 ||
-        transNorm.indexOf('cadastra cliente') !== -1 ||
-        transNorm.indexOf('novo cliente') !== -1 ||
-        transNorm.indexOf('adicionar cliente') !== -1 ||
-        transNorm.indexOf('adiciona cliente') !== -1 ||
-        transNorm.indexOf('salvar cliente') !== -1 ||
-        transNorm.indexOf('salva cliente') !== -1 ||
-        transNorm.indexOf('inserir cliente') !== -1 ||
-        contexto === 'cliente'
 
       let agentResponse = null
       try {
@@ -1703,112 +1231,83 @@ routerAdd(
           user_id: userId,
           message: promptInstrucoes,
         })
-      } catch (agentErr) {}
+      } catch (errAgente) {
+        console.log('[ia_interpretar] Fallback do agente para fast chat:', errAgente.message)
+        try {
+          const directChat = $ai.chat({
+            model: 'fast',
+            messages: [
+              {
+                role: 'system',
+                content: 'Você é o interpretador universal de voz e texto do OrçaFácil.',
+              },
+              { role: 'user', content: promptInstrucoes },
+            ],
+          })
+          agentResponse = { content: directChat?.choices?.[0]?.message?.content }
+        } catch (errDirect) {
+          console.log('[ia_interpretar] Falha no fallback direto:', errDirect.message)
+        }
+      }
 
       const content = agentResponse?.content || ''
       let parsed = null
-
       try {
         const jsonMatch = content.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[0])
-        } else {
-          parsed = JSON.parse(content)
-        }
-      } catch (parseErr) {
+        if (jsonMatch) parsed = JSON.parse(jsonMatch[0])
+      } catch (_) {
         parsed = null
       }
 
-      // Heurística de matching para comando de status caso agente falhe
+      // Heurística de status caso a IA falhe
       let comandoStatusHeuristico = null
-      if (temPalavrasComandoStatus || contexto === 'comando_status') {
+      if (
+        transNorm.indexOf('marcar') !== -1 ||
+        transNorm.indexOf('mudar') !== -1 ||
+        transNorm.indexOf('alterar') !== -1 ||
+        transNorm.indexOf('aprovar') !== -1 ||
+        transNorm.indexOf('rejeitar') !== -1
+      ) {
         let novoStatus = null
-        if (transNorm.indexOf('aprovad') !== -1 || transNorm.indexOf('aprovar') !== -1) {
+        if (transNorm.indexOf('aprovad') !== -1 || transNorm.indexOf('aprovar') !== -1)
           novoStatus = 'aprovado'
-        } else if (transNorm.indexOf('rejeitad') !== -1 || transNorm.indexOf('rejeitar') !== -1) {
+        else if (transNorm.indexOf('rejeitad') !== -1 || transNorm.indexOf('rejeitar') !== -1)
           novoStatus = 'rejeitado'
-        } else if (transNorm.indexOf('enviad') !== -1 || transNorm.indexOf('enviar') !== -1) {
+        else if (transNorm.indexOf('enviad') !== -1 || transNorm.indexOf('enviar') !== -1)
           novoStatus = 'enviado'
-        } else if (transNorm.indexOf('cancelad') !== -1 || transNorm.indexOf('cancelar') !== -1) {
-          novoStatus = 'cancelado'
-        } else if (transNorm.indexOf('rascunho') !== -1) {
-          novoStatus = 'rascunho'
-        }
 
-        const numMatch =
-          transcricao.match(/(?:orçamento|proposta|numero|n[ºo#])\s*#?(\d+)/i) ||
-          transcricao.match(/#?(\d+)/)
-        const numeroProcurado = numMatch ? numMatch[1] : null
-
-        let orcamentoEncontrado = null
-        if (numeroProcurado) {
-          const numFormatado1 = '#' + numeroProcurado.padStart(3, '0')
-          const numFormatado2 = '#' + numeroProcurado
-          for (let i = 0; i < orcamentosUsuario.length; i++) {
-            const o = orcamentosUsuario[i]
-            if (
-              o.numero === numFormatado1 ||
-              o.numero === numFormatado2 ||
-              o.numero.replace(/\D/g, '') === numeroProcurado
-            ) {
-              orcamentoEncontrado = o
-              break
+        if (novoStatus) {
+          const numMatch =
+            transcricao.match(/(?:orçamento|proposta|numero|n[ºo#])\s*#?(\d+)/i) ||
+            transcricao.match(/#?(\d+)/)
+          const numP = numMatch ? numMatch[1] : null
+          let oMatch = null
+          if (numP) {
+            for (let i = 0; i < orcamentosUsuario.length; i++) {
+              if (orcamentosUsuario[i].numero.replace(/\D/g, '') === numP) {
+                oMatch = orcamentosUsuario[i]
+                break
+              }
             }
           }
-        }
-
-        if (!orcamentoEncontrado && melhorClienteMatch) {
-          for (let i = 0; i < orcamentosUsuario.length; i++) {
-            const o = orcamentosUsuario[i]
-            if (o.cliente_id === melhorClienteMatch.id) {
-              orcamentoEncontrado = o
-              break
+          if (oMatch) {
+            comandoStatusHeuristico = {
+              orcamento_id: oMatch.id,
+              orcamento_numero: oMatch.numero,
+              cliente_nome: oMatch.cliente_nome || '',
+              status_anterior: oMatch.status,
+              novo_status: novoStatus,
+              mensagem_confirmacao: `Confirmar alteração do orçamento ${oMatch.numero} para "${novoStatus}"?`,
             }
-          }
-        }
-
-        if (novoStatus && orcamentoEncontrado) {
-          const saud = prefNome ? prefNome + ', ' : ''
-          const emojiIcon = prefEmojis ? '🔄 ' : ''
-          let msg = ''
-          if (prefTom === 'formal') {
-            msg =
-              'Confirmar a alteração do orçamento ' +
-              orcamentoEncontrado.numero +
-              (orcamentoEncontrado.cliente_nome
-                ? ' (' + orcamentoEncontrado.cliente_nome + ')'
-                : '') +
-              ' para o status "' +
-              novoStatus +
-              '"?'
-          } else if (prefTom === 'direto') {
-            msg = 'Mudar orçamento ' + orcamentoEncontrado.numero + ' para "' + novoStatus + '"?'
-          } else {
-            msg =
-              emojiIcon +
-              saud +
-              'mudar o orçamento ' +
-              orcamentoEncontrado.numero +
-              (orcamentoEncontrado.cliente_nome
-                ? ' (' + orcamentoEncontrado.cliente_nome + ')'
-                : '') +
-              ' de "' +
-              orcamentoEncontrado.status +
-              '" para "' +
-              novoStatus +
-              '"?'
-          }
-
-          comandoStatusHeuristico = {
-            orcamento_id: orcamentoEncontrado.id,
-            orcamento_numero: orcamentoEncontrado.numero,
-            cliente_nome: orcamentoEncontrado.cliente_nome || '',
-            status_anterior: orcamentoEncontrado.status,
-            novo_status: novoStatus,
-            mensagem_confirmacao: msg,
           }
         }
       }
+
+      const ehCadastroClienteHeuristico =
+        transNorm.indexOf('cadastrar cliente') !== -1 ||
+        transNorm.indexOf('novo cliente') !== -1 ||
+        transNorm.indexOf('adicionar cliente') !== -1 ||
+        contexto === 'cliente'
 
       if (!parsed) {
         parsed = {
@@ -1816,7 +1315,7 @@ routerAdd(
             ? 'comando_status'
             : ehCadastroClienteHeuristico
               ? 'cliente'
-              : contexto,
+              : 'orcamento',
           transcricao_corrigida: transcricao.trim(),
           descricao_servico: transcricao.trim(),
           cliente_sugerido_id: melhorClienteMatch ? melhorClienteMatch.id : null,
@@ -1829,44 +1328,18 @@ routerAdd(
               valor_unitario: 250.0,
             },
           ],
-          prazo: null,
-          observacoes: null,
           comando_status: comandoStatusHeuristico,
           confianca: 'media',
           duvidas: [],
         }
       }
 
-      // Se foi expressamente falado "cadastrar cliente ...", garante intencao_detectada = 'cliente'
       if (ehCadastroClienteHeuristico && !parsed.comando_status) {
         parsed.intencao_detectada = 'cliente'
         if (!parsed.cliente_novo) {
-          // Extração heurística simples de cliente da fala
-          // Remove marcadores como "cadastrar cliente", "novo cliente"
-          const limpoCli = transcricao
-            .replace(/cadastrar\s+cliente/i, '')
-            .replace(/cadastra\s+cliente/i, '')
-            .replace(/novo\s+cliente/i, '')
-            .replace(/adicionar\s+cliente/i, '')
-            .replace(/adiciona\s+cliente/i, '')
-            .trim()
-
-          // Procura telefone
-          let telExtraido = ''
-          const telMatch = limpoCli.match(
-            /(?:telefone|fone|celular|whatsapp|zap)?\s*\(?(\d{2})\)?\s*(9?\d{4})[-.\s]?(\d{4})/i,
-          )
-          if (telMatch) {
-            telExtraido = '(' + telMatch[1] + ') ' + telMatch[2] + '-' + telMatch[3]
-          }
-
-          // Nome: texto antes de telefone ou vírgula
-          let nomeCliExtraido = limpoCli.split(/telefone|fone|celular|whatsapp|zap|,/i)[0].trim()
-          nomeCliExtraido = nomeCliExtraido.replace(/^(?:do|da|o|a|para|pra)\s+/i, '').trim()
-
           parsed.cliente_novo = {
-            nome: nomeCliExtraido || 'Cliente',
-            telefone: telExtraido,
+            nome: 'Novo Cliente',
+            telefone: '',
             email: null,
             empresa: '',
             endereco: '',
@@ -1874,49 +1347,20 @@ routerAdd(
         }
       }
 
-      if (comandoStatusHeuristico) {
-        if (!parsed.comando_status || !parsed.comando_status.orcamento_id) {
-          parsed.comando_status = comandoStatusHeuristico
-        }
-        if (!parsed.intencao_detectada) {
-          parsed.intencao_detectada = 'comando_status'
-        }
+      if (comandoStatusHeuristico && !parsed.comando_status) {
+        parsed.comando_status = comandoStatusHeuristico
+        parsed.intencao_detectada = 'comando_status'
       }
 
-      if (
-        parsed.comando_status &&
-        !parsed.comando_status.orcamento_id &&
-        parsed.comando_status.orcamento_numero
-      ) {
-        const numDigitos = String(parsed.comando_status.orcamento_numero).replace(/\D/g, '')
-        for (let i = 0; i < orcamentosUsuario.length; i++) {
-          const o = orcamentosUsuario[i]
-          if (o.numero.replace(/\D/g, '') === numDigitos) {
-            parsed.comando_status.orcamento_id = o.id
-            parsed.comando_status.orcamento_numero = o.numero
-            parsed.comando_status.status_anterior = o.status
-            parsed.comando_status.cliente_nome = o.cliente_nome
-            break
-          }
+      // Higienização de e-mail de cliente novo: nunca inventar e-mail se não foi fornecido
+      if (parsed.cliente_novo && typeof parsed.cliente_novo === 'object') {
+        const rawEmail = parsed.cliente_novo.email ? String(parsed.cliente_novo.email).trim() : ''
+        if (!rawEmail || rawEmail.endsWith('@cliente.com') || rawEmail.indexOf('@') === -1) {
+          parsed.cliente_novo.email = null
         }
       }
 
-      if (!parsed.cliente_sugerido_id && melhorClienteMatch && scoreMatch >= 3) {
-        parsed.cliente_sugerido_id = melhorClienteMatch.id
-        parsed.cliente_sugerido_nome = melhorClienteMatch.nome
-      }
-
-      // Higienização de e-mail do cliente_novo: nunca inventar e-mail se não foi ditado
-      if (parsed.cliente_novo) {
-        if (typeof parsed.cliente_novo === 'object') {
-          const rawEmail = parsed.cliente_novo.email ? String(parsed.cliente_novo.email).trim() : ''
-          // Se for placeholder inventado com @cliente.com ou não parecer e-mail real válido, remove
-          if (!rawEmail || rawEmail.endsWith('@cliente.com') || rawEmail.indexOf('@') === -1) {
-            parsed.cliente_novo.email = null
-          }
-        }
-      }
-
+      // Higienização e garantia dos itens
       const rawItens = Array.isArray(parsed.itens) ? parsed.itens : []
       const itensLimpos = rawItens.map(function (it) {
         return {
@@ -1926,32 +1370,16 @@ routerAdd(
         }
       })
 
-      if (
-        (contexto === 'orcamento' || parsed.intencao_detectada === 'orcamento') &&
-        itensLimpos.length === 0
-      ) {
+      if (itensLimpos.length === 0 && parsed.intencao_detectada === 'orcamento') {
         itensLimpos.push({
           descricao: parsed.descricao_servico || 'Serviço solicitado: ' + transcricao.slice(0, 50),
           quantidade: 1,
           valor_unitario: 300.0,
         })
       }
-
       parsed.itens = itensLimpos
-      if (!Array.isArray(parsed.duvidas)) {
-        parsed.duvidas = []
-      }
 
-      // Salva áudio no histórico
-      let contextoHistorico = 'geral'
-      if (parsed.comando_status?.orcamento_id) {
-        contextoHistorico = 'comando_status'
-      } else if (contexto === 'cliente' || parsed.intencao_detectada === 'cliente') {
-        contextoHistorico = 'cliente'
-      } else if (contexto === 'orcamento' || parsed.intencao_detectada === 'orcamento') {
-        contextoHistorico = 'orcamento'
-      }
-
+      // Salva histórico na coleção audios
       let audioRecordId = null
       try {
         const audiosCol = $app.findCollectionByNameOrId('audios')
@@ -1959,13 +1387,13 @@ routerAdd(
         audioRec.set('user_id', userId)
         audioRec.set('transcricao_bruta', transcricao.trim())
         audioRec.set('transcricao_corrigida', parsed.transcricao_corrigida || transcricao.trim())
-        audioRec.set('contexto', contextoHistorico)
+        audioRec.set('contexto', contexto)
         audioRec.set('resultado_json', parsed)
         audioRec.set('confianca', parsed.confianca || 'media')
         audioRec.set('comando_executado', false)
         $app.save(audioRec)
         audioRecordId = audioRec.id
-      } catch (errAudioSave) {}
+      } catch (_) {}
 
       return e.json(200, {
         sucesso: true,
@@ -1975,8 +1403,11 @@ routerAdd(
         citations: agentResponse?.citations || [],
       })
     } catch (err) {
+      console.error('[ia_interpretar] Erro no processamento de IA:', err.message || err)
       return e.json(500, {
-        error: err.message || 'Erro ao interpretar áudio com IA',
+        sucesso: false,
+        error:
+          'Não foi possível concluir o processamento da IA neste momento. Por favor, tente novamente.',
       })
     }
   },

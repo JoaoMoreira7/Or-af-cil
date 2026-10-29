@@ -66,6 +66,14 @@ export default function OrcamentoForm() {
   // Resposta a dúvidas da IA
   const [respostaDuvida, setRespostaDuvida] = useState('')
   const reviewCardRef = useRef<HTMLDivElement | null>(null)
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     const init = async () => {
@@ -186,6 +194,7 @@ export default function OrcamentoForm() {
       return
     }
 
+    if (aiLoading) return // Trava contra cliques repetidos
     setAiLoading(true)
     try {
       const resultado = await aiInterpretarService.interpretar({
@@ -193,6 +202,8 @@ export default function OrcamentoForm() {
         contexto: 'orcamento',
         userId: user?.id,
       })
+
+      if (!isMountedRef.current) return
 
       const interp = resultado.interpretacao
       setInterpretacao(interp)
